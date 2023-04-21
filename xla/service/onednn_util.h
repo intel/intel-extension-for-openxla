@@ -1,0 +1,129 @@
+#ifndef ITEX_CORE_UTILS_ONEDNN_ONEDNN_UTIL_H_
+#define ITEX_CORE_UTILS_ONEDNN_ONEDNN_UTIL_H_
+
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "dnnl.hpp"       // NOLINT(build/include_subdir)
+#include "dnnl_sycl.hpp"  // NOLINT(build/include_subdir)
+#include "tsl/framework/numeric_types.h"
+#include "tsl/platform/types.h"
+#include "tsl/util/env_var.h"
+#include "xla/stream_executor/sycl/sycl_types.h"
+
+namespace xla {
+inline dnnl::memory::dims CalculateTFStrides(
+    const dnnl::memory::dims& dims_tf_order) {
+  CHECK_GT(dims_tf_order.size(), 0);
+  dnnl::memory::dims strides(dims_tf_order.size(), 1);
+  for (int d = strides.size() - 2; d >= 0; d--) {
+    strides[d] = strides[d + 1] * dims_tf_order[d + 1];
+  }
+  return strides;
+}
+
+/// Return oneDNN data type (memory::data_type) for input type T
+///
+/// @input None
+/// @return dnnl::memory::data_type corresponding to type T
+template <typename T>
+inline dnnl::memory::data_type OneDnnType();
+
+/// Instantiation for float type. Add similar instantiations for other
+/// type if needed.
+template <>
+inline dnnl::memory::data_type OneDnnType<float>() {
+  return dnnl::memory::data_type::f32;
+}
+
+template <>
+inline dnnl::memory::data_type OneDnnType<double>() {
+  return dnnl::memory::data_type::f64;
+}
+
+template <>
+inline dnnl::memory::data_type OneDnnType<Eigen::half>() {
+  return dnnl::memory::data_type::f16;
+}
+
+template <>
+inline dnnl::memory::data_type OneDnnType<tsl::quint8>() {
+  return dnnl::memory::data_type::u8;
+}
+
+template <>
+inline dnnl::memory::data_type OneDnnType<tsl::uint8>() {
+  return dnnl::memory::data_type::u8;
+}
+
+template <>
+inline dnnl::memory::data_type OneDnnType<tsl::qint8>() {
+  return dnnl::memory::data_type::s8;
+}
+
+template <>
+inline dnnl::memory::data_type OneDnnType<tsl::qint32>() {
+  return dnnl::memory::data_type::s32;
+}
+
+template <>
+inline dnnl::memory::data_type OneDnnType<Eigen::bfloat16>() {
+  return dnnl::memory::data_type::bf16;
+}
+
+static dnnl::engine& FindOrCreateEngine(se::gpu::GpuStreamHandle stream) {
+  static std::map<se::gpu::GpuStreamHandle, dnnl::engine> stream_engine_map;
+  auto iter = stream_engine_map.find(stream);
+  if (iter != stream_engine_map.end()) return iter->second;
+
+  dnnl::engine engine;
+  engine = dnnl::sycl_interop::make_engine(stream->get_device(),
+                                           stream->get_context());
+  return stream_engine_map
+      .insert(std::pair<se::gpu::GpuStreamHandle, dnnl::engine>(stream, engine))
+      .first->second;
+}
+
+inline dnnl::fpmath_mode GetFP32MathMode() {
+  std::string fp32_math_mode = "fp32";
+  TF_CHECK_OK(tsl::ReadStringFromEnvVar("ITEX_FP32_MATH_MODE", "fp32",
+                                        &fp32_math_mode));
+  fp32_math_mode = tsl::str_util::Lowercase(fp32_math_mode);
+  if (fp32_math_mode == "fp32") {
+    return dnnl::fpmath_mode::strict;
+  }
+  if (fp32_math_mode == "tf32") {
+    return dnnl::fpmath_mode::tf32;
+  }
+  if (fp32_math_mode == "bf32") {
+    LOG(FATAL) << "Did not support BF32 math mode on GPU ";
+  }
+  LOG(FATAL)
+      << "Invalid ITEX_FP32_MATH_MODE, should be FP32, TF32 or BF32, but got "
+      << fp32_math_mode;
+}
+
+inline dnnl::memory CreateDnnlMemory(const dnnl::memory::desc& md,
+                                     const dnnl::engine& engine,
+                                     void* data_handle = nullptr) {
+  if (engine.get_kind() == dnnl::engine::kind::gpu) {
+    auto kind = dnnl::sycl_interop::memory_kind::usm;
+    if (data_handle == nullptr)
+      return dnnl::sycl_interop::make_memory(md, engine, kind,
+                                             DNNL_MEMORY_ALLOCATE);
+    else
+      return dnnl::sycl_interop::make_memory(md, engine, kind, data_handle);
+  }
+
+  // Default path, always assume it's CPU engine.
+  CHECK(engine.get_kind() == dnnl::engine::kind::cpu)
+      << "Create oneDNN memory for unsupported engine.";
+  if (data_handle == nullptr)
+    return dnnl::memory(md, engine);
+  else
+    return dnnl::memory(md, engine, data_handle);
+}
+}  // namespace xla
+#endif  // ITEX_CORE_UTILS_ONEDNN_ONEDNN_UTIL_H_

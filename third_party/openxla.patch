@@ -1,0 +1,758 @@
+diff --git a/third_party/tsl/third_party/llvm/opt.patch b/third_party/tsl/third_party/llvm/opt.patch
+new file mode 100644
+index 000000000..9e72f0d2c
+--- /dev/null
++++ b/third_party/tsl/third_party/llvm/opt.patch
+@@ -0,0 +1,38 @@
++diff --git a/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp b/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp
++index a7307525b0a5..8b3dd8cf1eab 100644
++--- a/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp
+++++ b/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp
++@@ -4676,10 +4676,11 @@ PreservedAnalyses InstCombinePass::run(Function &F,
++   auto *BFI = (PSI && PSI->hasProfileSummary()) ?
++       &AM.getResult<BlockFrequencyAnalysis>(F) : nullptr;
++ 
++-  if (!combineInstructionsOverFunction(F, Worklist, AA, AC, TLI, TTI, DT, ORE,
++-                                       BFI, PSI, Options.MaxIterations, LI))
++-    // No changes, all analyses are preserved.
++-    return PreservedAnalyses::all();
+++  // FIXME: Disable InstCombinePass to avoid is_fpclass issue
+++  // if (!combineInstructionsOverFunction(F, Worklist, AA, AC, TLI, TTI, DT, ORE,
+++  //                                      BFI, PSI, Options.MaxIterations, LI))
+++  //   // No changes, all analyses are preserved.
+++  //   return PreservedAnalyses::all();
++ 
++   // Mark all the analyses that instcombine updates as preserved.
++   PreservedAnalyses PA;
++diff --git a/llvm/lib/Transforms/Scalar/MemCpyOptimizer.cpp b/llvm/lib/Transforms/Scalar/MemCpyOptimizer.cpp
++index 1a83c713092d..8a00c1f1e553 100644
++--- a/llvm/lib/Transforms/Scalar/MemCpyOptimizer.cpp
+++++ b/llvm/lib/Transforms/Scalar/MemCpyOptimizer.cpp
++@@ -1649,9 +1649,10 @@ PreservedAnalyses MemCpyOptPass::run(Function &F, FunctionAnalysisManager &AM) {
++   auto *DT = &AM.getResult<DominatorTreeAnalysis>(F);
++   auto *MSSA = &AM.getResult<MemorySSAAnalysis>(F);
++ 
++-  bool MadeChange = runImpl(F, &TLI, AA, AC, DT, &MSSA->getMSSA());
++-  if (!MadeChange)
++-    return PreservedAnalyses::all();
+++  // FIXME: Disable MemCpyOptPass to avoid llvm.memcpy issue
+++  // bool MadeChange = runImpl(F, &TLI, AA, AC, DT, &MSSA->getMSSA());
+++  // if (!MadeChange)
+++  //   return PreservedAnalyses::all();
++ 
++   PreservedAnalyses PA;
++   PA.preserveSet<CFGAnalyses>();
+diff --git a/third_party/tsl/third_party/llvm/spirv.patch b/third_party/tsl/third_party/llvm/spirv.patch
+new file mode 100644
+index 000000000..971b7c46b
+--- /dev/null
++++ b/third_party/tsl/third_party/llvm/spirv.patch
+@@ -0,0 +1,88 @@
++diff --git a/llvm/include/llvm/InitializePasses.h b/llvm/include/llvm/InitializePasses.h
++index 5c531ea89cc6..594618fe5414 100644
++--- a/llvm/include/llvm/InitializePasses.h
+++++ b/llvm/include/llvm/InitializePasses.h
++@@ -99,6 +99,7 @@ void initializeCrossDSOCFIPass(PassRegistry&);
++ void initializeCycleInfoWrapperPassPass(PassRegistry &);
++ void initializeDAEPass(PassRegistry&);
++ void initializeDAHPass(PassRegistry&);
+++void initializeDAESYCLPass(PassRegistry&);
++ void initializeDCELegacyPassPass(PassRegistry&);
++ void initializeDSELegacyPassPass(PassRegistry&);
++ void initializeDeadMachineInstructionElimPass(PassRegistry&);
++diff --git a/llvm/lib/Passes/PassBuilderPipelines.cpp b/llvm/lib/Passes/PassBuilderPipelines.cpp
++index 6cc66a0cb132..29c3431f84eb 100644
++--- a/llvm/lib/Passes/PassBuilderPipelines.cpp
+++++ b/llvm/lib/Passes/PassBuilderPipelines.cpp
++@@ -192,6 +192,10 @@ static cl::opt<bool> EnableGlobalAnalyses(
++     "enable-global-analyses", cl::init(true), cl::Hidden,
++     cl::desc("Enable inter-procedural analyses"));
++ 
+++static cl::opt<bool>
+++    SYCLOptimizationMode("sycl-opt", cl::init(false), cl::Hidden,
+++                         cl::desc("Enable SYCL optimization mode."));
+++
++ static cl::opt<bool>
++     RunPartialInlining("enable-partial-inlining", cl::init(false), cl::Hidden,
++                        cl::desc("Run Partial inlinining pass"));
++@@ -354,6 +358,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
++   // Form canonically associated expression trees, and simplify the trees using
++   // basic mathematical properties. For example, this will form (nearly)
++   // minimal multiplication trees.
+++  if (!SYCLOptimizationMode) {
++   FPM.addPass(ReassociatePass());
++ 
++   // Add the primary loop simplification pipeline.
++@@ -431,7 +436,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
++   FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM2),
++                                               /*UseMemorySSA=*/false,
++                                               /*UseBlockFrequencyInfo=*/false));
++-
+++  }
++   // Delete small array after loop unroll.
++   FPM.addPass(SROAPass(SROAOptions::ModifyCFG));
++ 
++@@ -539,6 +544,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++   // Form canonically associated expression trees, and simplify the trees using
++   // basic mathematical properties. For example, this will form (nearly)
++   // minimal multiplication trees.
+++  if (!SYCLOptimizationMode) {
++   FPM.addPass(ReassociatePass());
++ 
++   // Add the primary loop simplification pipeline.
++@@ -620,7 +626,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++   FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM2),
++                                               /*UseMemorySSA=*/false,
++                                               /*UseBlockFrequencyInfo=*/false));
++-
+++  }
++   // Delete small array after loop unroll.
++   FPM.addPass(SROAPass(SROAOptions::ModifyCFG));
++ 
++@@ -677,6 +683,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++   for (auto &C : ScalarOptimizerLateEPCallbacks)
++     C(FPM, Level);
++ 
+++  if (SYCLOptimizationMode)
+++    FPM.addPass(SimplifyCFGPass());
+++  else
++   FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions()
++                                   .convertSwitchRangeToICmp(true)
++                                   .hoistCommonInsts(true)
++@@ -1320,6 +1329,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
++   for (auto &C : VectorizerStartEPCallbacks)
++     C(OptimizePM, Level);
++ 
+++  if (!SYCLOptimizationMode) {
++   LoopPassManager LPM;
++   // First rotate loops that may have been un-rotated by prior passes.
++   // Disable header duplication at -Oz.
++@@ -1343,7 +1353,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
++   OptimizePM.addPass(InjectTLIMappings());
++ 
++   addVectorPasses(Level, OptimizePM, /* IsFullLTO */ false);
++-
+++  }
++   // LoopSink pass sinks instructions hoisted by LICM, which serves as a
++   // canonicalization pass that enables other optimizations. As a result,
++   // LoopSink pass needs to be a very late IR pass to avoid undoing LICM
+diff --git a/third_party/tsl/third_party/llvm/workspace.bzl b/third_party/tsl/third_party/llvm/workspace.bzl
+index 28ff9e93f..2456d3098 100644
+--- a/third_party/tsl/third_party/llvm/workspace.bzl
++++ b/third_party/tsl/third_party/llvm/workspace.bzl
+@@ -21,6 +21,8 @@ def repo(name):
+             "//third_party/llvm:build.patch",
+             "//third_party/llvm:mathextras.patch",
+             "//third_party/llvm:toolchains.patch",
++            "//third_party/llvm:spirv.patch",
++            "//third_party/llvm:opt.patch",
+         ],
+         link_files = {"//third_party/llvm:run_lit.sh": "mlir/run_lit.sh"},
+     )
+diff --git a/third_party/tsl/tsl/framework/contraction/BUILD b/third_party/tsl/tsl/framework/contraction/BUILD
+index c58246b95..450e24f44 100644
+--- a/third_party/tsl/tsl/framework/contraction/BUILD
++++ b/third_party/tsl/tsl/framework/contraction/BUILD
+@@ -78,7 +78,7 @@ cc_library(
+         "//tsl:macos_arm64": [],
+         "//conditions:default": [
+             "TENSORFLOW_USE_CUSTOM_CONTRACTION_KERNEL",
+-            "TENSORFLOW_USE_MKLDNN_CONTRACTION_KERNEL",
++            # "TENSORFLOW_USE_MKLDNN_CONTRACTION_KERNEL",
+         ],
+     }),
+     deps = [
+@@ -94,7 +94,9 @@ cc_library(
+         "//tsl:linux_ppc64le": [],
+         "//tsl:linux_s390x": [],
+         "//tsl:macos_arm64": [],
+-        "//conditions:default": ["@mkl_dnn_v1//:mkl_dnn"],
++        "//conditions:default": [
++            # "@mkl_dnn_v1//:mkl_dnn"
++        ],
+     }),
+ )
+ 
+diff --git a/xla/service/gpu/elemental_ir_emitter.cc b/xla/service/gpu/elemental_ir_emitter.cc
+index f2afe628f..ac1a907c2 100644
+--- a/xla/service/gpu/elemental_ir_emitter.cc
++++ b/xla/service/gpu/elemental_ir_emitter.cc
+@@ -321,12 +321,13 @@ StatusOr<llvm::Value*> GpuElementalIrEmitter::EmitTanh(PrimitiveType prim_type,
+                 value->getType(), "tanh");
+ }
+ 
+-StatusOr<llvm::Value*> GpuElementalIrEmitter::EmitComplexAbs(
+-    PrimitiveType prim_type, llvm::Value* value) {
+-  return EmitDeviceMathCall(TargetDeviceFunctionID::kHypot,
+-                            {EmitExtractReal(value), EmitExtractImag(value)},
+-                            {prim_type, prim_type}, prim_type);
+-}
++// TODO: hypot has accuracy issue on PVC. Fallback it.
++// StatusOr<llvm::Value*> GpuElementalIrEmitter::EmitComplexAbs(
++//     PrimitiveType prim_type, llvm::Value* value) {
++//   return EmitDeviceMathCall(TargetDeviceFunctionID::kHypot,
++//                             {EmitExtractReal(value), EmitExtractImag(value)},
++//                             {prim_type, prim_type}, prim_type);
++// }
+ 
+ llvm::Value* GpuElementalIrEmitter::EmitThreadId() {
+   llvm::Value* block_id = IntCast(
+diff --git a/xla/service/gpu/elemental_ir_emitter.h b/xla/service/gpu/elemental_ir_emitter.h
+index 12f5f03ac..d9e4a4170 100644
+--- a/xla/service/gpu/elemental_ir_emitter.h
++++ b/xla/service/gpu/elemental_ir_emitter.h
+@@ -93,8 +93,8 @@ class GpuElementalIrEmitter : public ElementalIrEmitter {
+   StatusOr<llvm::Value*> EmitTanh(PrimitiveType prim_type,
+                                   llvm::Value* value) override;
+ 
+-  StatusOr<llvm::Value*> EmitComplexAbs(PrimitiveType prim_type,
+-                                        llvm::Value* value) override;
++  // StatusOr<llvm::Value*> EmitComplexAbs(PrimitiveType prim_type,
++  //                                       llvm::Value* value) override;
+ 
+   StatusOr<std::vector<llvm::Value*>> EmitThreadLocalCall(
+       const HloComputation& callee, absl::Span<llvm::Value* const> parameters,
+diff --git a/xla/service/gpu/ir_emission_utils.cc b/xla/service/gpu/ir_emission_utils.cc
+index 5ae52feb6..ac3452c57 100644
+--- a/xla/service/gpu/ir_emission_utils.cc
++++ b/xla/service/gpu/ir_emission_utils.cc
+@@ -105,11 +105,11 @@ bool IsMatrixMultiplication(const HloInstruction& dot) {
+   const DotDimensionNumbers& dim_numbers = dot.dot_dimension_numbers();
+ 
+   PrimitiveType output_primitive_type = dot.shape().element_type();
++  // Disable F64, C64, C128
+   bool type_is_allowed =
+       (output_primitive_type == F8E4M3FN || output_primitive_type == F8E5M2 ||
+        output_primitive_type == F16 || output_primitive_type == BF16 ||
+-       output_primitive_type == F32 || output_primitive_type == F64 ||
+-       output_primitive_type == C64 || output_primitive_type == C128) ||
++       output_primitive_type == F32) ||
+       (output_primitive_type == S32 && lhs_shape.element_type() == S8 &&
+        rhs_shape.element_type() == S8);
+   bool shapes_are_valid =
+@@ -363,6 +363,23 @@ llvm::Value* EmitNVPTXShflDown(llvm::Value* value, llvm::Value* offset,
+       intrinsic, {b->getInt32(-1), value, offset, b->getInt32(WarpSize() - 1)});
+ }
+ 
++// Helper function to emit call to NVPTX shfl_down intrinsic.
++llvm::Value* EmitSPIRShflDown(llvm::Value* value, llvm::Value* offset,
++                              llvm::IRBuilder<>* b) {
++  llvm::Module* module = b->GetInsertBlock()->getModule();
++  llvm::Intrinsic::ID llvm_intrinsic_id;
++  CHECK_EQ(value->getType()->getPrimitiveSizeInBits(), 32);
++  if (value->getType()->isFloatTy()) {
++    return EmitDeviceFunctionCall("_Z28intel_sub_group_shuffle_downffj",
++                                  {value, value, offset}, {F32, F32, U32}, F32,
++                                  {b->getContext()}, b);
++  } else {
++    return EmitDeviceFunctionCall("_Z28intel_sub_group_shuffle_downjjj",
++                                  {value, value, offset}, {U32, U32, U32}, U32,
++                                  {b->getContext()}, b);
++  }
++}
++
+ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
+                                      llvm::IRBuilder<>* builder) {
+   int bit_width = value->getType()->getPrimitiveSizeInBits();
+@@ -375,6 +392,8 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
+       return EmitNVPTXShflDown(value, offset, builder);
+     } else if (target_triple.getArch() == llvm::Triple::amdgcn) {
+       return EmitAMDGPUShflDown(value, offset, builder);
++    } else if (target_triple.isSPIR()) {
++      return EmitSPIRShflDown(value, offset, builder);
+     } else {
+       LOG(FATAL) << "Invalid triple " << target_triple.str();
+     }
+@@ -396,6 +415,9 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
+     } else if (target_triple.getArch() == llvm::Triple::amdgcn) {
+       insert_val = EmitAMDGPUShflDown(builder->CreateExtractElement(x, i),
+                                       offset, builder);
++    } else if (target_triple.isSPIR()) {
++      insert_val = EmitSPIRShflDown(builder->CreateExtractElement(x, i), offset,
++                                    builder);
+     } else {
+       LOG(FATAL) << "Invalid triple " << target_triple.str();
+     }
+diff --git a/xla/service/gpu/stream_executor_util.cc b/xla/service/gpu/stream_executor_util.cc
+index 6f2be2a88..026024a91 100644
+--- a/xla/service/gpu/stream_executor_util.cc
++++ b/xla/service/gpu/stream_executor_util.cc
+@@ -121,7 +121,7 @@ StreamExecutorConvLayoutsToXlaLayouts(const ConvolutionDimensionNumbers& dnums,
+                            dnums.kernel_spatial_dimensions().begin(),
+                            dnums.kernel_spatial_dimensions().end());
+       break;
+-    case FilterLayout::kOutputInputYX4:   // OIHW_VECT_C
++    case FilterLayout::kOutputInputYX4:  // OIHW_VECT_C
+       filter_layout.push_back(dnums.kernel_output_feature_dimension());
+       filter_layout.push_back(dnums.kernel_input_feature_dimension());
+       filter_layout.insert(filter_layout.end(),
+@@ -325,7 +325,8 @@ StatusOr<std::unique_ptr<se::KernelBase>> CreateKernel(
+ 
+   if (!cubin_data.empty()) {
+     loader_spec.AddCudaCubinInMemory(
+-        reinterpret_cast<const char*>(cubin_data.data()), kernel_name);
++        reinterpret_cast<const char*>(cubin_data.data()), cubin_data.size(),
++        kernel_name);
+   }
+ 
+   auto kernel_base = std::make_unique<se::KernelBase>(stream_exec);
+diff --git a/xla/service/gpu/target_constants.h b/xla/service/gpu/target_constants.h
+index 92f31a6c1..ff12c19d9 100644
+--- a/xla/service/gpu/target_constants.h
++++ b/xla/service/gpu/target_constants.h
+@@ -54,6 +54,28 @@ inline const char* DataLayout() {
+ 
+ }  // namespace amdgpu
+ 
++namespace spir {
++// SYCL: The triple that represents our target on SPIR backend.
++inline const char* TargetTriple() {
++  static constexpr char kTargetTriple[] = "spir64-unknown-unknown";
++  return kTargetTriple;
++}
++
++// The data layout of the emitted module.
++inline const char* DataLayout() {
++  // Specifies the address space as global address space
++  // A1: Specifies the address space of objects created by ‘alloca’.
++  // P1: Specifies the address space that corresponds to program memory.
++  // G1: Specifies the address space of global variables.
++  static constexpr char kDataLayout[] =
++      "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:"
++      "32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:"
++      "128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:"
++      "1024";
++  return kDataLayout;
++}
++}  // namespace spir
++
+ }  // namespace gpu
+ }  // namespace xla
+ 
+diff --git a/xla/service/gpu/target_util.cc b/xla/service/gpu/target_util.cc
+index 97ee67bd3..2321a042e 100644
+--- a/xla/service/gpu/target_util.cc
++++ b/xla/service/gpu/target_util.cc
+@@ -40,6 +40,10 @@ struct TargetIntrinsics {
+   std::variant<llvm::Intrinsic::ID,
+                std::function<llvm::CallInst*(llvm::IRBuilder<>*)>>
+       amdgpu_intrinsic_or_function;
++  // SYCL: Target for SPIRV.
++  absl::variant<llvm::Intrinsic::ID,
++                std::function<llvm::CallInst*(llvm::IRBuilder<>*)>>
++      spir_intrinsic_or_function;
+ };
+ 
+ // Gets the llvm intrinsic ids on different platforms (NVPTX, AMDGPU)
+@@ -47,32 +51,80 @@ struct TargetIntrinsics {
+ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
+   switch (intrin) {
+     case TargetIntrinsicID::kThreadIdx: {
+-      return {llvm::Intrinsic::nvvm_read_ptx_sreg_tid_x,
+-              llvm::Intrinsic::amdgcn_workitem_id_x};
++      return {
++          llvm::Intrinsic::nvvm_read_ptx_sreg_tid_x,
++          llvm::Intrinsic::amdgcn_workitem_id_x,
++          [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
++            return EmitDeviceFunctionCall("_Z12get_local_idj",
++                                          {b_->getInt32(0)}, {U32}, U64,
++                                          {b_->getContext()}, b_);
++          },
++      };
+     }
+     case TargetIntrinsicID::kThreadIdy: {
+-      return {llvm::Intrinsic::nvvm_read_ptx_sreg_tid_y,
+-              llvm::Intrinsic::amdgcn_workitem_id_y};
++      return {
++          llvm::Intrinsic::nvvm_read_ptx_sreg_tid_y,
++          llvm::Intrinsic::amdgcn_workitem_id_y,
++          [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
++            return EmitDeviceFunctionCall("_Z12get_local_idj",
++                                          {b_->getInt32(1)}, {U32}, U64,
++                                          {b_->getContext()}, b_);
++          },
++      };
+     }
+     case TargetIntrinsicID::kThreadIdz: {
+-      return {llvm::Intrinsic::nvvm_read_ptx_sreg_tid_z,
+-              llvm::Intrinsic::amdgcn_workitem_id_z};
++      return {
++          llvm::Intrinsic::nvvm_read_ptx_sreg_tid_z,
++          llvm::Intrinsic::amdgcn_workitem_id_z,
++          [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
++            return EmitDeviceFunctionCall("_Z12get_local_idj",
++                                          {b_->getInt32(2)}, {U32}, U64,
++                                          {b_->getContext()}, b_);
++          },
++      };
+     }
+     case TargetIntrinsicID::kBlockIdx: {
+-      return {llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_x,
+-              llvm::Intrinsic::amdgcn_workgroup_id_x};
++      return {
++          llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_x,
++          llvm::Intrinsic::amdgcn_workgroup_id_x,
++          [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
++            return EmitDeviceFunctionCall("_Z12get_group_idj",
++                                          {b_->getInt32(0)}, {U32}, U64,
++                                          {b_->getContext()}, b_);
++          },
++      };
+     }
+     case TargetIntrinsicID::kBlockIdy: {
+-      return {llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_y,
+-              llvm::Intrinsic::amdgcn_workgroup_id_y};
++      return {
++          llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_y,
++          llvm::Intrinsic::amdgcn_workgroup_id_y,
++          [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
++            return EmitDeviceFunctionCall("_Z12get_group_idj",
++                                          {b_->getInt32(1)}, {U32}, U64,
++                                          {b_->getContext()}, b_);
++          },
++      };
+     }
+     case TargetIntrinsicID::kBlockIdz: {
+-      return {llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_z,
+-              llvm::Intrinsic::amdgcn_workgroup_id_z};
++      return {
++          llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_z,
++          llvm::Intrinsic::amdgcn_workgroup_id_z,
++          [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
++            return EmitDeviceFunctionCall("_Z12get_group_idj",
++                                          {b_->getInt32(2)}, {U32}, U64,
++                                          {b_->getContext()}, b_);
++          },
++      };
+     }
+     case TargetIntrinsicID::kBarrierId: {
+-      return {llvm::Intrinsic::nvvm_barrier0,
+-              llvm::Intrinsic::amdgcn_s_barrier};
++      return {llvm::Intrinsic::nvvm_barrier0, llvm::Intrinsic::amdgcn_s_barrier,
++              [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
++                return EmitDeviceFunctionCall(
++                    "_Z7barrierj", {b_->getInt32(3)}, {U32}, VOID,
++                    llvm::AttrBuilder(b_->getContext())
++                        .addAttribute(llvm::Attribute::Convergent),
++                    b_);
++              }};
+     }
+     case TargetIntrinsicID::kBlockDimx: {
+       return {llvm::Intrinsic::nvvm_read_ptx_sreg_ntid_x,
+@@ -80,6 +132,11 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
+                 return EmitDeviceFunctionCall("__ockl_get_local_size",
+                                               {b_->getInt32(0)}, {U32}, U64,
+                                               {b_->getContext()}, b_);
++              },
++              [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
++                return EmitDeviceFunctionCall("_Z14get_local_sizej",
++                                              {b_->getInt32(0)}, {U32}, U64,
++                                              {b_->getContext()}, b_);
+               }};
+     }
+     case TargetIntrinsicID::kBlockDimy: {
+@@ -88,6 +145,11 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
+                 return EmitDeviceFunctionCall("__ockl_get_local_size",
+                                               {b_->getInt32(1)}, {U32}, U64,
+                                               {b_->getContext()}, b_);
++              },
++              [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
++                return EmitDeviceFunctionCall("_Z14get_local_sizej",
++                                              {b_->getInt32(1)}, {U32}, U64,
++                                              {b_->getContext()}, b_);
+               }};
+     }
+     case TargetIntrinsicID::kBlockDimz: {
+@@ -96,11 +158,24 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
+                 return EmitDeviceFunctionCall("__ockl_get_local_size",
+                                               {b_->getInt32(2)}, {U32}, U64,
+                                               {b_->getContext()}, b_);
++              },
++              [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
++                return EmitDeviceFunctionCall("_Z14get_local_sizej",
++                                              {b_->getInt32(2)}, {U32}, U64,
++                                              {b_->getContext()}, b_);
+               }};
+     }
+     case TargetIntrinsicID::kGroupBarrierId: {
+       return {llvm::Intrinsic::nvvm_bar_warp_sync,
+-              llvm::Intrinsic::amdgcn_wave_barrier};
++              llvm::Intrinsic::amdgcn_wave_barrier,
++              [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
++                // TODO: Fix it.
++                return EmitDeviceFunctionCall(
++                    "_Z7barrierj", {b_->getInt32(3)}, {U32}, VOID,
++                    llvm::AttrBuilder(b_->getContext())
++                        .addAttribute(llvm::Attribute::Convergent),
++                    b_);
++              }};
+     }
+   }
+ }
+@@ -109,6 +184,7 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
+ struct TargetDeviceFunction {
+   const std::string nvptx_root;
+   const std::string amdgpu_root;
++  const std::string spir_root;
+ };
+ 
+ // Gets the device function name on different platforms (NVPTX, AMDGPU)
+@@ -117,52 +193,52 @@ struct TargetDeviceFunction GetDeviceFunctionRoot(
+     TargetDeviceFunctionID func_id) {
+   switch (func_id) {
+     case TargetDeviceFunctionID::kAtan2: {
+-      return {"__nv_atan2", "__ocml_atan2"};
++      return {"__nv_atan2", "__ocml_atan2", "_Z5atan2"};
+     }
+     case TargetDeviceFunctionID::kCos: {
+-      return {"__nv_cos", "__ocml_cos"};
++      return {"__nv_cos", "__ocml_cos", "_Z3cos"};
+     }
+     case TargetDeviceFunctionID::kErfcinv: {
+-      return {"__nv_erfcinv", "__ocml_erfcinv"};
++      return {"__nv_erfcinv", "__ocml_erfcinv", "_Z7erfcinv"};
+     }
+     case TargetDeviceFunctionID::kExp: {
+-      return {"__nv_exp", "__ocml_exp"};
++      return {"__nv_exp", "__ocml_exp", "_Z3exp"};
+     }
+     case TargetDeviceFunctionID::kExpm1: {
+-      return {"__nv_expm1", "__ocml_expm1"};
++      return {"__nv_expm1", "__ocml_expm1", "_Z5expm1"};
+     }
+     case TargetDeviceFunctionID::kFmod: {
+-      return {"__nv_fmod", "__ocml_fmod"};
++      return {"__nv_fmod", "__ocml_fmod", "_Z4fmod"};
+     }
+     case TargetDeviceFunctionID::kHypot: {
+-      return {"__nv_hypot", "__ocml_hypot"};
++      return {"__nv_hypot", "__ocml_hypot", "_Z5hypot"};
+     }
+     case TargetDeviceFunctionID::kLog: {
+-      return {"__nv_log", "__ocml_log"};
++      return {"__nv_log", "__ocml_log", "_Z3log"};
+     }
+     case TargetDeviceFunctionID::kLog1p: {
+-      return {"__nv_log1p", "__ocml_log1p"};
++      return {"__nv_log1p", "__ocml_log1p", "_Z5log1p"};
+     }
+     case TargetDeviceFunctionID::kPow: {
+-      return {"__nv_pow", "__ocml_pow"};
++      return {"__nv_pow", "__ocml_pow", "_Z3pow"};
+     }
+     case TargetDeviceFunctionID::kRound: {
+-      return {"__nv_round", "__ocml_round"};
++      return {"__nv_round", "__ocml_round", "_Z5round"};
+     }
+     case TargetDeviceFunctionID::kRsqrt: {
+-      return {"__nv_rsqrt", "__ocml_rsqrt"};
++      return {"__nv_rsqrt", "__ocml_rsqrt", "_Z5rsqrt"};
+     }
+     case TargetDeviceFunctionID::kSin: {
+-      return {"__nv_sin", "__ocml_sin"};
++      return {"__nv_sin", "__ocml_sin", "_Z3sin"};
+     }
+     case TargetDeviceFunctionID::kSqrt: {
+-      return {"__nv_sqrt", "__ocml_sqrt"};
++      return {"__nv_sqrt", "__ocml_sqrt", "_Z4sqrt"};
+     }
+     case TargetDeviceFunctionID::kTan: {
+-      return {"__nv_tan", "__ocml_tan"};
++      return {"__nv_tan", "__ocml_tan", "_Z3tan"};
+     }
+     case TargetDeviceFunctionID::kTanh: {
+-      return {"__nv_tanh", "__ocml_tanh"};
++      return {"__nv_tanh", "__ocml_tanh", "_Z4tanh"};
+     }
+   }
+ }
+@@ -193,6 +269,24 @@ std::string ObtainDeviceFunctionName(TargetDeviceFunctionID func_id,
+     } else {
+       LOG(FATAL) << "Unexpected type while getting device function name.";
+     }
++  } else if (target_triple.isSPIR()) {
++    if (output_type == F32) {
++      if (gpu_root_names.spir_root == "_Z5hypot" ||
++          gpu_root_names.spir_root == "_Z3pow" ||
++          gpu_root_names.spir_root == "_Z5atan2" ||
++          gpu_root_names.spir_root == "_Z4fmod")
++        return StrCat(gpu_root_names.spir_root, "ff");
++      return StrCat(gpu_root_names.spir_root, "f");
++    } else if (output_type == F64) {
++      if (gpu_root_names.spir_root == "_Z5hypot" ||
++          gpu_root_names.spir_root == "_Z3pow" ||
++          gpu_root_names.spir_root == "_Z5atan2" ||
++          gpu_root_names.spir_root == "_Z4fmod")
++        return StrCat(gpu_root_names.spir_root, "dd");
++      return StrCat(gpu_root_names.spir_root, "d");
++    } else {
++      LOG(FATAL) << "Unexpected type while getting device function name.";
++    }
+   } else {
+     LOG(FATAL) << "Invalid triple " << target_triple.str();
+   }
+@@ -222,6 +316,9 @@ llvm::CallInst* EmitDeviceFunctionCall(
+           .getCallee());
+ 
+   callee->addFnAttrs(attributes);
++  // SYCL: SPIR function with mangling name
++  if (callee_name.find("_Z") != std::string::npos)
++    callee->setCallingConv(llvm::CallingConv::SPIR_FUNC);
+ 
+   return b->CreateCall(callee, llvm_ir::AsArrayRef(operands), name.data());
+ }
+@@ -247,6 +344,18 @@ llvm::CallInst* EmitCallToTargetIntrinsic(
+               &gpu_intrinsic_id.amdgpu_intrinsic_or_function);
+       return (*builder_func)(b);
+     }
++  } else if (target_triple.isSPIR()) {
++    llvm::Intrinsic::ID* llvm_intrinsic_id_ptr =
++        absl::get_if<llvm::Intrinsic::ID>(
++            &gpu_intrinsic_id.spir_intrinsic_or_function);
++    if (llvm_intrinsic_id_ptr) {
++      llvm_intrinsic_id = *llvm_intrinsic_id_ptr;
++    } else {
++      std::function<llvm::CallInst*(llvm::IRBuilder<>*)>* builder_func =
++          absl::get_if<std::function<llvm::CallInst*(llvm::IRBuilder<>*)>>(
++              &gpu_intrinsic_id.spir_intrinsic_or_function);
++      return (*builder_func)(b);
++    }
+   } else {
+     LOG(FATAL) << "Invalid triple " << target_triple.str();
+   }
+@@ -274,6 +383,8 @@ void AnnotateFunctionAsGpuKernel(llvm::Module* module, llvm::Function* func,
+     // Attach information so AMDGPU can recognize function as a AMDGPU kernel.
+     func->setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
+     func->addFnAttr("amdgpu-flat-work-group-size", "1, 1024");
++  } else if (target_triple.isSPIR()) {
++    // Do nothing
+   } else {
+     LOG(FATAL) << "Invalid triple " << target_triple.str();
+   }
+diff --git a/xla/service/llvm_ir/fused_ir_emitter.cc b/xla/service/llvm_ir/fused_ir_emitter.cc
+index d1247b8c6..4d9c249b2 100644
+--- a/xla/service/llvm_ir/fused_ir_emitter.cc
++++ b/xla/service/llvm_ir/fused_ir_emitter.cc
+@@ -104,7 +104,7 @@ FusedIrEmitter::IndexedGenerator FusedIrEmitter::HandleConstant(
+       /*Initializer=*/initializer,
+       /*Name=*/"", /*InsertBefore=*/nullptr,
+       /*TLMode=*/llvm::GlobalValue::NotThreadLocal,
+-      /*AddressSpace=*/0,
++      /*AddressSpace=*/1,  // SYCL: Hardcode to global addrspace
+       /*isExternallyInitialized=*/false);
+   global->setUnnamedAddr(llvm::GlobalVariable::UnnamedAddr::Global);
+ 
+diff --git a/xla/service/llvm_ir/llvm_util.cc b/xla/service/llvm_ir/llvm_util.cc
+index be59801b9..7dbb5e999 100644
+--- a/xla/service/llvm_ir/llvm_util.cc
++++ b/xla/service/llvm_ir/llvm_util.cc
+@@ -234,6 +234,8 @@ llvm::Type* PrimitiveTypeToIrType(PrimitiveType element_type,
+       // Tokens do not have a physical representation, but the compiler needs
+       // some placeholder type, so use int8_t*.
+       return llvm::Type::getInt8PtrTy(module->getContext());
++    case VOID:
++      return llvm::Type::getVoidTy(module->getContext());
+     default:
+       LOG(FATAL) << "unsupported type " << element_type;
+   }
+@@ -436,6 +438,7 @@ void SetDereferenceableMetadataForLoad(llvm::LoadInst* load,
+ 
+ llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
+                                     llvm::Instruction* inst) {
++  /* SYCL: This range is for NVPTX target only.
+   llvm::LLVMContext& context = inst->getParent()->getContext();
+   llvm::IntegerType* i32 = llvm::Type::getInt32Ty(context);
+   inst->setMetadata(
+@@ -444,6 +447,7 @@ llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
+           context,
+           {llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i32, lower)),
+            llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i32, upper))}));
++  */
+   return inst;
+ }
+ 
+diff --git a/xla/stream_executor/kernel_spec.cc b/xla/stream_executor/kernel_spec.cc
+index a8efbb398..878316ae5 100644
+--- a/xla/stream_executor/kernel_spec.cc
++++ b/xla/stream_executor/kernel_spec.cc
+@@ -34,9 +34,9 @@ CudaCubinOnDisk::CudaCubinOnDisk(absl::string_view filename,
+                                  absl::string_view kernelname)
+     : OnDiskKernelLoaderSpec(filename, kernelname) {}
+ 
+-CudaCubinInMemory::CudaCubinInMemory(const char *bytes,
++CudaCubinInMemory::CudaCubinInMemory(const char *bytes, int size,
+                                      absl::string_view kernelname)
+-    : KernelLoaderSpec(kernelname), bytes_(bytes) {}
++    : KernelLoaderSpec(kernelname), size_(size), bytes_(bytes) {}
+ 
+ bool CompareComputeCapability(const std::tuple<int, int> &lhs,
+                               const std::tuple<int, int> &rhs) {
+@@ -198,9 +198,9 @@ MultiKernelLoaderSpec *MultiKernelLoaderSpec::AddCudaPtxOnDisk(
+ }
+ 
+ MultiKernelLoaderSpec *MultiKernelLoaderSpec::AddCudaCubinInMemory(
+-    const char *bytes, absl::string_view kernelname) {
++    const char *bytes, int size, absl::string_view kernelname) {
+   CHECK(cuda_cubin_in_memory_ == nullptr);
+-  cuda_cubin_in_memory_.reset(new CudaCubinInMemory{bytes, kernelname});
++  cuda_cubin_in_memory_.reset(new CudaCubinInMemory{bytes, size, kernelname});
+   return this;
+ }
+ 
+diff --git a/xla/stream_executor/kernel_spec.h b/xla/stream_executor/kernel_spec.h
+index 8b33a5fe8..9c3ae880b 100644
+--- a/xla/stream_executor/kernel_spec.h
++++ b/xla/stream_executor/kernel_spec.h
+@@ -258,13 +258,16 @@ class OpenCLTextInMemory : public KernelLoaderSpec {
+ // Kernel loader specification for a CUBIN blob that resides in memory.
+ class CudaCubinInMemory : public KernelLoaderSpec {
+  public:
+-  CudaCubinInMemory(const char *bytes, absl::string_view kernelname);
++  CudaCubinInMemory(const char *bytes, int size, absl::string_view kernelname);
+   ~CudaCubinInMemory() override {}
+ 
+   const char *bytes() const { return bytes_; }
++  const int size() const { return size_; }
+ 
+  private:
+   const char *bytes_;
++  // SYCL: this is needed only for SPIRV
++  int size_;
+ 
+   SE_DISALLOW_COPY_AND_ASSIGN(CudaCubinInMemory);
+ };
+@@ -338,7 +341,7 @@ class MultiKernelLoaderSpec {
+                                           absl::string_view kernelname);
+   MultiKernelLoaderSpec *AddCudaCubinOnDisk(absl::string_view filename,
+                                             absl::string_view kernelname);
+-  MultiKernelLoaderSpec *AddCudaCubinInMemory(const char *cubin_bytes,
++  MultiKernelLoaderSpec *AddCudaCubinInMemory(const char *cubin_bytes, int size,
+                                               absl::string_view kernelname);
+   MultiKernelLoaderSpec *AddCudaPtxInMemory(absl::string_view ptx,
+                                             absl::string_view kernelname);
+diff --git a/xla/stream_executor/stream_executor_pimpl.h b/xla/stream_executor/stream_executor_pimpl.h
+index 755dd564e..701ecc3c7 100644
+--- a/xla/stream_executor/stream_executor_pimpl.h
++++ b/xla/stream_executor/stream_executor_pimpl.h
+@@ -828,7 +828,8 @@ StreamExecutor::CreateTypedKernel(absl::string_view kernel_name,
+ 
+   if (!cubin_data.empty()) {
+     loader_spec.AddCudaCubinInMemory(
+-        reinterpret_cast<const char*>(cubin_data.data()), kernel_name);
++        reinterpret_cast<const char*>(cubin_data.data()), cubin_data.size(),
++        kernel_name);
+   }
+ 
+   TF_RETURN_IF_ERROR(GetKernel(loader_spec, kernel_base.get()));
+diff --git a/xla/xla_data.proto b/xla/xla_data.proto
+index a9db4c982..1b30bea66 100644
+--- a/xla/xla_data.proto
++++ b/xla/xla_data.proto
+@@ -101,6 +101,7 @@ enum PrimitiveType {
+   TOKEN = 17;
+ 
+   // Next = 23
++  VOID = 100;
+ }
+ // LINT.ThenChange(
+ //   https://www.tensorflow.org/code/tensorflow/compiler/xla/shape_util.cc,
