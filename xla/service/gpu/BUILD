@@ -1,4 +1,4 @@
-load("//xla:xla.bzl", "itex_xpu_library")
+load("//xla:xla.bzl", "itex_xpu_library", "itex_xetla_library")
 
 package(
     default_visibility = [
@@ -58,6 +58,7 @@ cc_library(
     ],
     deps = [
         ":cudnn_fused_conv_rewriter",
+        ":cudnn_fused_mha_rewriter",
         ":cusolver_rewriter",
         ":gpu_compiler",
         ":triangular_solve_rewriter",
@@ -208,6 +209,7 @@ cc_library(
         "gpu_compiler.h",
     ],
     deps = [
+        ":dot_expand_dims",
         ":gpu_executable",
         ":ir_emitter",
         "@com_google_absl//absl/strings",
@@ -343,7 +345,7 @@ cc_library(
         "@xla//xla/service/gpu:horizontal_loop_fusion",
         "@xla//xla/service/gpu:instruction_fusion",
         "@xla//xla/service/gpu:ir_emission_utils",
-        "@xla//xla/service/gpu:matmul_utils",
+        ":matmul_utils",
         "@xla//xla/service/gpu:metrics",
         "@xla//xla/service/gpu:move_copy_to_users",
         "@xla//xla/service/gpu:multi_output_fusion",
@@ -392,6 +394,7 @@ cc_library(
         ":matmul_utils",
         ":nccl_collective_thunks",
         ":triangular_solve_thunk",
+        ":gpu_fused_mha_runner",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -651,6 +654,7 @@ itex_xpu_library(
         "convolution_thunk.cc",
         "copy_thunk.cc",
         "for_thunk.cc",
+        "fused_mha_thunk.cc",
         "gpu_executable.cc",
         "infeed_thunk.cc",
         "kernel_thunk.cc",
@@ -666,6 +670,7 @@ itex_xpu_library(
         "copy_thunk.h",
         "custom_call_thunk.h",
         "for_thunk.h",
+        "fused_mha_thunk.h",
         "gemm_thunk.h",
         "gpu_executable.h",
         "infeed_thunk.h",
@@ -682,6 +687,7 @@ itex_xpu_library(
         ":fft_thunk",
         ":gemm_thunk",
         ":gpu_conv_runner",
+        ":gpu_fused_mha_runner",
         ":matmul_utils",
         ":nccl_collective_thunks",
         ":scratch_allocator",
@@ -797,5 +803,71 @@ cc_library(
     deps = [
         "@tsl//tsl/framework:numeric_types",
         "@tsl//tsl/platform:logging",
+    ],
+)
+
+cc_library(
+    name = "cudnn_fused_mha_rewriter",
+    srcs = ["cudnn_fused_mha_rewriter.cc"],
+    hdrs = ["cudnn_fused_mha_rewriter.h"],
+    deps = [
+        "@xla//xla/service/gpu:backend_configs_cc",
+        "@xla//xla/service/gpu:cublas_cudnn",
+        "@xla//xla/service/gpu:ir_emission_utils",
+        ":matmul_utils",
+        "@xla//xla:comparison_util",
+        "@xla//xla:literal_util",
+        "@xla//xla:permutation_util",
+        "@xla//xla/hlo/ir:hlo",
+        "@xla//xla/service:hlo_creation_utils",
+        "@xla//xla/service:hlo_pass",
+        "@xla//xla/service:pattern_matcher",
+        "@xla//xla/stream_executor:dnn_proto_cc",
+        "@tsl//tsl/platform:errors",
+        "@tsl//tsl/platform:statusor",
+    ],
+)
+
+itex_xetla_library(
+    name = "gpu_fused_mha_runner",
+    srcs = ["gpu_fused_mha_runner.cc"],
+    hdrs = ["gpu_fused_mha_runner.h"],
+    deps = [
+        "//xla/service/gpu/xetla:mha_op",
+        "//xla/stream_executor/sycl:sycl_executor",
+        "@xla//xla/service/gpu:backend_configs_cc",
+        "@xla//xla/service/gpu:cublas_cudnn",
+        "@xla//xla/service/gpu:stream_executor_util",
+        "@xla//xla:shape_util",
+        "@xla//xla:status",
+        "@xla//xla:status_macros",
+        "@xla//xla:statusor",
+        "@xla//xla:types",
+        "@xla//xla:util",
+        "@xla//xla:xla_data_proto_cc",
+        "@xla//xla/hlo/ir:hlo",
+        "@xla//xla/stream_executor",
+        "@xla//xla/stream_executor:dnn",
+        "@xla//xla/stream_executor:lazy_op_runner",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "dot_expand_dims",
+    srcs = ["dot_expand_dims.cc"],
+    hdrs = ["dot_expand_dims.h"],
+    deps = [
+        ":matmul_utils",
+        "@xla//xla:comparison_util",
+        "@xla//xla:literal_util",
+        "@xla//xla:permutation_util",
+        "@xla//xla/hlo/ir:hlo",
+        "@xla//xla/service:hlo_creation_utils",
+        "@xla//xla/service:hlo_pass",
+        "@xla//xla/service:pattern_matcher",
+        "@xla//xla/service/gpu:ir_emission_utils",
+        "@tsl//tsl/platform:errors",
+        "@tsl//tsl/platform:statusor",
     ],
 )

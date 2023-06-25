@@ -600,7 +600,6 @@ def _impl(ctx):
                 ],
                 flag_groups = [
                     flag_group(flags = [
-                        "-std=c++17",
                         "-fPIC",
                         # ref: https://github.com/intel/llvm/blob/sycl/clang/docs/UsersManual.rst#controlling-floating-point-behavior
                         "-fno-finite-math-only",

@@ -1,6 +1,6 @@
 # Return the options to use for a C++ library or binary build.
 # Uses the ":optmode" config_setting to pick the options.
-load("@local_config_dpcpp//dpcpp:build_defs.bzl", "if_dpcpp")
+load("@local_config_dpcpp//dpcpp:build_defs.bzl", "if_dpcpp", "if_xetla")
 
 def if_linux_x86_64(a, otherwise = []):
     return select({
@@ -22,6 +22,17 @@ def tf_copts(android_optimization_level_override = "-O2", is_external = False):
             "-pthread",
         ]
     )
+
+def itex_xetla_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
+    kwargs["copts"] = kwargs.get("copts", []) + if_dpcpp(["-dpcpp_compile"]) + if_xetla(["--xetla"])
+    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_dpcpp(["-link_stage"]) + if_xetla(["--xetla"])
+    native.cc_library(
+        name = name,
+        srcs = srcs,
+        hdrs = hdrs,
+        deps = deps,
+        **kwargs
+    )    
 
 def itex_xpu_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
     kwargs["copts"] = kwargs.get("copts", []) + if_dpcpp(["-dpcpp_compile"])

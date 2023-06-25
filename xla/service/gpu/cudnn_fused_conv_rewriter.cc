@@ -392,6 +392,10 @@ StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
         conv->CloneWithNewOperands(conv->shape(), new_operands));
     comp->parent()->SetAndUniquifyInstrName(new_conv, conv->name());
     TF_RETURN_IF_ERROR(new_conv->set_backend_config(config));
+    if (can_accept_side_input) {
+      xla::Cast<HloCustomCallInstruction>(new_conv)
+          ->set_output_to_operand_aliasing({{{}, {new_operands.size()-1, {}}}});
+    }
     TF_ASSIGN_OR_RETURN(HloInstruction * new_instr,
                         MakeGetTupleElementHlo(new_conv, 0));
     TF_RETURN_IF_ERROR(comp->ReplaceInstruction(instr, new_instr));

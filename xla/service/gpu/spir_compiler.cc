@@ -27,6 +27,7 @@ limitations under the License.
 
 #include "tsl/platform/path.h"
 #include "tsl/platform/status.h"
+#include "tsl/util/env_var.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/algebraic_simplifier.h"
 #include "xla/service/call_inliner.h"
@@ -34,8 +35,10 @@ limitations under the License.
 #include "xla/service/dump.h"
 #include "xla/service/float_normalization.h"
 #include "xla/service/float_support.h"
+#include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/cublas_cudnn.h"
 #include "xla/service/gpu/cudnn_fused_conv_rewriter.h"
+#include "xla/service/gpu/cudnn_fused_mha_rewriter.h"
 #include "xla/service/gpu/cusolver_rewriter.h"
 #include "xla/service/gpu/gpu_conv_padding_legalization.h"
 #include "xla/service/gpu/gpu_conv_rewriter.h"
@@ -46,6 +49,7 @@ limitations under the License.
 #include "xla/service/gpu/triangular_solve_rewriter.h"
 #include "xla/service/hlo_constant_folding.h"
 #include "xla/service/hlo_cse.h"
+#include "xla/service/hlo_dce.h"
 #include "xla/service/hlo_pass_fix.h"
 #include "xla/service/hlo_pass_pipeline.h"
 #include "xla/service/hlo_verifier.h"
@@ -154,6 +158,27 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
       hlo_module, stream_exec, device_allocator, gpu_target_config,
       autotune_results));
 
+  bool use_mha = true;
+  TF_CHECK_OK(tsl::ReadBoolFromEnvVar("MHA", true, &use_mha));
+  if (use_mha) {
+    auto cuda_compute_capability =
+        std::get<se::CudaComputeCapability>(gpu_target_config.gpu_version);
+    HloPassPipeline mha_fusion_pipeline(
+        "nvptx cudnn multi-headed attention fusion");
+    // Rewrite Multi-Headed Attention modules to Fused MHA custom-calls.
+    if (stream_exec) {
+      mha_fusion_pipeline.AddPass<CudnnFusedMHARewriter>(cuda_compute_capability,
+                                                         stream_exec);
+    } else {
+      mha_fusion_pipeline.AddPass<CudnnFusedMHARewriter>(
+          cuda_compute_capability, gpu_target_config.dnn_version_info);
+    }
+    AlgebraicSimplifierOptions algebraic_simplifier_options({}, {});
+    mha_fusion_pipeline.AddPass<HloDCE>();
+
+    TF_RETURN_IF_ERROR(mha_fusion_pipeline.Run(hlo_module).status());
+  }
+
   HloPassPipeline post_pipeline("spir post-layout_assignment part 2");
 
   // Transform TriangularSolve ops into custom-calls, so we can add temp
@@ -182,6 +207,11 @@ std::optional<bool> CanShareBufferHint(const HloInstruction* user,
       //       std::move(user->backend_config<GemmBackendConfig>()).value();
       //   return (config.beta() != 0.) && user->operand(2) == operand;
       // }
+      if (user->custom_call_target() == kCudnnConvBiasActivationForwardCallTarget) {
+        CudnnConvBackendConfig config =
+            std::move(user->backend_config<CudnnConvBackendConfig>()).value();
+        return (config.side_input_scale() != 0.) && (user->operand(user->operand_count()-1) == operand);
+      }
       // The operand of cholesky can be shared with the first output.
       if (user->custom_call_target() == kCusolverCholeskyCallTarget) {
         return user_index.size() == 1 && user_index[0] == 0;

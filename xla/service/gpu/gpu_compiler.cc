@@ -99,6 +99,7 @@ limitations under the License.
 #include "xla/service/gpu/conditional_thunk.h"
 #include "xla/service/gpu/conv_layout_normalization.h"
 #include "xla/service/gpu/dot_dimension_sorter.h"
+#include "xla/service/gpu/dot_expand_dims.h"
 #include "xla/service/gpu/for_thunk.h"
 #include "xla/service/gpu/fusion_merger.h"
 #include "xla/service/gpu/gemm_broadcast_folding_rewriter.h"
@@ -666,6 +667,7 @@ Status GpuCompiler::OptimizeHloModule(
     HloPassPipeline pipeline("layout assignment");
     // Layout assignment uses alias analysis, which requires the call graph to
     // be flattened.
+    pipeline.AddPass<DotExpandDims>();
     pipeline.AddPass<FlattenCallGraph>();
     ChannelLayoutConstraints layout_constraints;
     pipeline.AddPass<GpuLayoutAssignment>(
@@ -852,10 +854,6 @@ Status GpuCompiler::OptimizeHloPostLayoutAssignment(
         std::get<se::CudaComputeCapability>(gpu_target_config.gpu_version);
 
     // Rewrite GEMMs into custom calls.
-    if (debug_options.xla_gpu_enable_triton_gemm() &&
-        compute_capability.IsAtLeast(se::CudaComputeCapability::VOLTA)) {
-      pipeline.AddPass<GemmRewriterTriton>(compute_capability);
-    }
     pipeline.AddPass<GemmRewriter>(compute_capability);
 
     // Rewrite GEMMs with broadcasted inputs as strided GEMMs.

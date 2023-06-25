@@ -10,4 +10,9 @@ config_setting(
     },
 )
 
-
+config_setting(
+    name = "using_xetla",
+    values = {
+        "define": "using_xetla=true",
+    },
+)

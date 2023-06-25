@@ -97,39 +97,6 @@ void InitializePasses(llvm::PassRegistry* pass_registry) {
   llvm::initializeCodeGenPreparePass(*pass_registry);
 }
 
-// Adds the standard LLVM optimization passes, based on the speed optimization
-// level (opt_level) and size optimization level (size_level). Both module
-// and function-level passes are added, so two pass managers are passed in and
-// modified by this function.
-void AddOptimizationPasses(unsigned opt_level, unsigned size_level,
-                           llvm::TargetMachine* target_machine,
-                           llvm::legacy::PassManagerBase* module_passes,
-                           llvm::legacy::FunctionPassManager* function_passes,
-                           int inline_threshold) {
-  // llvm::PassManagerBuilder builder;
-  // builder.OptLevel = opt_level;
-  // builder.SizeLevel = size_level;
-
-  // if (opt_level > 1) {
-  //   builder.Inliner = llvm::createFunctionInliningPass(inline_threshold);
-  // } else {
-  //   // Only inline functions marked with "alwaysinline".
-  //   builder.Inliner = llvm::createAlwaysInlinerLegacyPass();
-  // }
-
-  // // Disable loop unroll in LLVM
-  // builder.DisableUnrollLoops = 1;
-  // builder.LoopVectorize = 0;
-  // builder.SLPVectorize = 0;
-
-  // // NVPTX's early-as-possible passes include NVVM reflect.
-  // // if (target_machine)
-  // //   target_machine->adjustPassManager(builder);
-
-  // builder.populateFunctionPassManager(*function_passes);
-  // builder.populateModulePassManager(*module_passes);
-}
-
 // Refer to function `EmitAssemblyHelper::RunOptimizationPipeline` defined in
 // clang/lib/CodeGen/BackendUtil.cpp.
 void RunOptimizationPipeline(llvm::Module* module,
@@ -205,88 +172,6 @@ Status LinkAndOptimizeModule(llvm::Module* module,
                              llvm::Triple default_target_triple,
                              llvm::TargetMachine* target_machine,
                              int inline_threshold) {
-  // bool dump_ir = hlo_module_config.debug_options().xla_gpu_dump_llvmir();
-  // std::string outputs_dir;
-  // tsl::io::GetTestUndeclaredOutputsDir(&outputs_dir);
-  // IrDumpingPassManager module_passes(module->getModuleIdentifier(),
-  // outputs_dir,
-  //                                    dump_ir);
-
-  // // Add an appropriate TargetLibraryInfo pass for the module's triple.
-  // llvm::TargetLibraryInfoWrapperPass* tliwp =
-  //     new llvm::TargetLibraryInfoWrapperPass(
-  //         llvm::Triple(module->getTargetTriple()));
-  // module_passes.add(tliwp);
-
-  // // Try to fetch the target triple from the module. If not present, set a
-  // // default target triple.
-  // llvm::Triple target_triple = llvm::Triple(module->getTargetTriple());
-  // if (target_triple.getArch() == llvm::Triple::UnknownArch) {
-  //   VLOG(2) << "target triple not found in the module";
-  //   target_triple = default_target_triple;
-  // }
-
-  // if (target_machine)
-  //   module_passes.add(llvm::createTargetTransformInfoWrapperPass(
-  //       target_machine->getTargetIRAnalysis()));
-
-  // // The LLVM IR verifier performs sanity checking on the IR. This helps
-  // // discover problems and report them in a meaningful manner, rather than
-  // let
-  // // later passes report obscure assertions because of unfulfilled
-  // invariants. module_passes.add(llvm::createVerifierPass());
-
-  // // Create the function-level pass manager. It needs data layout information
-  // // too.
-  // llvm::legacy::FunctionPassManager function_passes(module);
-
-  // int32_t opt_level =
-  //     hlo_module_config.debug_options().xla_backend_optimization_level();
-
-  // if (opt_level < 2) {
-  //   LOG(ERROR) << std::string(80, '*');
-  //   LOG(ERROR) << "The XLA GPU backend doesn't support unoptimized code "
-  //                      "generation but ";
-  //   LOG(ERROR) << "--xla_backend_optimization_level is set to "
-  //                   << opt_level << "!";
-  //   LOG(ERROR) << "(Supported configuration is "
-  //                      "--xla_backend_optimization_level >= 2.)";
-  //   LOG(ERROR) << std::string(80, '*');
-  // }
-
-  // // Add optimization passes, and set inliner threshold.
-  // AddOptimizationPasses(opt_level, 0, target_machine, &module_passes,
-  //                       &function_passes, inline_threshold);
-
-  // // Loop unrolling exposes more opportunities for SROA. Therefore, we run
-  // SROA
-  // // again after the standard optimization passes [http://b/13329423].
-  // // TODO(jingyue): SROA may further expose more optimization opportunities
-  // such
-  // // as more precise alias analysis and more function inlining (SROA may
-  // change
-  // // the inlining cost of a function). For now, running SROA already emits
-  // good
-  // // enough code for the evaluated benchmarks. We may want to run more
-  // // optimizations later.
-  // if (opt_level > 0) {
-  //   // LLVM's optimizer turns on SROA when the optimization level is greater
-  //   // than 0. We mimic this behavior here.
-  //   module_passes.add(llvm::createSROAPass());
-  // }
-
-  // // Verify that the module is well formed after optimizations ran.
-  // module_passes.add(llvm::createVerifierPass());
-
-  // // Done populating the pass managers. Now run them.
-
-  // function_passes.doInitialization();
-  // for (auto func = module->begin(); func != module->end(); ++func) {
-  //   function_passes.run(*func);
-  // }
-  // function_passes.doFinalization();
-  // module_passes.run(*module);
-
   bool opt = true;
   tsl::ReadBoolFromEnvVar("DPCPP_LLVM_OPT", true, &opt);
   if (opt) {
@@ -331,9 +216,6 @@ void SPIRBackendInit(const HloModuleConfig& hlo_module_config) {
   // which contains a lot of load instructions and many arithmetic instructions
   // between those loads.
   FeedLLVMWithFlags({"-memdep-block-scan-limit=500"});
-
-  // intel llvm sycl opt flag.
-  FeedLLVMWithFlags({"-sycl-opt=1"});
 
   llvm_ir::InitializeLLVMCommandLineOptions(
       hlo_module_config.debug_options().xla_backend_extra_options());
@@ -388,8 +270,8 @@ StatusOr<std::string> CompileToSpir(llvm::Module* module,
     // No SPIR target machine?
     llvm::Triple default_target_triple("spir64-unknown-unknown");
 
-    bool reuse = true;
-    tsl::ReadBoolFromEnvVar("TF_LLVM_OPT", true, &reuse);
+    bool reuse = false;
+    tsl::ReadBoolFromEnvVar("TF_LLVM_OPT", false, &reuse);
     if (reuse) {
       // Link with libdevice, and optimize the LLVM module.
       TF_RETURN_IF_ERROR(LinkAndOptimizeModule(module, hlo_module_config,

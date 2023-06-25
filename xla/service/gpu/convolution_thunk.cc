@@ -84,8 +84,7 @@ Status CreateOneDnnPrimitive(
   se::OwningScratchAllocator<> scratch_allocator(
       buffer_allocations.device_ordinal(),
       buffer_allocations.memory_allocator());
-  onednn_primitive->engine = dnnl::sycl_interop::make_engine(
-      dpcpp_stream->get_device(), dpcpp_stream->get_context());
+  onednn_primitive->engine = FindOrCreateEngine(dpcpp_stream);
   onednn_primitive->stream =
       dnnl::sycl_interop::make_stream(onednn_primitive->engine, *dpcpp_stream);
   DataLayout input_dl;
@@ -336,6 +335,10 @@ Status CreateOneDnnPrimitive(
           weight_fmt = is_group_conv ? dnnl::memory::format_tag::gohwi
                                      : dnnl::memory::format_tag::ohwi;
           break;
+        case FilterLayout::kYXInputOutput:
+          weight_fmt = is_group_conv ? dnnl::memory::format_tag::hwigo
+                                     : dnnl::memory::format_tag::hwio;
+          break;
         default:
           return InternalError("Unsupported convolution weight format");
       }
@@ -506,11 +509,7 @@ Status CreateOneDnnPrimitive(
 
     if (conv_descriptor.kind == CudnnConvKind::kForward ||
         conv_descriptor.kind == CudnnConvKind::kForwardActivation) {
-      ConvFwdPd fwd_pd =
-          ConvFwdPd(onednn_primitive->engine, dnnl::prop_kind::forward,
-                    dnnl::algorithm::convolution_direct, src_md,
-                    filter_md_prefer, dst_md, stride_dims, dilation_dims,
-                    padding_dims_l, padding_dims_r, post_ops_attr);
+      ConvFwdPd fwd_pd;
       if (bias_data != nullptr && conv_result_scale_one) {
         auto bias_md = dnnl::memory::desc(bias_dims, data_type,
                                           dnnl::memory::format_tag::x);
@@ -523,6 +522,12 @@ Status CreateOneDnnPrimitive(
             bias_md, onednn_primitive->engine, kind, bias_data);
         onednn_primitive->fwd_primitives_args.insert(
             {DNNL_ARG_BIAS, onednn_primitive->bias_memory});
+      } else {
+        fwd_pd =
+          ConvFwdPd(onednn_primitive->engine, dnnl::prop_kind::forward,
+                    dnnl::algorithm::convolution_direct, src_md,
+                    filter_md_prefer, dst_md, stride_dims, dilation_dims,
+                    padding_dims_l, padding_dims_r, post_ops_attr);
       }
 
       onednn_primitive->fwd_primitive = dnnl::convolution_forward(fwd_pd);

@@ -6,8 +6,8 @@ def workspace(path_prefix = "", tf_repo_name = ""):
 
     new_git_repository(
         name = "onednn_gpu",
-        # rls-v3.1
-        commit = "8e522c65b4b3840cf088bfacd2f307cdf3f5ac24",
+        # rls-v3.2
+        commit = "f88241a",
         remote = "https://github.com/oneapi-src/oneDNN.git",
         build_file = "//third_party/onednn:onednn_gpu.BUILD",
         verbose = True,
@@ -34,6 +34,18 @@ def workspace(path_prefix = "", tf_repo_name = ""):
         verbose = True,
         patches = ["//third_party/llvm_spir:llvm_spir.patch"],
         patch_args = ["-p1"],
+    )
+
+    new_git_repository(
+        name = "xetla",
+        # v0.3.1
+        commit = "b18d66e127e0db05c2a3ffed99792c361ce2b7b6",
+        remote = "https://github.com/intel-innersource/libraries.gpu.xetla.git",
+        verbose = True,
+        build_file = "//third_party/xetla:BUILD",
+        patch_cmds = [
+            "git log -1 --format=%H > COMMIT",
+        ], 
     )
 
     # _itex_bind()

@@ -189,9 +189,7 @@ class DevicePool {
       size_t num_device = devices.size();
 
       if (num_device <= 0) {
-        LOG(ERROR) << "Can not found any devices. "
-                   << "To check runtime environment on your host, "
-                   << "please run tools/env_check.sh.";
+        LOG(ERROR) << "Can not found any devices.";
       }
       assert((num_device > 0));
     });

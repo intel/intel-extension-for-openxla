@@ -53,7 +53,7 @@ def system(cmd):
   else:
     return -os.WTERMSIG(ret)
 
-def call_compiler(argv, link = False, dpcpp = True):
+def call_compiler(argv, link = False, dpcpp = True, xetla = False):
   flags = argv
 
   # TODO(itex): check dose this compiler has
@@ -87,12 +87,21 @@ def call_compiler(argv, link = False, dpcpp = True):
   compile_flags = []
   compile_flags.append(' -isystem ' + ' -isystem '.join(%{dpcpp_builtin_include_directories}))
   compile_flags.append('-DDNNL_GRAPH_WITH_SYCL=1')
+  if xetla:
+    compile_flags.append("-std=c++20")
+    compile_flags.append("-DXETPP_NEW_XMAIN")
+  else:
+    compile_flags.append("-std=c++17")   
 
 # link flags
   link_flags = ['-fPIC']
   link_flags.append('-lsycl')
   link_flags.append("-fsycl")
-  link_flags.append('-Xs \'-options "-cl-poison-unsupported-fp64-kernels -cl-intel-enable-auto-large-GRF-mode"\'')
+  if xetla:
+    # TODO(itex): unsupported -vc-codegen , does it impact performance?
+    link_flags.append('-Xs "-doubleGRF -Xfinalizer -printregusage  -Xfinalizer -DPASTokenReduction  -Xfinalizer -enableBCR"')
+  else:
+    link_flags.append('-Xs \'-options "-cl-poison-unsupported-fp64-kernels -cl-intel-enable-auto-large-GRF-mode"\'')
   # TODO use bazel --jobs number here.
   link_flags.append('-fsycl-max-parallel-link-jobs=8')
   link_flags.append("-Wl,-no-as-needed")
@@ -163,6 +172,7 @@ def call_compiler(argv, link = False, dpcpp = True):
 
 def main():
   parser = ArgumentParser()
+  parser.add_argument('--xetla', action='store_true')
   parser.add_argument('-dpcpp_compile', action='store_true')
   parser.add_argument('-link_stage', action='store_true')
   if len(sys.argv[1:]) == 1 and (sys.argv[1:][0].startswith('@')):
@@ -176,10 +186,10 @@ def main():
   leftover = [pipes.quote(s) for s in leftover]
   if args.link_stage:
     # link for DPC++ object
-    return call_compiler(leftover, link=True, dpcpp=args.dpcpp_compile)
+    return call_compiler(leftover, link=True, dpcpp=args.dpcpp_compile, xetla=args.xetla)
   else:
     # compile for DPC++ object
-    return call_compiler(leftover, link=False, dpcpp=args.dpcpp_compile)
+    return call_compiler(leftover, link=False, dpcpp=args.dpcpp_compile, xetla=args.xetla)
 
 if __name__ == '__main__':
   sys.exit(main())
