@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "xla/service/gpu/cusolver_rewriter.h"
+#include "xla/service/gpu/mkl_rewriter.h"
 
 #include <cstdlib>
 #include <functional>
@@ -151,30 +151,29 @@ StatusOr<bool> RunOnInstruction(HloInstruction* instruction) {
 
 // Rewrites the convolutions in the given computation into calls to cudnn.
 // Returns true if it made any changes.
-StatusOr<bool> GpusolverRewriter::RunOnComputation(
-    HloComputation* computation) {
-  std::vector<HloInstruction*> cusolver_calls;
+StatusOr<bool> MklRewriter::RunOnComputation(HloComputation* computation) {
+  std::vector<HloInstruction*> mkl_calls;
   for (auto* hlo : computation->instructions()) {
     if (hlo->opcode() == HloOpcode::kCholesky) {
-      cusolver_calls.push_back(hlo);
+      mkl_calls.push_back(hlo);
     }
   }
 
-  if (cusolver_calls.empty()) {
+  if (mkl_calls.empty()) {
     return false;
   }
 
   bool changed = false;
-  for (HloInstruction* instruction : cusolver_calls) {
+  for (HloInstruction* instruction : mkl_calls) {
     TF_ASSIGN_OR_RETURN(bool result, RunOnInstruction(instruction));
     changed |= result;
   }
   return changed;
 }
 
-GpusolverRewriter::GpusolverRewriter() = default;
+MklRewriter::MklRewriter() = default;
 
-StatusOr<bool> GpusolverRewriter::Run(
+StatusOr<bool> MklRewriter::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool changed = false;

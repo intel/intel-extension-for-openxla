@@ -1,18 +1,17 @@
-/*******************************************************************************
- * Copyright 2020-2022 Intel Corporation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in wriscalar_tg, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- ******************************************************************************/
+/* Copyright (c) 2023 Intel Corporation
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
 
 #pragma once
 
@@ -22,7 +21,8 @@ namespace gpu::xetla {
 
 namespace fmha {
 
-template <typename mat_t> struct tile_mask_t {
+template <typename mat_t>
+struct tile_mask_t {
   using accum_t = typename mat_t::dtype;
   static constexpr accum_t kNegInfinity = INFINITY * -1;
   static constexpr uint32_t tile_size_x = mat_t::tile_size_x;
@@ -34,7 +34,7 @@ template <typename mat_t> struct tile_mask_t {
 
   // --------------------- // causal_mask // ---------------------- //
 
-  inline static void causal_mask(mat_t &src, uint32_t start_x,
+  inline static void causal_mask(mat_t& src, uint32_t start_x,
                                  uint32_t start_y) {
 #pragma unroll
     for (int i = 0; i < tile_size_y / block_size_y; i++) {
@@ -89,7 +89,7 @@ template <typename mat_t> struct tile_mask_t {
 
   // -------------------- // padding_mask // ---------------------- //
 
-  inline static void padding_mask(mat_t &src, uint32_t num_keep) {
+  inline static void padding_mask(mat_t& src, uint32_t num_keep) {
 #pragma unroll
     for (int i = 0; i < tile_size_y / block_size_y; i++) {
 #pragma unroll
@@ -176,11 +176,10 @@ struct group_row_reduce_t {
     slm_base = slm_base_;
   }
 
-  inline KERNEL_FUNC xetla_vector<T, kNum> operator()(mat_t &src) {
+  inline KERNEL_FUNC xetla_vector<T, kNum> operator()(mat_t& src) {
     xetla_vector<T, kNum> ret =
         subgroup::tile_reduce<reduce_kind, mat_t, T, 1>(src);
-    if constexpr (kNumSg == 1)
-      return ret;
+    if constexpr (kNumSg == 1) return ret;
 
     store_tile_t sg_store;
     store_payload_t sg_store_payload(slm_base, kTotal, 1, kTotal, sg_id * kNum,
@@ -205,6 +204,6 @@ struct group_row_reduce_t {
   }
 };
 
-} // namespace fmha
+}  // namespace fmha
 
-} // namespace gpu::xetla
+}  // namespace gpu::xetla

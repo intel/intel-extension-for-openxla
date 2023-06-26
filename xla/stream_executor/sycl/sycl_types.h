@@ -17,15 +17,15 @@ limitations under the License.
 
 // GPU (ROCm / CUDA) specific type handle resolution
 
-#ifndef ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_TYPES_H_
-#define ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_TYPES_H_
+#ifndef XLA_STREAM_EXECUTOR_SYCL_SYCL_TYPES_H_
+#define XLA_STREAM_EXECUTOR_SYCL_SYCL_TYPES_H_
 
 #include <level_zero/ze_api.h>
 
 #include <CL/sycl.hpp>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 
-#include "xla/stream_executor/sycl/itex_gpu_runtime.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 
 namespace stream_executor {
 namespace gpu {
@@ -50,4 +50,4 @@ using GpuModuleHandle = ze_module_handle_t;
 }  // namespace gpu
 }  // namespace stream_executor
 
-#endif  // ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_TYPES_H_
+#endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_TYPES_H_

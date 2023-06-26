@@ -1,4 +1,4 @@
-/* Copyright (c) 2021-2022 Intel Corporation
+/* Copyright (c) 2023 Intel Corporation
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_DEVICES_BFC_ALLOCATOR_H_
-#define ITEX_CORE_DEVICES_BFC_ALLOCATOR_H_
+#ifndef XLA_STREAM_EXECUTOR_SYCL_BFC_ALLOCATOR_H_
+#define XLA_STREAM_EXECUTOR_SYCL_BFC_ALLOCATOR_H_
 
 #include <algorithm>
 #include <set>
@@ -29,7 +29,7 @@ limitations under the License.
 #include "tsl/platform/mutex.h"
 #include "tsl/util/env_var.h"
 #include "xla/stream_executor/sycl/allocator.h"
-#include "xla/stream_executor/sycl/itex_gpu_runtime.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 
 namespace itex {
 
@@ -395,4 +395,4 @@ class BFCAllocator : public Allocator {
 };  // class BFCAllocator
 
 }  // namespace itex
-#endif  // ITEX_CORE_DEVICES_BFC_ALLOCATOR_H_
+#endif  // XLA_STREAM_EXECUTOR_SYCL_BFC_ALLOCATOR_H_

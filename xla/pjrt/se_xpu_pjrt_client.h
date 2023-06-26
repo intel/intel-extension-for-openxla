@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_COMPILER_XLA_PJRT_SE_XPU_PJRT_CLIENT_H_
-#define ITEX_CORE_COMPILER_XLA_PJRT_SE_XPU_PJRT_CLIENT_H_
+#ifndef XLA_PJRT_SE_XPU_PJRT_CLIENT_H_
+#define XLA_PJRT_SE_XPU_PJRT_CLIENT_H_
 #include <memory>
 #include <optional>
 #include <set>
@@ -47,4 +47,4 @@ StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorXpuClient(
 
 }  // namespace xla
 
-#endif  // ITEX_CORE_COMPILER_XLA_PJRT_SE_XPU_PJRT_CLIENT_H_
+#endif  // XLA_PJRT_SE_XPU_PJRT_CLIENT_H_

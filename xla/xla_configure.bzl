@@ -219,7 +219,7 @@ def _tf_pip_impl(repository_ctx):
         "%{JAX_SHARED_LIBRARY_NAME}": jax_shared_library_name,
     })
 
-tf_configure = repository_rule(
+xla_configure = repository_rule(
     environ = [
         _JAX_SHARED_LIBRARY_DIR,
     ],

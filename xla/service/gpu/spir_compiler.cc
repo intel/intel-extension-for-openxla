@@ -1,7 +1,5 @@
 /* Copyright (c) 2023 Intel Corporation
 
-Copyright 2017 The TensorFlow Authors. All Rights Reserved.
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -37,14 +35,14 @@ limitations under the License.
 #include "xla/service/float_support.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/cublas_cudnn.h"
-#include "xla/service/gpu/cudnn_fused_conv_rewriter.h"
-#include "xla/service/gpu/cudnn_fused_mha_rewriter.h"
-#include "xla/service/gpu/cusolver_rewriter.h"
+#include "xla/service/gpu/fused_mha_rewriter.h"
 #include "xla/service/gpu/gpu_conv_padding_legalization.h"
 #include "xla/service/gpu/gpu_conv_rewriter.h"
 #include "xla/service/gpu/gpu_layout_assignment.h"
 #include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h"
+#include "xla/service/gpu/mkl_rewriter.h"
+#include "xla/service/gpu/onednn_fused_conv_rewriter.h"
 #include "xla/service/gpu/target_constants.h"
 #include "xla/service/gpu/triangular_solve_rewriter.h"
 #include "xla/service/hlo_constant_folding.h"
@@ -85,7 +83,7 @@ class ConvBfloat16Support : public FloatSupport {
 Status SPIRCompiler::OptimizeHloConvolutionCanonicalization(
     HloModule* hlo_module, GpuVersion gpu_version,
     se::DeviceMemoryAllocator* device_allocator) {
-  // Convert convolutions into CustomCalls to cudnn, then canonicalize them
+  // Convert convolutions into CustomCalls to onednn, then canonicalize them
   // (GpuConvPaddingLegalization). Also expand cuSolver calls.
   HloPassPipeline pipeline("conv_canonicalization");
   pipeline.AddInvariantCheckerDebug<HloVerifier>(
@@ -96,9 +94,9 @@ Status SPIRCompiler::OptimizeHloConvolutionCanonicalization(
   ConvBfloat16Support conv_bf16_support;
   pipeline.AddPass<FloatNormalization>(&conv_bf16_support);
 
-  pipeline.AddPass<GpusolverRewriter>();
+  pipeline.AddPass<MklRewriter>();
   pipeline.AddPass<GpuConvRewriter>();
-  pipeline.AddPass<CudnnFusedConvRewriter>();
+  pipeline.AddPass<OnednnFusedConvRewriter>();
   pipeline.AddPass<GpuConvPaddingLegalization>();
 
   // The conv padding/vectorization passes which we need to get rid of.  They
@@ -110,13 +108,6 @@ Status SPIRCompiler::OptimizeHloConvolutionCanonicalization(
   AlgebraicSimplifierOptions algsimp_options;
   algsimp_options.set_enable_conv_operand_swap(false);
   pipeline.AddPass<HloPassFix<AlgebraicSimplifier>>(algsimp_options);
-
-  // CudnnSimplifyPadding gets rid of some padding introduced by
-  // CudnnPadForConvolutions and used by CudnnVectorizeConvolutions.  The
-  // pattern-matches in this pass need to be run after inlining and simplifying
-  // tuples from CudnnVectorizeConvolutions.  We also need to run algsimp to
-  // e.g. clean up unnecessary nop `convert`s.
-  // pipeline.AddPass<CudnnSimplifyPadding>();
 
   // tf2xla bridge, DepthwiseConvolutionConverter, GpuConvRewriter, and
   // CudnnSimplifyPadding introduce reshapes and transposes.
@@ -163,16 +154,9 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
   if (use_mha) {
     auto cuda_compute_capability =
         std::get<se::CudaComputeCapability>(gpu_target_config.gpu_version);
-    HloPassPipeline mha_fusion_pipeline(
-        "nvptx cudnn multi-headed attention fusion");
+    HloPassPipeline mha_fusion_pipeline("multi-headed attention fusion");
     // Rewrite Multi-Headed Attention modules to Fused MHA custom-calls.
-    if (stream_exec) {
-      mha_fusion_pipeline.AddPass<CudnnFusedMHARewriter>(cuda_compute_capability,
-                                                         stream_exec);
-    } else {
-      mha_fusion_pipeline.AddPass<CudnnFusedMHARewriter>(
-          cuda_compute_capability, gpu_target_config.dnn_version_info);
-    }
+    mha_fusion_pipeline.AddPass<FusedMHARewriter>();
     AlgebraicSimplifierOptions algebraic_simplifier_options({}, {});
     mha_fusion_pipeline.AddPass<HloDCE>();
 
@@ -201,16 +185,12 @@ std::optional<bool> CanShareBufferHint(const HloInstruction* user,
              (user_index.size() == 1 &&
               user->operand(user_index[0]) == operand);
     case HloOpcode::kCustomCall:
-      // The matrix bias operand can be overwritten in-place.
-      // if (user->custom_call_target() == kCublasLtMatmulCallTarget) {
-      //   GemmBackendConfig config =
-      //       std::move(user->backend_config<GemmBackendConfig>()).value();
-      //   return (config.beta() != 0.) && user->operand(2) == operand;
-      // }
-      if (user->custom_call_target() == kCudnnConvBiasActivationForwardCallTarget) {
+      if (user->custom_call_target() ==
+          kCudnnConvBiasActivationForwardCallTarget) {
         CudnnConvBackendConfig config =
             std::move(user->backend_config<CudnnConvBackendConfig>()).value();
-        return (config.side_input_scale() != 0.) && (user->operand(user->operand_count()-1) == operand);
+        return (config.side_input_scale() != 0.) &&
+               (user->operand(user->operand_count() - 1) == operand);
       }
       // The operand of cholesky can be shared with the first output.
       if (user->custom_call_target() == kCusolverCholeskyCallTarget) {

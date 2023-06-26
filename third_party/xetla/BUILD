@@ -12,7 +12,7 @@ cc_library(
             "include/gemm/*.h",
             "include/data_transformer/*.h",
             "include/core/*.h",
-            "include/brgemm/*.h",            
+            "include/brgemm/*.h",
         ],
     ),
     includes = ["include"],

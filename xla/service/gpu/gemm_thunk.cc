@@ -1,4 +1,6 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +21,7 @@ limitations under the License.
 
 #include "tsl/platform/logging.h"
 #include "xla/service/gpu/matmul_utils.h"
+#include "xla/service/gpu/onednn_matmul_utils.h"
 #include "xla/service/gpu/scratch_allocator.h"
 #include "xla/service/gpu/thunk.h"
 #include "xla/status.h"

@@ -1,4 +1,4 @@
-load("//xla:xla.bzl", "itex_xpu_library", "itex_xetla_library")
+load("//xla:xla.bzl", "xetla_library", "xpu_library")
 
 package(
     default_visibility = [
@@ -57,10 +57,10 @@ cc_library(
         "spir_compiler.h",
     ],
     deps = [
-        ":cudnn_fused_conv_rewriter",
-        ":cudnn_fused_mha_rewriter",
-        ":cusolver_rewriter",
+        ":fused_mha_rewriter",
         ":gpu_compiler",
+        ":mkl_rewriter",
+        ":onednn_fused_conv_rewriter",
         ":triangular_solve_rewriter",
         "//xla/service/gpu/llvm_gpu_backend",
         "//xla/stream_executor/sycl:sycl_platform_id",
@@ -88,9 +88,9 @@ cc_library(
 )
 
 cc_library(
-    name = "cusolver_rewriter",
-    srcs = ["cusolver_rewriter.cc"],
-    hdrs = ["cusolver_rewriter.h"],
+    name = "mkl_rewriter",
+    srcs = ["mkl_rewriter.cc"],
+    hdrs = ["mkl_rewriter.h"],
     deps = [
         ":mkl",
         "@com_google_absl//absl/algorithm:container",
@@ -110,9 +110,9 @@ cc_library(
 )
 
 cc_library(
-    name = "cudnn_fused_conv_rewriter",
-    srcs = ["cudnn_fused_conv_rewriter.cc"],
-    hdrs = ["cudnn_fused_conv_rewriter.h"],
+    name = "onednn_fused_conv_rewriter",
+    srcs = ["onednn_fused_conv_rewriter.cc"],
+    hdrs = ["onednn_fused_conv_rewriter.h"],
     deps = [
         "@tsl//tsl/platform:errors",
         "@tsl//tsl/platform:statusor",
@@ -345,7 +345,7 @@ cc_library(
         "@xla//xla/service/gpu:horizontal_loop_fusion",
         "@xla//xla/service/gpu:instruction_fusion",
         "@xla//xla/service/gpu:ir_emission_utils",
-        ":matmul_utils",
+        "@xla//xla/service/gpu:matmul_utils",
         "@xla//xla/service/gpu:metrics",
         "@xla//xla/service/gpu:move_copy_to_users",
         "@xla//xla/service/gpu:multi_output_fusion",
@@ -387,14 +387,13 @@ cc_library(
         "kernel_mapping_scheme.h",
     ],
     deps = [
+        ":ccl_collective_thunks",
         ":cholesky_thunk",
         ":fft_thunk",
         ":gpu_conv_runner",
         ":gpu_executable",
-        ":matmul_utils",
-        ":nccl_collective_thunks",
-        ":triangular_solve_thunk",
         ":gpu_fused_mha_runner",
+        ":triangular_solve_thunk",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -460,6 +459,7 @@ cc_library(
         "@xla//xla/service/gpu:hlo_to_ir_bindings",
         "@xla//xla/service/gpu:ir_emission_utils",
         "@xla//xla/service/gpu:launch_dimensions",
+        "@xla//xla/service/gpu:matmul_utils",
         "@xla//xla/service/gpu:parallel_loop_emitter",
         "@xla//xla/service/gpu:target_util",
         "@xla//xla/service/gpu:thunk",
@@ -531,10 +531,12 @@ cc_library(
     srcs = ["gemm_thunk.cc"],
     hdrs = ["gemm_thunk.h"],
     deps = [
-        ":matmul_utils",
+        ":onednn_matmul_utils",
+        ":scratch_allocator",
         "@tsl//tsl/platform:logging",
         "@xla//xla:status",
         "@xla//xla/service:buffer_assignment",
+        "@xla//xla/service/gpu:matmul_utils",
         "@xla//xla/service/gpu:thunk",
         "@xla//xla/stream_executor:device_memory",
         "@xla//xla/stream_executor:stream_executor_headers",
@@ -542,9 +544,9 @@ cc_library(
 )
 
 cc_library(
-    name = "matmul_utils",
-    srcs = ["matmul_utils.cc"],
-    hdrs = ["matmul_utils.h"],
+    name = "onednn_matmul_utils",
+    srcs = ["onednn_matmul_utils.cc"],
+    hdrs = ["onednn_matmul_utils.h"],
     deps = [
         ":scratch_allocator",
         "//xla/service:onednn_util",
@@ -564,14 +566,15 @@ cc_library(
         "@xla//xla/mlir_hlo:lhlo_gpu",
         "@xla//xla/service/gpu:backend_configs_cc",
         "@xla//xla/service/gpu:ir_emission_utils",
+        "@xla//xla/service/gpu:matmul_utils",
         "@xla//xla/stream_executor:stream_executor_headers",
     ],
 )
 
-itex_xpu_library(
-    name = "nccl_utils",
-    srcs = ["nccl_utils.cc"],
-    hdrs = ["nccl_utils.h"],
+xpu_library(
+    name = "ccl_utils",
+    srcs = ["ccl_utils.cc"],
+    hdrs = ["ccl_utils.h"],
     deps = [
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings:str_format",
@@ -592,26 +595,26 @@ itex_xpu_library(
     ],
 )
 
-itex_xpu_library(
-    name = "nccl_collective_thunks",
+xpu_library(
+    name = "ccl_collective_thunks",
     srcs = [
-        "nccl_all_gather_thunk.cc",
-        "nccl_all_reduce_thunk.cc",
-        "nccl_all_to_all_thunk.cc",
-        "nccl_collective_permute_thunk.cc",
-        "nccl_collective_thunk.cc",
-        "nccl_ops.cc",
+        "ccl_all_gather_thunk.cc",
+        "ccl_all_reduce_thunk.cc",
+        "ccl_all_to_all_thunk.cc",
+        "ccl_collective_permute_thunk.cc",
+        "ccl_collective_thunk.cc",
+        "ccl_ops.cc",
     ],
     hdrs = [
-        "nccl_all_gather_thunk.h",
-        "nccl_all_reduce_thunk.h",
-        "nccl_all_to_all_thunk.h",
-        "nccl_collective_permute_thunk.h",
-        "nccl_collective_thunk.h",
-        "nccl_ops.h",
+        "ccl_all_gather_thunk.h",
+        "ccl_all_reduce_thunk.h",
+        "ccl_all_to_all_thunk.h",
+        "ccl_collective_permute_thunk.h",
+        "ccl_collective_thunk.h",
+        "ccl_ops.h",
     ],
     deps = [
-        ":nccl_utils",
+        ":ccl_utils",
         "//xla/stream_executor/sycl:sycl_executor",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base",
@@ -647,7 +650,7 @@ itex_xpu_library(
     ],
 )
 
-itex_xpu_library(
+xpu_library(
     name = "gpu_executable",
     srcs = [
         "conditional_thunk.cc",
@@ -682,14 +685,13 @@ itex_xpu_library(
         "while_thunk.h",
     ],
     deps = [
+        ":ccl_collective_thunks",
         ":cholesky_thunk",
         ":custom_call_thunk",
         ":fft_thunk",
         ":gemm_thunk",
         ":gpu_conv_runner",
         ":gpu_fused_mha_runner",
-        ":matmul_utils",
-        ":nccl_collective_thunks",
         ":scratch_allocator",
         ":triangular_solve_thunk",
         "@com_google_absl//absl/algorithm:container",
@@ -807,14 +809,12 @@ cc_library(
 )
 
 cc_library(
-    name = "cudnn_fused_mha_rewriter",
-    srcs = ["cudnn_fused_mha_rewriter.cc"],
-    hdrs = ["cudnn_fused_mha_rewriter.h"],
+    name = "fused_mha_rewriter",
+    srcs = ["fused_mha_rewriter.cc"],
+    hdrs = ["fused_mha_rewriter.h"],
     deps = [
-        "@xla//xla/service/gpu:backend_configs_cc",
-        "@xla//xla/service/gpu:cublas_cudnn",
-        "@xla//xla/service/gpu:ir_emission_utils",
-        ":matmul_utils",
+        "@tsl//tsl/platform:errors",
+        "@tsl//tsl/platform:statusor",
         "@xla//xla:comparison_util",
         "@xla//xla:literal_util",
         "@xla//xla:permutation_util",
@@ -822,22 +822,22 @@ cc_library(
         "@xla//xla/service:hlo_creation_utils",
         "@xla//xla/service:hlo_pass",
         "@xla//xla/service:pattern_matcher",
+        "@xla//xla/service/gpu:backend_configs_cc",
+        "@xla//xla/service/gpu:cublas_cudnn",
+        "@xla//xla/service/gpu:ir_emission_utils",
+        "@xla//xla/service/gpu:matmul_utils",
         "@xla//xla/stream_executor:dnn_proto_cc",
-        "@tsl//tsl/platform:errors",
-        "@tsl//tsl/platform:statusor",
     ],
 )
 
-itex_xetla_library(
+xetla_library(
     name = "gpu_fused_mha_runner",
     srcs = ["gpu_fused_mha_runner.cc"],
     hdrs = ["gpu_fused_mha_runner.h"],
     deps = [
         "//xla/service/gpu/xetla:mha_op",
         "//xla/stream_executor/sycl:sycl_executor",
-        "@xla//xla/service/gpu:backend_configs_cc",
-        "@xla//xla/service/gpu:cublas_cudnn",
-        "@xla//xla/service/gpu:stream_executor_util",
+        "@com_google_absl//absl/strings",
         "@xla//xla:shape_util",
         "@xla//xla:status",
         "@xla//xla:status_macros",
@@ -846,10 +846,12 @@ itex_xetla_library(
         "@xla//xla:util",
         "@xla//xla:xla_data_proto_cc",
         "@xla//xla/hlo/ir:hlo",
+        "@xla//xla/service/gpu:backend_configs_cc",
+        "@xla//xla/service/gpu:cublas_cudnn",
+        "@xla//xla/service/gpu:stream_executor_util",
         "@xla//xla/stream_executor",
         "@xla//xla/stream_executor:dnn",
         "@xla//xla/stream_executor:lazy_op_runner",
-        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -858,7 +860,8 @@ cc_library(
     srcs = ["dot_expand_dims.cc"],
     hdrs = ["dot_expand_dims.h"],
     deps = [
-        ":matmul_utils",
+        "@tsl//tsl/platform:errors",
+        "@tsl//tsl/platform:statusor",
         "@xla//xla:comparison_util",
         "@xla//xla:literal_util",
         "@xla//xla:permutation_util",
@@ -867,7 +870,6 @@ cc_library(
         "@xla//xla/service:hlo_pass",
         "@xla//xla/service:pattern_matcher",
         "@xla//xla/service/gpu:ir_emission_utils",
-        "@tsl//tsl/platform:errors",
-        "@tsl//tsl/platform:statusor",
+        "@xla//xla/service/gpu:matmul_utils",
     ],
 )

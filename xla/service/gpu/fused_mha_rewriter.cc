@@ -1,4 +1,6 @@
-/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "xla/service/gpu/cudnn_fused_mha_rewriter.h"
+#include "xla/service/gpu/fused_mha_rewriter.h"
 
 #include <functional>
 #include <string>
@@ -110,20 +112,21 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
     HloInstruction** softmax_input = nullptr) {
   // The reduce-max part of the softmax
   auto unfused_softmax_max_subpattern = m::Subtract(
-      m::Op(),
-      m::Broadcast(OptionalConvert(OptionalConvert(
-          m::Op()
-              .WithPredicate(IsReduceMax)
-              .WithOperand(0, OptionalBitcast(OptionalConvert(m::Op(softmax_input))))))));
+      m::Op(), m::Broadcast(OptionalConvert(OptionalConvert(
+                   m::Op()
+                       .WithPredicate(IsReduceMax)
+                       .WithOperand(0, OptionalBitcast(OptionalConvert(
+                                           m::Op(softmax_input))))))));
   // The reduce-add part of the softmax
   auto unfused_softmax_sum_subpattern = m::Divide(
       m::Exp(unfused_softmax_max_subpattern),
-      m::Broadcast(OptionalBitcast(OptionalConvert(OptionalBitcast(OptionalConvert(
-                       m::Op()
-                           .WithOperand(0, OptionalBitcast(OptionalConvert(m::Exp(
-                                               unfused_softmax_max_subpattern))))
-                           .WithPredicate(IsReduceSum)
-                           .WithOneUse())))))
+      m::Broadcast(
+          OptionalBitcast(OptionalConvert(OptionalBitcast(OptionalConvert(
+              m::Op()
+                  .WithOperand(0, OptionalBitcast(OptionalConvert(
+                                      m::Exp(unfused_softmax_max_subpattern))))
+                  .WithPredicate(IsReduceSum)
+                  .WithOneUse())))))
           .WithOneUse());
   return unfused_softmax_sum_subpattern;
 }
@@ -216,32 +219,6 @@ Status SetName(HloModule* module, HloInstruction* fmha) {
       "Found invalid FMHA custom-call target while setting custom-call name");
 }
 
-bool IsComputeCapabilityAndCudnnSupported(
-    stream_executor::CudaComputeCapability cc,
-    stream_executor::dnn::VersionInfo cudnn_version,
-    stream_executor::StreamExecutor* stream_exec) {
-  // return true;
-  se::dnn::VersionInfo real_cudnn_version;
-  if (stream_exec) {
-    stream_executor::dnn::DnnSupport* dnn = stream_exec->AsDnn();
-    StatusOr<se::dnn::VersionInfo> se_cudnn_version = dnn->GetVersion();
-    if (se_cudnn_version.ok()) {
-      real_cudnn_version = (*se_cudnn_version);
-    }
-  } else {
-    real_cudnn_version = cudnn_version;
-  }
-
-  if (!((cc.IsAtLeast(se::CudaComputeCapability::AMPERE) && cc.minor == 0) &&
-        (real_cudnn_version.major_version() == 8 &&
-         real_cudnn_version.minor_version() >= 8))) {
-    VLOG(2) << "CudnnFusedMHARewriter did not run. Unsupported compute "
-               "capability(==8.0) or cudnn version(>=8.8)";
-    return false;
-  }
-  return true;
-}
-
 bool IsSupportedPrimitiveType(const HloInstruction* bmm) {
   auto dtype = bmm->shape().element_type();
   return dtype == BF16 || dtype == F16;
@@ -311,8 +288,7 @@ StatusOr<bool> IsSupportedBMM1(const HloInstruction* bmm_1) {
               << absl::StrJoin(lhs_non_contracting_dims_bmm1, ",")
               << " BMM1 rhs_non_contracting_dims: "
               << absl::StrJoin(rhs_non_contracting_dims_bmm1, ",")
-              << " are not supported. The non-contracting dims should be less "
-                 "than 512. This is a criteria for current cuDNN 8.8 support.";
+              << " are not supported.";
     }
     return false;
   }
@@ -421,8 +397,8 @@ bool MatchSoftmaxDropoutBmm(int64_t bmm2_operand_position,
           .WithPredicate(IsBatchedMatmul)
           .WithOperand(
               bmm2_operand_position,
-                  OptionalReshape(OptionalConvert(OptionalBitcast(
-                      GetUnfusedReduceMaxSumSoftmaxPattern(softmax_input)))));
+              OptionalReshape(OptionalConvert(OptionalBitcast(
+                  GetUnfusedReduceMaxSumSoftmaxPattern(softmax_input)))));
   if (!Match(instr, softmax_dropout_bmm2_pattern) ||
       !IsSupportedPrimitiveType((*bmm_2))) {
     return false;
@@ -479,10 +455,11 @@ bool MatchBmm1UnfusedBiasSoftmaxBmm2(HloInstruction* softmax_input,
           // BMM + add + scale + softmax
           m::AddAnyOrder(
               m::Op(bias),
-              m::AnyOf<HloInstruction>(
-                  OptionalBitcast(OptionalConvert(
-                      m::Op(bmm_1).WithPredicate(IsBatchedMatmul).WithOneUse())),
-                  unfused_scaled_bmm_subpattern)),
+              m::AnyOf<HloInstruction>(OptionalBitcast(OptionalConvert(
+                                           m::Op(bmm_1)
+                                               .WithPredicate(IsBatchedMatmul)
+                                               .WithOneUse())),
+                                       unfused_scaled_bmm_subpattern)),
           // BMM + scale + softmax
           unfused_scaled_bmm_subpattern)));
 
@@ -627,10 +604,9 @@ bool MatchMHAPatternsForCanonicalization(
 
 StatusOr<bool> IsMHABlockSupported(HloInstruction* bmm_1, HloInstruction* bmm_2,
                                    bool need_canonicalization) {
-  // cuDNN 8.8 currently only supports BF16 and F16 data types.
   if (!IsSupportedPrimitiveType(bmm_1) || !IsSupportedPrimitiveType(bmm_2)) {
     if (VLOG_IS_ON(1)) {
-      VLOG(1) << "Unsupported primitive type for cuDNN MHA fusion:\n"
+      VLOG(1) << "Unsupported primitive type for MHA fusion:\n"
               << bmm_1->ToString() << "\nOR\n"
               << bmm_2->ToString() << "\n"
               << "BF16 and F16 are the supported Dtypes.";
@@ -701,8 +677,7 @@ StatusOr<HloInstruction*> CanonicalizeBatchedGemmForcuDNNFMHA(
 StatusOr<bool> FuseMultiHeadedAttentionBlock(
     HloComputation* comp, HloInstruction* bmm_1, HloInstruction* bmm_2,
     HloInstruction* bias, HloInstruction* mask, HloInstruction* scale,
-    double dropout_rate, std::string& custom_call_name,
-    stream_executor::CudaComputeCapability cc) {
+    double dropout_rate, std::string& custom_call_name) {
   bool changed = false;
   double scale_value = 1.0;
 
@@ -917,14 +892,14 @@ StatusOr<bool> FuseMultiHeadedAttentionBlock(
       bmm_2,
       HloInstruction::CreateGetTupleElement(bmm_2->shape(), fmha_call, 0)));
   if (VLOG_IS_ON(2)) {
-    VLOG(2) << "After CudnnFusedMHARewriter: \n" << comp->parent()->ToString();
+    VLOG(2) << "After FusedMHARewriter: \n" << comp->parent()->ToString();
   }
   changed = true;
   return changed;
 }
 }  // namespace
 
-StatusOr<bool> CudnnFusedMHARewriter::Run(
+StatusOr<bool> FusedMHARewriter::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool any_changed = false;
@@ -932,11 +907,6 @@ StatusOr<bool> CudnnFusedMHARewriter::Run(
        module->MakeNonfusionComputations(execution_threads)) {
     const DebugOptions& debug_options =
         comp->parent()->config().debug_options();
-    // if (!debug_options.xla_gpu_enable_cudnn_fmha() ||
-    //     !IsComputeCapabilityAndCudnnSupported(
-    //         compute_capability_, cudnn_version_, stream_executor_)) {
-    //   return false;
-    // }
     for (HloInstruction* instr : comp->MakeInstructionPostOrder()) {
       HloInstruction* bmm_1 = nullptr;
       HloInstruction* bmm_2 = nullptr;
@@ -975,10 +945,9 @@ StatusOr<bool> CudnnFusedMHARewriter::Run(
       bool changed = false;
       // Fuse the bmms and intermediate nodes into fMHA call, the fused call
       // will replace bmm_2.
-      TF_ASSIGN_OR_RETURN(
-          changed, FuseMultiHeadedAttentionBlock(
-                       comp, bmm_1, bmm_2, bias, mask, scale, dropout_rate,
-                       custom_call_name, compute_capability_));
+      TF_ASSIGN_OR_RETURN(changed, FuseMultiHeadedAttentionBlock(
+                                       comp, bmm_1, bmm_2, bias, mask, scale,
+                                       dropout_rate, custom_call_name));
       any_changed |= changed;
     }
   }

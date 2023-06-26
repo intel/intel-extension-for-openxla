@@ -1,4 +1,6 @@
-/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_SERVICE_GPU_NCCL_UTILS_H_
-#define XLA_SERVICE_GPU_NCCL_UTILS_H_
+#ifndef XLA_SERVICE_GPU_CCL_UTILS_H_
+#define XLA_SERVICE_GPU_CCL_UTILS_H_
 
 #include <memory>
 #include <utility>
@@ -46,13 +48,13 @@ namespace xla {
 namespace gpu {
 
 #if ITEX_USE_CCL
-ccl::reduction ToNcclReduction(ReductionKind kind);
-StatusOr<std::pair<ccl::datatype, int>> ToNcclDataTypeAndCountMultiplier(
+ccl::reduction ToCclReduction(ReductionKind kind);
+StatusOr<std::pair<ccl::datatype, int>> ToCclDataTypeAndCountMultiplier(
     PrimitiveType element_type);
 #endif  // ITEX_USE_CCL
 
-bool IsGlobalNcclConfig();
-bool IsNcclLaunchModeParallel();
+bool IsGlobalCclConfig();
+bool IsCclLaunchModeParallel();
 
 size_t GetNumLocalParticipants(
     const std::vector<GlobalDeviceId>& participants,
@@ -96,11 +98,11 @@ class Lockable {
 
 TSL_LIB_GTL_DEFINE_INT_TYPE(OpId, int64_t);
 
-struct NcclComm : public Lockable<ccl::communicator*> {
-  explicit NcclComm(ccl::communicator* comm) : Lockable(comm) {}
+struct CclComm : public Lockable<ccl::communicator*> {
+  explicit CclComm(ccl::communicator* comm) : Lockable(comm) {}
 };
 
-StatusOr<NcclComm::Lock> AcquireNcclComm(
+StatusOr<CclComm::Lock> AcquireCclComm(
     RunId run_id, OpId op_id, std::vector<GlobalDeviceId> participants,
     size_t num_local_participants,
     const NcclUniqueIdCallback& unique_id_callback, int rank);
@@ -108,4 +110,4 @@ StatusOr<NcclComm::Lock> AcquireNcclComm(
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_NCCL_UTILS_H_
+#endif  // XLA_SERVICE_GPU_CCL_UTILS_H_

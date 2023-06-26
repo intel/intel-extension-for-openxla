@@ -1,4 +1,6 @@
-/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,23 +15,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_XLA_SERVICE_FUSED_MULTI_HEADED_ATTENTION_THUNK_H_
-#define TENSORFLOW_COMPILER_XLA_SERVICE_FUSED_MULTI_HEADED_ATTENTION_THUNK_H_
+#ifndef XLA_SERVICE_GPU_FUSED_MHA_THUNK_H_
+#define XLA_SERVICE_GPU_FUSED_MHA_THUNK_H_
 
 #include <optional>
 
 #include "absl/container/flat_hash_map.h"
+#include "tsl/platform/status.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/buffer_assignment.h"
 #include "xla/service/gpu/buffer_allocations.h"
-#include "xla/service/gpu/gpu_fused_mha_runner.h"
 #include "xla/service/gpu/gpu_executable.h"
+#include "xla/service/gpu/gpu_fused_mha_runner.h"
 #include "xla/service/gpu/thunk.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/types.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/status.h"
 
 namespace xla {
 namespace gpu {
@@ -71,4 +73,4 @@ class FusedMHAThunk : public Thunk {
 
 }  // namespace gpu
 }  // namespace xla
-#endif  // TENSORFLOW_COMPILER_XLA_SERVICE_FUSED_MULTI_HEADED_ATTENTION_THUNK_H_
+#endif  // XLA_SERVICE_GPU_FUSED_MHA_THUNK_H_

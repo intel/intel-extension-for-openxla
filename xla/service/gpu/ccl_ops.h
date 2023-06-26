@@ -12,12 +12,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#ifndef ITEX_CORE_COMPILER_XLA_SERVICE_GPU_NCCL_OPS_H_
-#define ITEX_CORE_COMPILER_XLA_SERVICE_GPU_NCCL_OPS_H_
+#ifndef XLA_SERVICE_GPU_CCL_OPS_H_
+#define XLA_SERVICE_GPU_CCL_OPS_H_
 #include <vector>
 
 #include "xla/service/collective_ops_utils.h"
-#include "xla/service/gpu/nccl_collective_thunk.h"
+#include "xla/service/gpu/ccl_collective_thunk.h"
 #include "xla/stream_executor/sycl/sycl_types.h"
 
 #if !ITEX_USE_CCL
@@ -25,26 +25,26 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-void itex_allreduce(const void* send_buffer, void* recv_buffer,
+void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                     int element_count, PrimitiveType dtype,
                     ReductionKind reduction_kind,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
 
-void itex_allgather(const void* send_buffer, void* recv_buffer,
+void sycl_allgather(const void* send_buffer, void* recv_buffer,
                     int element_count, PrimitiveType dtype,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
 
-void itex_alltoall(std::vector<const void*> send_buffer,
+void sycl_alltoall(std::vector<const void*> send_buffer,
                    std::vector<void*> recv_buffer, int element_count,
                    PrimitiveType dtype, se::gpu::GpuStreamHandle gpu_stream,
                    ncclComm_t comm);
 
-void itex_reduce_scatter(const void* send_buffer, void* recv_buffer,
+void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                          int element_count, PrimitiveType dtype,
                          ReductionKind reduction_kind,
                          se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
 
-void itex_collective_permute(const void* send_buffer, void* recv_buffer,
+void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
                              int element_count, PrimitiveType dtype,
                              const std::optional<int64_t>& source_id,
                              const std::optional<int64_t>& target_id,
@@ -54,4 +54,4 @@ void itex_collective_permute(const void* send_buffer, void* recv_buffer,
 }  // namespace xla
 
 #endif  // ITEX_USE_CCL
-#endif  // ITEX_CORE_COMPILER_XLA_SERVICE_GPU_NCCL_OPS_H_
+#endif  // XLA_SERVICE_GPU_CCL_OPS_H_

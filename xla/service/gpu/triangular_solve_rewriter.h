@@ -15,8 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_COMPILER_XLA_SERVICE_GPU_TRIANGULAR_SOLVE_REWRITER_H_
-#define ITEX_CORE_COMPILER_XLA_SERVICE_GPU_TRIANGULAR_SOLVE_REWRITER_H_
+#ifndef XLA_SERVICE_GPU_TRIANGULAR_SOLVE_REWRITER_H_
+#define XLA_SERVICE_GPU_TRIANGULAR_SOLVE_REWRITER_H_
 
 #include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_module.h"
@@ -29,10 +29,10 @@ namespace gpu {
 // Rewrites HLO TriangularSolve ops into a custom-call.
 //
 // The motivation for this is that we need to add temp memory to batched
-// triangular-solve ops in order to call cublas trsmBatched.  We rewrite batch 1
+// triangular-solve ops in order to call mkl trsmBatched.  We rewrite batch 1
 // ops as well so that we have fewer codepaths to worry about in the backend.
 //
-// cublas trsmBatched takes arrays in GPU memory of pointers to the inputs and
+// mkl trsmBatched takes arrays in GPU memory of pointers to the inputs and
 // outputs, `a` and `b`.  In XLA the inputs/outputs are always contiguous, but
 // we still have to materialize out these arrays.
 //
@@ -58,4 +58,4 @@ class TriangularSolveRewriter : public HloModulePass {
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // ITEX_CORE_COMPILER_XLA_SERVICE_GPU_TRIANGULAR_SOLVE_REWRITER_H_
+#endif  // XLA_SERVICE_GPU_TRIANGULAR_SOLVE_REWRITER_H_

@@ -1,4 +1,6 @@
-/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,10 +33,10 @@ limitations under the License.
 #include "tsl/platform/statusor.h"
 #include "tsl/protobuf/autotuning.pb.h"
 #include "xla/hlo/ir/hlo_computation.h"
+#include "xla/service/gpu/ccl_all_reduce_thunk.h"
 #include "xla/service/gpu/ir_emitter.h"
 #include "xla/service/gpu/kernel_mapping_scheme.h"
 #include "xla/service/gpu/kernel_thunk.h"
-#include "xla/service/gpu/nccl_all_reduce_thunk.h"
 #include "xla/service/gpu/thunk.h"
 #include "xla/service/llvm_ir/ir_array.h"
 #include "xla/service/llvm_ir/llvm_util.h"
@@ -198,9 +200,6 @@ class IrEmitterUnnested : public IrEmitter {
   Status EmitConvolutionThunk(mlir::Operation* op);
   Status EmitGemmThunk(mlir::Operation* op);
 #if GOOGLE_CUDA
-  Status EmitCublasLtMatmulThunk(mlir::Operation* op);
-  Status EmitCublasLtMatmulThunkF8(mlir::Operation* op);
-  Status EmitConvolutionReorderThunk(mlir::Operation* op);
   Status EmitTritonFusion(mlir::Operation* op,
                           tensorflow::AutotuneResult::TritonGemmKey& config);
 #endif  // GOOGLE_CUDA
@@ -225,15 +224,15 @@ class IrEmitterUnnested : public IrEmitter {
   Status EmitTriangularSolveCustomCall(mlir::Operation* op);
 #endif  // ITEX_USE_MKL
 
-  template <typename NcclThunkType, typename OpT>
-  Status EmitNcclThunk(mlir::Operation* op);
-  template <typename NcclThunkType, typename OpT>
-  Status EmitNcclAsyncDone(mlir::Operation* op);
+  template <typename CclThunkType, typename OpT>
+  Status EmitCclThunk(mlir::Operation* op);
+  template <typename CclThunkType, typename OpT>
+  Status EmitCclAsyncDone(mlir::Operation* op);
 
   template <typename ThunkType, typename OpT>
   Status EmitReplicaOrPartitionId(mlir::Operation* op);
 
-  template <typename NcclThunkType, typename OpT>
+  template <typename CclThunkType, typename OpT>
   Status EmitCollectivePermute(mlir::Operation* op);
 
   Status EmitOp(mlir::Operation* op);
@@ -885,7 +884,7 @@ class IrEmitterUnnested : public IrEmitter {
 
   // Maps async start ops to their executors so done can access the thunk.
   // Executor may be null if the start op is degenerate (so not emitted).
-  absl::flat_hash_map<mlir::Operation*, NcclCollectiveThunk::AsyncExecutor*>
+  absl::flat_hash_map<mlir::Operation*, CclCollectiveThunk::AsyncExecutor*>
       async_executors_;
 
   // Begin optional members for XLA HLO -> LMHLO:

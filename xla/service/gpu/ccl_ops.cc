@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "xla/service/gpu/nccl_ops.h"
+#include "xla/service/gpu/ccl_ops.h"
 
 #include <algorithm>
 #include <string>
@@ -390,7 +390,7 @@ void streamlist_wait_stream(se::gpu::GpuStreamHandle stream,
 }
 }  // namespace
 
-void itex_allreduce(const void* send_buffer, void* recv_buffer,
+void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                     int element_count, PrimitiveType dtype,
                     ReductionKind reduction_kind,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
@@ -544,7 +544,7 @@ void itex_allreduce(const void* send_buffer, void* recv_buffer,
   }
 }
 
-void itex_allgather(const void* send_buffer, void* recv_buffer,
+void sycl_allgather(const void* send_buffer, void* recv_buffer,
                     int element_count, PrimitiveType dtype,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
   std::vector<Participant> p;
@@ -595,7 +595,7 @@ void itex_allgather(const void* send_buffer, void* recv_buffer,
   }
 }
 
-void itex_alltoall(std::vector<const void*> send_buffers,
+void sycl_alltoall(std::vector<const void*> send_buffers,
                    std::vector<void*> recv_buffers, int element_count,
                    PrimitiveType dtype, se::gpu::GpuStreamHandle gpu_stream,
                    ncclComm_t comm) {
@@ -647,7 +647,7 @@ void itex_alltoall(std::vector<const void*> send_buffers,
   }
 }
 
-void itex_reduce_scatter(const void* send_buffer, void* recv_buffer,
+void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                          int element_count, PrimitiveType dtype,
                          ReductionKind reduction_kind,
                          se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
@@ -786,7 +786,7 @@ void itex_reduce_scatter(const void* send_buffer, void* recv_buffer,
   }
 }
 
-void itex_collective_permute(const void* send_buffer, void* recv_buffer,
+void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
                              int element_count, PrimitiveType dtype,
                              const std::optional<int64_t>& source_id,
                              const std::optional<int64_t>& target_id,

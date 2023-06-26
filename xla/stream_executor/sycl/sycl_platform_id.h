@@ -15,8 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_ID_H_
-#define ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_ID_H_
+#ifndef XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_ID_H_
+#define XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_ID_H_
 
 #include "xla/stream_executor/platform.h"
 
@@ -33,4 +33,4 @@ extern const Platform::Id kSyclPlatformId;
 }  // namespace gpu
 }  // namespace stream_executor
 
-#endif  // ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_ID_H_
+#endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_ID_H_

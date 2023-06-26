@@ -1,4 +1,6 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -523,11 +525,10 @@ Status CreateOneDnnPrimitive(
         onednn_primitive->fwd_primitives_args.insert(
             {DNNL_ARG_BIAS, onednn_primitive->bias_memory});
       } else {
-        fwd_pd =
-          ConvFwdPd(onednn_primitive->engine, dnnl::prop_kind::forward,
-                    dnnl::algorithm::convolution_direct, src_md,
-                    filter_md_prefer, dst_md, stride_dims, dilation_dims,
-                    padding_dims_l, padding_dims_r, post_ops_attr);
+        fwd_pd = ConvFwdPd(onednn_primitive->engine, dnnl::prop_kind::forward,
+                           dnnl::algorithm::convolution_direct, src_md,
+                           filter_md_prefer, dst_md, stride_dims, dilation_dims,
+                           padding_dims_l, padding_dims_r, post_ops_attr);
       }
 
       onednn_primitive->fwd_primitive = dnnl::convolution_forward(fwd_pd);

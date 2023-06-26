@@ -165,7 +165,7 @@ cc_library(
     ],
     #nocopts = "-fno-exceptions",
     visibility = ["//visibility:public"],
-    deps = ["@intel_extension_for_openxla//xla/stream_executor/sycl:itex_gpu_header"],
+    deps = ["@intel_extension_for_openxla//xla/stream_executor/sycl:sycl_gpu_header"],
 )
 
 load("@intel_extension_for_openxla//third_party/onednn:build_defs.bzl", "if_graph_compiler", "if_llga_debug")

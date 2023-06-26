@@ -1,4 +1,4 @@
-/* Copyright (c) 2022 Intel Corporation
+/* Copyright (c) 2023 Intel Corporation
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,14 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_DEVICES_GPU_GPU_POOL_ALLOCATOR_H_
-#define ITEX_CORE_DEVICES_GPU_GPU_POOL_ALLOCATOR_H_
+#ifndef XLA_STREAM_EXECUTOR_SYCL_GPU_POOL_ALLOCATOR_H_
+#define XLA_STREAM_EXECUTOR_SYCL_GPU_POOL_ALLOCATOR_H_
 
 #include <map>
 #include <memory>
 
 #include "xla/stream_executor/sycl/bfc_allocator.h"
-#include "xla/stream_executor/sycl/itex_gpu_runtime.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 
 namespace itex {
 
@@ -67,4 +67,4 @@ inline ITEX_GPUError_t ITEX_GPUGetAllocator(
 }
 
 }  // namespace itex
-#endif  // ITEX_CORE_DEVICES_GPU_GPU_POOL_ALLOCATOR_H_
+#endif  // XLA_STREAM_EXECUTOR_SYCL_GPU_POOL_ALLOCATOR_H_

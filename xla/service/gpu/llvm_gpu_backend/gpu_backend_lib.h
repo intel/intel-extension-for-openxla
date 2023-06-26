@@ -16,8 +16,8 @@ limitations under the License.
 ==============================================================================*/
 
 // LLVM-based compiler backend.
-#ifndef ITEX_CORE_COMPILER_XLA_SERVICE_GPU_LLVM_GPU_BACKEND_GPU_BACKEND_LIB_H_
-#define ITEX_CORE_COMPILER_XLA_SERVICE_GPU_LLVM_GPU_BACKEND_GPU_BACKEND_LIB_H_
+#ifndef XLA_SERVICE_GPU_LLVM_GPU_BACKEND_GPU_BACKEND_LIB_H_
+#define XLA_SERVICE_GPU_LLVM_GPU_BACKEND_GPU_BACKEND_LIB_H_
 
 #include <string>
 #include <utility>
@@ -41,4 +41,4 @@ StatusOr<std::string> CompileToSpir(llvm::Module* module,
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // ITEX_CORE_COMPILER_XLA_SERVICE_GPU_LLVM_GPU_BACKEND_GPU_BACKEND_LIB_H_
+#endif  // XLA_SERVICE_GPU_LLVM_GPU_BACKEND_GPU_BACKEND_LIB_H_

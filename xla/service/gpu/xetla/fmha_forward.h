@@ -1,18 +1,17 @@
-/*******************************************************************************
- * Copyright 2020-2022 Intel Corporation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in wriscalar_tg, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- ******************************************************************************/
+/* Copyright (c) 2023 Intel Corporation
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
 
 /*
 Fused Multi-Head Attention Forward
@@ -23,10 +22,11 @@ This is an implementation of the Flash Attention algorithm
 
 #pragma once
 
+#include <limits>
+
 #include "fmha_policy.h"
 #include "fmha_utils.h"
 #include "xetla.hpp"
-#include <limits>
 
 // Set to 1 to get raw output, not permuted
 #define _RAW_OUTPUT 1
@@ -38,7 +38,7 @@ namespace fmha {
 template <typename fmha_policy, typename scalar_t, bool kUseBias,
           bool kIsCausal, bool kIsTraining>
 class fmha_forward_t {
-public:
+ public:
   static_assert((!kIsTraining), "training is not supported yet");
 
   using accum_t = float;
@@ -46,16 +46,16 @@ public:
 
   struct arguments_t {
     // Input tensors
-    scalar_t *Q_ptr;           // [B, N, F, H] - query
-    scalar_t *K_ptr;           // [B, N, T, H] - key
-    scalar_t *V_ptr;           // [B, N, T, H] - value
-    scalar_t *B_ptr = nullptr; // [B, 1, F, T] - bias
-    uint8_t *Dp_ptr = nullptr; // [B, N, F, T] - dropout mask
+    scalar_t* Q_ptr;            // [B, N, F, H] - query
+    scalar_t* K_ptr;            // [B, N, T, H] - key
+    scalar_t* V_ptr;            // [B, N, T, H] - value
+    scalar_t* B_ptr = nullptr;  // [B, 1, F, T] - bias
+    uint8_t* Dp_ptr = nullptr;  // [B, N, F, T] - dropout mask
     // Dropout scale is computed from dropout prob
     accum_t dp_prob;
     accum_t dp_scale;
     // Output tensor
-    scalar_t *O_ptr; // raw: [B, N, F, H]; permute: [B, F, N, H] - output
+    scalar_t* O_ptr;  // raw: [B, N, F, H]; permute: [B, F, N, H] - output
     // Dimension size
     uint32_t uB;
     uint32_t uN;
@@ -66,19 +66,28 @@ public:
     accum_t sm_scale;
 
     inline arguments_t() = default;
-    inline arguments_t(scalar_t *query, scalar_t *key, scalar_t *value,
-                       scalar_t *bias, uint8_t *dropout, accum_t dropout_prob,
-                       scalar_t *out, uint32_t num_batches, uint32_t num_heads,
+    inline arguments_t(scalar_t* query, scalar_t* key, scalar_t* value,
+                       scalar_t* bias, uint8_t* dropout, accum_t dropout_prob,
+                       scalar_t* out, uint32_t num_batches, uint32_t num_heads,
                        uint32_t head_size, uint32_t num_queries,
                        uint32_t num_keys, accum_t sm_scale)
-        : Q_ptr(query), K_ptr(key), V_ptr(value), B_ptr(bias), Dp_ptr(dropout),
-          dp_prob(dropout_prob), dp_scale(1.f / (1.f - dropout_prob)),
-          O_ptr(out), uB(num_batches), uN(num_heads), uH(head_size),
-          uF(num_queries), uT(num_keys),
+        : Q_ptr(query),
+          K_ptr(key),
+          V_ptr(value),
+          B_ptr(bias),
+          Dp_ptr(dropout),
+          dp_prob(dropout_prob),
+          dp_scale(1.f / (1.f - dropout_prob)),
+          O_ptr(out),
+          uB(num_batches),
+          uN(num_heads),
+          uH(head_size),
+          uF(num_queries),
+          uT(num_keys),
           sm_scale(sm_scale) {}
   };
 
-private:
+ private:
   // -------------------- // Compute policy // -------------------- //
   static constexpr uint32_t accum_step = fmha_policy::accum_step;
   static constexpr uint32_t stages = fmha_policy::stages;
@@ -165,7 +174,7 @@ private:
     inline context_t() = default;
 
     /// @brief Initialize invariant variables in the flash mha loop
-    inline void init_context(xetla_exec_item<3> &ei, arguments_t &args) {
+    inline void init_context(xetla_exec_item<3>& ei, arguments_t& args) {
       // thread id
       uint32_t sg_id = ei.get_local_linear_id();
       g.init(sg_id);
@@ -192,7 +201,7 @@ private:
     }
 
     /// @brief Update variables for each flash mha loop
-    inline void update_context(xetla_exec_item<3> &ei, arguments_t &args,
+    inline void update_context(xetla_exec_item<3>& ei, arguments_t& args,
                                uint32_t startT) {
       uint32_t gid = ei.get_group(0);
       int32_t start_x = gid * args.uT + startT;
@@ -231,7 +240,7 @@ private:
 
   /// @brief gemm_Sij is used to compute Sij = Qi x Kj.T
   /// # [Br,H] x [H,Bc] = [Br,Bc]
-  inline void gemm_Sij(matAccSij_t &matAccSij, arguments_t &args) {
+  inline void gemm_Sij(matAccSij_t& matAccSij, arguments_t& args) {
     using brgemm_args_t = typename brgemm_Sij_t::arguments_t;
 
     // Gemm to comput Sij
@@ -267,7 +276,7 @@ private:
 
   /// @brief gemm_Oi is used to compute Oi += Pij x Vj
   /// # [Br,Bc] x [Bc,H] = [Br,Hm]
-  inline void gemm_Oi(matAccOi_t &matAccOi, arguments_t &args,
+  inline void gemm_Oi(matAccOi_t& matAccOi, arguments_t& args,
                       uint32_t startT) {
     using brgemm_args_t = typename brgemm_Oi_t::arguments_t;
 
@@ -284,7 +293,7 @@ private:
   // ====================== // apply_mask // ====================== //
 
   /// @brief apply mask to matAccSij.
-  inline void apply_mask(matAccSij_t &matAccSij, arguments_t &args,
+  inline void apply_mask(matAccSij_t& matAccSij, arguments_t& args,
                          uint32_t startF, uint32_t startT) {
     using tile_mask = tile_mask_t<matAccSij_t>;
 
@@ -305,8 +314,8 @@ private:
   // ====================== // softmax_fwd // ===================== //
 
   /// @brief softmax_fwd is used to do softmax.
-  inline void softmax_fwd(matAccSij_t &matAccSij, matAccOi_t &matAccOi,
-                          arguments_t &args) {
+  inline void softmax_fwd(matAccSij_t& matAccSij, matAccOi_t& matAccOi,
+                          arguments_t& args) {
     using wg_row_max_t =
         group_row_reduce_t<matAccSij_t, wg_size_x, reduce_op::max>;
     using wg_row_sum_t =
@@ -321,8 +330,7 @@ private:
     xetla_vector<accum_t, kSgBr> m_new = wg_row_max(matAccSij);
     m_new = xetla_max<accum_t, kSgBr>(m_new, ctx.softmax_m);
 
-    if constexpr (wg_size_x > 1)
-      ctx.nbarrier.arrive();
+    if constexpr (wg_size_x > 1) ctx.nbarrier.arrive();
 
     // correct old l
     ctx.softmax_l *= xetla_exp<accum_t, kSgBr>(ctx.softmax_m - m_new);
@@ -331,8 +339,7 @@ private:
                                                                    m_new);
     matAccSij.reg = xetla_exp<accum_t>(matAccSij.reg);
 
-    if constexpr (wg_size_x > 1)
-      ctx.nbarrier.wait();
+    if constexpr (wg_size_x > 1) ctx.nbarrier.wait();
 
     // compute new l
     wg_row_sum_t wg_row_sum(ctx.sg_idx, ctx.sg_idy, reducer_slm);
@@ -360,14 +367,13 @@ private:
     epilogue_t epilogue;
     epilogue(ctx.g, matAccSij, ctx.mem_desc_Pij_L);
     xetla_fence<memory_kind::shared_local>();
-    if constexpr (wg_size_x > 1)
-      ctx.nbarrier.arrive_wait();
+    if constexpr (wg_size_x > 1) ctx.nbarrier.arrive_wait();
   }
 
   // ==================== // raw_store_Oi // ====================== //
 
   /// @brief store raw Oi to global memory. [B,N,F,H]
-  inline void raw_store_Oi(matAccOi_t &matAccOi, arguments_t &args) {
+  inline void raw_store_Oi(matAccOi_t& matAccOi, arguments_t& args) {
     using epilogue_t =
         group::epilogue_t<group::epilogue_policy_default<gpu_arch::Xe>,
                           tile_shape_BrHm, mem_desc_Oi_t>;
@@ -378,16 +384,15 @@ private:
   // ================== // permute_store_Oi // ==================== //
 
   /// @brief permuted store Oi to global memory. [B,F,N,H]
-  inline void permute_store_Oi(xetla_exec_item<3> &ei, matAccOi_t &matAccOi,
-                               arguments_t &args) {
+  inline void permute_store_Oi(xetla_exec_item<3>& ei, matAccOi_t& matAccOi,
+                               arguments_t& args) {
     uint32_t b = ei.get_group(0) / args.uN;
     uint32_t n = ei.get_group(0) % args.uN;
     uint32_t f = ctx.sg_idy * kSgBr + ei.get_group(1) * kBr;
     uint32_t h = ctx.sg_idx * kSgHm;
 
     // Because Hm is greater than uH
-    if (h >= args.uH)
-      return;
+    if (h >= args.uH) return;
 
     xetla_tdescriptor transpose_tdecs;
     xetla_vector<scalar_t, kSgHm> v_out;
@@ -414,7 +419,7 @@ private:
   // ====================== // preload_Qi // ====================== //
 
   /// @brief preload_Qi is used to load Qi from global to local memory.
-  inline void preload_Qi(arguments_t &args) {
+  inline void preload_Qi(arguments_t& args) {
     using matQi_tile_desc_t = typename brgemm_Oi_t::matAcc_tile_desc_t;
     using matQi_t = subgroup::tile_t<scalar_t, matQi_tile_desc_t>;
     using matQi_load_t = subgroup::mem_payload_t<
@@ -443,11 +448,10 @@ private:
     subgroup::tile_store(matQi, matQi_store);
 
     xetla_fence<memory_kind::shared_local>();
-    if constexpr (wg_size_x > 1)
-      ctx.nbarrier.arrive_wait();
+    if constexpr (wg_size_x > 1) ctx.nbarrier.arrive_wait();
   }
 
-public:
+ public:
   /// @brief Gets named_barrier id consumption count.
   /// Users query and get a named_barrier id consumption count in compile time.
   /// @return The count of named barriers required.
@@ -486,8 +490,8 @@ public:
 
   // ================= // Entry of the functor // ================= //
 
-  inline KERNEL_FUNC void operator()(xetla_exec_item<3> &ei,
-                                     arguments_t &args) {
+  inline KERNEL_FUNC void operator()(xetla_exec_item<3>& ei,
+                                     arguments_t& args) {
     // allocate slm and nbarrier resource
     xetla_local_init<get_slm_size()>();
     xetla_nbarrier_init<get_barrier_count()>();
@@ -505,8 +509,7 @@ public:
     // iterate through the keys
     for (uint32_t startT = 0; startT < args.uT; startT += kBc) {
       if constexpr (kIsCausal) {
-        if (startT >= endF)     
-          break;
+        if (startT >= endF) break;
       }
       // update context for current loop
       ctx.update_context(ei, args, startT);
@@ -528,7 +531,7 @@ public:
     permute_store_Oi(ei, matAccOi, args);
 #endif
   }
-}; // fmha_forward_t
+};  // fmha_forward_t
 
 template <typename fmha_policy, typename T, bool kUseBias, bool kIsCausal,
           bool kIsTraining>
@@ -537,8 +540,8 @@ class FmhaForwardKernel;
 // The launcher of fmha forward kernel
 template <typename fmha_policy, typename T, bool kUseBias, bool kIsCausal,
           bool kIsTraining>
-void fmha_forward_impl(sycl::queue &q, T *query, T *key, T *value, T *bias,
-                       uint8_t *dropout, float dropout_prob, T *out,
+void fmha_forward_impl(sycl::queue& q, T* query, T* key, T* value, T* bias,
+                       uint8_t* dropout, float dropout_prob, T* out,
                        uint32_t num_batches, uint32_t num_heads,
                        uint32_t head_size, uint32_t num_queries,
                        uint32_t num_keys, float head_scale) {
@@ -549,51 +552,53 @@ void fmha_forward_impl(sycl::queue &q, T *query, T *key, T *value, T *bias,
   sycl::nd_range<3> NdRange =
       fmha_forward_op_t::get_nd_range(num_batches * num_heads, num_queries);
 
-  auto event = q.submit([&](sycl::handler &cgh) {
+  auto event = q.submit([&](sycl::handler& cgh) {
     cgh.parallel_for<class FmhaForwardKernel<fmha_policy, T, kUseBias,
                                              kIsCausal, kIsTraining>>(
         NdRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          // exec item
-          xetla_exec_item<3> ei(item);
+      // exec item
+      xetla_exec_item<3> ei(item);
 
-          // init fmha forward op and arguments
-          fmha_forward_op_t fmha_fwd_op;
-          typename fmha_forward_op_t::arguments_t args(
-              query, key, value, bias, dropout, dropout_prob, out, num_batches,
-              num_heads, head_size, num_queries, num_keys, head_scale);
+      // init fmha forward op and arguments
+      fmha_forward_op_t fmha_fwd_op;
+      typename fmha_forward_op_t::arguments_t args(query, key, value, bias,
+                                                   dropout, dropout_prob, out,
+                                                   num_batches, num_heads,
+                                                   head_size, num_queries,
+                                                   num_keys, head_scale);
 
-          // call the functor
-          fmha_fwd_op(ei, args);
+      // call the functor
+      fmha_fwd_op(ei, args);
         });
   });
 }
 
-} // namespace fmha
+}  // namespace fmha
 
-#define CALL_IMPL_FUNC(P)                                                      \
-  fmha::fmha_forward_impl<P, T, kUseBias, kIsCausal, kIsTraining>(             \
-      q, query, key, value, bias, dropout, dropout_prob, out, num_batches,     \
+#define CALL_IMPL_FUNC(P)                                                  \
+  fmha::fmha_forward_impl<P, T, kUseBias, kIsCausal, kIsTraining>(         \
+      q, query, key, value, bias, dropout, dropout_prob, out, num_batches, \
       num_heads, head_size, num_queries, num_keys, head_scale)
 
 /// @brief Main execution function for flash mha forward.
 template <typename T, bool kUseBias = false, bool kIsCausal = false,
           bool kIsTraining = false>
-void fmha_forward(sycl::queue &q, T *query, T *key, T *value, T *bias,
-                  uint8_t *dropout, float dropout_prob, T *out,
+void fmha_forward(sycl::queue& q, T* query, T* key, T* value, T* bias,
+                  uint8_t* dropout, float dropout_prob, T* out,
                   uint32_t num_batches, uint32_t num_heads, uint32_t head_size,
-                  uint32_t num_queries, uint32_t num_keys,  float head_scale) {
+                  uint32_t num_queries, uint32_t num_keys, float head_scale) {
   if (head_size <= 64) {
     CALL_IMPL_FUNC(fmha_policy_64x128x64);
-    } else if (head_size <= 128) {
-      CALL_IMPL_FUNC(fmha_policy_64x128x128);
-    } else if (head_size <= 256) {
-      if (num_keys < 64){       
-        CALL_IMPL_FUNC(fmha_policy_8x256x256);                
-      } else if (num_keys < 128){
-        CALL_IMPL_FUNC(fmha_policy_64x128x256);                
-      } else{
-        CALL_IMPL_FUNC(fmha_policy_64x256x256);
-      }
+  } else if (head_size <= 128) {
+    CALL_IMPL_FUNC(fmha_policy_64x128x128);
+  } else if (head_size <= 256) {
+    if (num_keys < 64) {
+      CALL_IMPL_FUNC(fmha_policy_8x256x256);
+    } else if (num_keys < 128) {
+      CALL_IMPL_FUNC(fmha_policy_64x128x256);
+    } else {
+      CALL_IMPL_FUNC(fmha_policy_64x256x256);
+    }
   } else {
     std::cout << "No policy available for current head_size " << head_size
               << "\n";
@@ -603,4 +608,4 @@ void fmha_forward(sycl::queue &q, T *query, T *key, T *value, T *bias,
 
 #undef CALL_IMPL_FUNC
 
-} // namespace gpu::xetla
+}  // namespace gpu::xetla

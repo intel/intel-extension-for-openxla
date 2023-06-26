@@ -1,4 +1,6 @@
-/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "xla/service/gpu/nccl_collective_thunk.h"
+#include "xla/service/gpu/ccl_collective_thunk.h"
 
 #include <chrono>  // NOLINT (required by TF interfaces)
 #include <cstdlib>
@@ -41,14 +43,14 @@ namespace gpu {
 //  - All threads that "go together" (i.e. are participating in the "same"
 //    collective op) choose the same Rendezvous object from a global map.
 //  - Once all threads have arrived at the Rendezvous, we know exactly which
-//    GPUs are participating in the op, so we get or create a NcclClique
+//    GPUs are participating in the op, so we get or create a CclClique
 //    containing those GPUs.
 //  - We perform the NCCL operation using the clique.
 
-NcclCollectiveConfig::NcclCollectiveConfig() = default;
-NcclCollectiveConfig::NcclCollectiveConfig(NcclCollectiveConfig&&) = default;
-NcclCollectiveConfig::~NcclCollectiveConfig() = default;
-NcclCollectiveConfig& NcclCollectiveConfig::operator=(NcclCollectiveConfig&&) =
+CclCollectiveConfig::CclCollectiveConfig() = default;
+CclCollectiveConfig::CclCollectiveConfig(CclCollectiveConfig&&) = default;
+CclCollectiveConfig::~CclCollectiveConfig() = default;
+CclCollectiveConfig& CclCollectiveConfig::operator=(CclCollectiveConfig&&) =
     default;
 
 // Returns if the collective communication operation is degenerate because all
@@ -69,8 +71,8 @@ NcclCollectiveConfig& NcclCollectiveConfig::operator=(NcclCollectiveConfig&&) =
 //         degenerate if replica_groups are singleton or group emty and
 //         num_partitions == 1 (since replica groups contain partition ids).
 //
-bool NcclCollectiveConfig::IsDegenerate(int64_t replica_count,
-                                        int64_t partition_count) const {
+bool CclCollectiveConfig::IsDegenerate(int64_t replica_count,
+                                       int64_t partition_count) const {
   bool groups_empty = replica_groups.empty();
 
   // check if all replica_groups are singleton. If not, then the operation is
@@ -99,9 +101,9 @@ bool NcclCollectiveConfig::IsDegenerate(int64_t replica_count,
   }
 }
 
-/* static */ bool NcclCollectiveThunk::NcclIsEnabled() { return true; }
+/* static */ bool CclCollectiveThunk::CclIsEnabled() { return true; }
 
-StatusOr<NcclComm::Lock> LockNcclComm(
+StatusOr<CclComm::Lock> LockCclComm(
     const NcclExecuteParams& params,
     const std::vector<ReplicaGroup>& replica_groups,
     CollectiveOpGroupMode group_mode, int64_t op_id) {
@@ -113,7 +115,7 @@ StatusOr<NcclComm::Lock> LockNcclComm(
       GetParticipatingDevices(global_device_id, *params.device_assn,
                               replica_groups, group_mode));
 
-  if (IsGlobalNcclConfig() &&
+  if (IsGlobalCclConfig() &&
       (participants.size() != params.device_assn->replica_count())) {
     return InvalidArgument(
         "Partial replica groups are not allowed when using NCCL_COMM_ID "
@@ -139,13 +141,13 @@ StatusOr<NcclComm::Lock> LockNcclComm(
       const NcclUniqueIdCallback* unique_id_callback,
       GetNcclUniqueIdCallback(params.nccl_unique_id_callback, is_local));
 
-  return AcquireNcclComm(params.run_id, OpId(op_id), std::move(participants),
-                         num_local_participants, *unique_id_callback, rank);
+  return AcquireCclComm(params.run_id, OpId(op_id), std::move(participants),
+                        num_local_participants, *unique_id_callback, rank);
 }
 
 StatusOr<std::vector<DeviceBufferPair>> ConvertToDeviceBuffers(
     const Thunk::ExecuteParams& params,
-    const std::vector<NcclCollectiveThunk::Buffer>& buffers,
+    const std::vector<CclCollectiveThunk::Buffer>& buffers,
     const std::vector<PrimitiveType>& element_types) {
   if (buffers.size() != element_types.size())
     return FailedPrecondition("Mismatch in operand buffer counts.");
@@ -163,13 +165,13 @@ StatusOr<std::vector<DeviceBufferPair>> ConvertToDeviceBuffers(
   return device_buffers;
 }
 
-Status NcclCollectiveThunk::ExecuteOnStream(const ExecuteParams& params) {
+Status CclCollectiveThunk::ExecuteOnStream(const ExecuteParams& params) {
   VLOG(1) << absl::StreamFormat("Starting %s.", Thunk::KindToString(kind()));
-  TF_ASSIGN_OR_RETURN(NcclComm::Lock comm,
-                      LockNcclComm(params.nccl_params, config().replica_groups,
-                                   config().group_mode, config().op_id));
+  TF_ASSIGN_OR_RETURN(CclComm::Lock comm,
+                      LockCclComm(params.nccl_params, config().replica_groups,
+                                  config().group_mode, config().op_id));
 
-  TF_RETURN_IF_ERROR(RunNcclCollective(params, *comm));
+  TF_RETURN_IF_ERROR(RunCclCollective(params, *comm));
 
   // Block host on the first call to ensure that all devices have allocated the
   // required buffers for their communicators before allowing any device to
@@ -182,7 +184,7 @@ Status NcclCollectiveThunk::ExecuteOnStream(const ExecuteParams& params) {
   return OkStatus();
 }
 
-std::string NcclCollectiveThunk::GetDeviceString(
+std::string CclCollectiveThunk::GetDeviceString(
     const NcclExecuteParams& nccl_params) {
   int device_ordinal = nccl_params.stream_executor->device_ordinal();
   GlobalDeviceId global_device_id = nccl_params.GetGlobalDeviceId().value();
@@ -193,7 +195,7 @@ std::string NcclCollectiveThunk::GetDeviceString(
                          global_device_id.value(), device_ordinal);
 }
 
-Status NcclCollectiveThunk::AsyncExecutor::Execute(
+Status CclCollectiveThunk::AsyncExecutor::Execute(
     absl::FunctionRef<Status(const ExecuteParams&, se::Stream&, ncclComm_t)> fn,
     const ExecuteParams& params, ncclComm_t comm) {
   se::Stream& async_comms_stream = *params.async_comms_stream;
@@ -215,7 +217,7 @@ Status NcclCollectiveThunk::AsyncExecutor::Execute(
   return OkStatus();
 }
 
-Status NcclCollectiveThunk::AsyncExecutor::Await(const ExecuteParams& params) {
+Status CclCollectiveThunk::AsyncExecutor::Await(const ExecuteParams& params) {
   int device_ordinal = params.stream->parent()->device_ordinal();
   auto done_event = [this, device_ordinal] {
     absl::MutexLock lock(&mu_);
@@ -226,17 +228,17 @@ Status NcclCollectiveThunk::AsyncExecutor::Await(const ExecuteParams& params) {
   return OkStatus();
 }
 
-NcclCollectiveDoneThunk::NcclCollectiveDoneThunk(
+CclCollectiveDoneThunk::CclCollectiveDoneThunk(
     Thunk::Kind kind, ThunkInfo thunk_info,
-    NcclCollectiveThunk::AsyncExecutor& async)
+    CclCollectiveThunk::AsyncExecutor& async)
     : Thunk(kind, std::move(thunk_info)), async_(async) {}
 
-Status NcclCollectiveDoneThunk::ExecuteOnStream(const ExecuteParams& params) {
+Status CclCollectiveDoneThunk::ExecuteOnStream(const ExecuteParams& params) {
   return async_.Await(params);
 }
 
-bool IsTypeSupportedByNccl(PrimitiveType element_type,
-                           Thunk::Kind reduction_op) {
+bool IsTypeSupportedByCcl(PrimitiveType element_type,
+                          Thunk::Kind reduction_op) {
   switch (element_type) {
     case S8:
     case PRED:

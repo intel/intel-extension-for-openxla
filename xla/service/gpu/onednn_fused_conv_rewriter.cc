@@ -1,4 +1,6 @@
-/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "xla/service/gpu/cudnn_fused_conv_rewriter.h"
+#include "xla/service/gpu/onednn_fused_conv_rewriter.h"
 
 #include <array>
 #include <functional>
@@ -173,7 +175,7 @@ StatusOr<HloInstruction*> EnsureIsConvBiasActivation(HloInstruction* conv) {
     TF_RETURN_IF_ERROR(comp->ReplaceInstruction(conv, new_conv));
     new_conv->set_custom_call_target(kCudnnConvBiasActivationForwardCallTarget);
     comp->parent()->SetAndUniquifyInstrName(new_conv,
-                                            "cudnn-conv-bias-activation");
+                                            "onednn-conv-bias-activation");
     return new_conv;
   }
 
@@ -196,7 +198,7 @@ StatusOr<bool> FuseConvertTypeIntoConv(HloComputation* comp,
     if (!Match(instr, pattern)) {
       continue;
     }
-    if (!ConsumeFuel("cudnn-fused-convolution-rewriter", [&] {
+    if (!ConsumeFuel("onednn-fused-convolution-rewriter", [&] {
           return absl::StrCat("FuseConvertTypeIntoConv: ", conv->ToString());
         })) {
       continue;
@@ -276,7 +278,7 @@ StatusOr<bool> FuseConvAlpha(HloComputation* comp) {
     if (config.conv_result_scale() != 1) {
       continue;
     }
-    if (!ConsumeFuel("cudnn-fused-convolution-rewriter", [&] {
+    if (!ConsumeFuel("onednn-fused-convolution-rewriter", [&] {
           return absl::StrCat("FuseConvAlpha: ", conv->ToString());
         })) {
       continue;
@@ -382,7 +384,7 @@ StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
       continue;
     }
 
-    if (!ConsumeFuel("cudnn-fused-convolution-rewriter", [&] {
+    if (!ConsumeFuel("onednn-fused-convolution-rewriter", [&] {
           return absl::StrCat("FuseBiasOrSideInput: ", conv->ToString());
         })) {
       continue;
@@ -394,7 +396,8 @@ StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
     TF_RETURN_IF_ERROR(new_conv->set_backend_config(config));
     if (can_accept_side_input) {
       xla::Cast<HloCustomCallInstruction>(new_conv)
-          ->set_output_to_operand_aliasing({{{}, {new_operands.size()-1, {}}}});
+          ->set_output_to_operand_aliasing(
+              {{{}, {new_operands.size() - 1, {}}}});
     }
     TF_ASSIGN_OR_RETURN(HloInstruction * new_instr,
                         MakeGetTupleElementHlo(new_conv, 0));
@@ -460,7 +463,7 @@ StatusOr<bool> FuseSideInputAlpha(HloComputation* comp) {
                     }))))) {
       continue;
     }
-    if (!ConsumeFuel("cudnn-fused-convolution-rewriter", [&] {
+    if (!ConsumeFuel("onednn-fused-convolution-rewriter", [&] {
           return absl::StrCat("FuseSideInputAlpha: ", conv->ToString());
         })) {
       continue;
@@ -582,7 +585,7 @@ StatusOr<bool> FuseElu(HloComputation* comp) {
       continue;
     }
 
-    if (!ConsumeFuel("cudnn-fused-convolution-rewriter", [&] {
+    if (!ConsumeFuel("onednn-fused-convolution-rewriter", [&] {
           return absl::StrCat("FuseElu: ", conv->ToString());
         })) {
       continue;
@@ -619,7 +622,7 @@ StatusOr<bool> FuseRelu(HloComputation* comp) {
       continue;
     }
 
-    if (!ConsumeFuel("cudnn-fused-convolution-rewriter", [&] {
+    if (!ConsumeFuel("onednn-fused-convolution-rewriter", [&] {
           return absl::StrCat("FuseRelu: ", conv->ToString());
         })) {
       continue;
@@ -661,7 +664,7 @@ StatusOr<bool> FuseConvertToF16(HloComputation* comp) {
                                        IsConvCustomCall))))) {
       continue;
     }
-    if (!ConsumeFuel("cudnn-fused-convolution-rewriter", [&] {
+    if (!ConsumeFuel("onednn-fused-convolution-rewriter", [&] {
           return absl::StrCat("FuseConvertToF16: ", conv->ToString());
         })) {
       continue;
@@ -739,7 +742,7 @@ StatusOr<bool> FuseConvertToS8(HloComputation* comp) {
     } else {
       continue;
     }
-    if (!ConsumeFuel("cudnn-fused-convolution-rewriter", [&] {
+    if (!ConsumeFuel("onednn-fused-convolution-rewriter", [&] {
           return absl::StrCat("FuseConvertToS8: ", conv->ToString());
         })) {
       continue;
@@ -835,7 +838,7 @@ void VlogStats(HloModule* module) {
     return;
   }
 
-  VLOG(1) << "Results of CudnnFusedConvRewriter for " << module->name();
+  VLOG(1) << "Results of OnednnFusedConvRewriter for " << module->name();
   absl::flat_hash_map<std::string, int> stats;
   for (HloComputation* comp : module->MakeNonfusionComputations()) {
     for (HloInstruction* instr : comp->instructions()) {
@@ -908,7 +911,7 @@ void VlogStats(HloModule* module) {
 
 }  // namespace
 
-StatusOr<bool> CudnnFusedConvRewriter::Run(
+StatusOr<bool> OnednnFusedConvRewriter::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool any_changed = false;

@@ -21,8 +21,8 @@ limitations under the License.
 // The notions from the StreamExecutor basically correspond to the CUDA streams
 // programming model provided by the libcuda.so driver APIs, so we don't have
 // to do much more than wrap the calls to the libraries appropriately.
-#ifndef ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_EXECUTOR_H_
-#define ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_EXECUTOR_H_
+#ifndef XLA_STREAM_EXECUTOR_SYCL_SYCL_EXECUTOR_H_
+#define XLA_STREAM_EXECUTOR_SYCL_SYCL_EXECUTOR_H_
 
 #include <cstdint>
 #include <map>
@@ -439,4 +439,4 @@ inline GpuExecutor* ExtractGpuExecutor(StreamExecutor* stream_exec) {
 }  // namespace gpu
 }  // namespace stream_executor
 
-#endif  // ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_EXECUTOR_H_
+#endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_EXECUTOR_H_

@@ -1,4 +1,6 @@
-/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_SERVICE_GPU_NCCL_ALL_REDUCE_THUNK_H_
-#define XLA_SERVICE_GPU_NCCL_ALL_REDUCE_THUNK_H_
+#ifndef XLA_SERVICE_GPU_CCL_ALL_REDUCE_THUNK_H_
+#define XLA_SERVICE_GPU_CCL_ALL_REDUCE_THUNK_H_
 
 #include <memory>
 #include <optional>
@@ -23,32 +25,32 @@ limitations under the License.
 #include "xla/mlir_hlo/lhlo/IR/lhlo_ops.h"
 #include "xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.h"
 #include "xla/service/collective_ops_utils.h"
-#include "xla/service/gpu/nccl_collective_thunk.h"
+#include "xla/service/gpu/ccl_collective_thunk.h"
 #include "xla/xla_data.pb.h"
 
 namespace xla {
 namespace gpu {
 
-struct NcclAllReduceConfig {
-  NcclCollectiveConfig config;
+struct CclAllReduceConfig {
+  CclCollectiveConfig config;
   ReductionKind reduction_kind;
 };
 
 // Thunk that performs a NCCL-based All-Reduce or Reduce-Scatter among CUDA
 // GPU-based replicas.
-class NcclAllReduceReduceScatterThunkBase : public NcclCollectiveThunk {
+class CclAllReduceReduceScatterThunkBase : public CclCollectiveThunk {
  public:
   static std::optional<ReductionKind> MatchAllReduceComputation(
       mlir::Region& computation);
 
-  NcclAllReduceReduceScatterThunkBase(Kind kind, ThunkInfo thunk_info,
-                                      NcclAllReduceConfig config,
-                                      std::vector<Buffer> buffers);
+  CclAllReduceReduceScatterThunkBase(Kind kind, ThunkInfo thunk_info,
+                                     CclAllReduceConfig config,
+                                     std::vector<Buffer> buffers);
 
  protected:
-  const NcclCollectiveConfig& config() const override { return config_.config; }
+  const CclCollectiveConfig& config() const override { return config_.config; }
 
-  const NcclAllReduceConfig config_;
+  const CclAllReduceConfig config_;
   const std::vector<Buffer> buffers_;
 };
 
@@ -56,20 +58,19 @@ class NcclAllReduceReduceScatterThunkBase : public NcclCollectiveThunk {
 // AllReduce thunks
 // -----------------------------------------------------------------------------
 
-class NcclAllReduceThunkBase : public NcclAllReduceReduceScatterThunkBase {
+class CclAllReduceThunkBase : public CclAllReduceReduceScatterThunkBase {
  public:
-  using NcclAllReduceReduceScatterThunkBase::
-      NcclAllReduceReduceScatterThunkBase;
+  using CclAllReduceReduceScatterThunkBase::CclAllReduceReduceScatterThunkBase;
 
  protected:
   Status RunAllReduce(const ExecuteParams& params, se::Stream& stream,
                       ncclComm_t comm);
 };
 
-class NcclAllReduceThunk : public NcclAllReduceThunkBase {
+class CclAllReduceThunk : public CclAllReduceThunkBase {
  public:
-  NcclAllReduceThunk(ThunkInfo thunk_info, mlir::lmhlo::AllReduceOp op,
-                     std::vector<Buffer> buffers);
+  CclAllReduceThunk(ThunkInfo thunk_info, mlir::lmhlo::AllReduceOp op,
+                    std::vector<Buffer> buffers);
 
   static const char* GetName() { return "AllReduce"; }
 
@@ -80,15 +81,15 @@ class NcclAllReduceThunk : public NcclAllReduceThunkBase {
   static constexpr bool IsAsync() { return false; }
 
  protected:
-  Status RunNcclCollective(const ExecuteParams& params,
-                           ncclComm_t comm) override;
+  Status RunCclCollective(const ExecuteParams& params,
+                          ncclComm_t comm) override;
 };
 
-class NcclAllReduceStartThunk : public NcclAllReduceThunkBase {
+class CclAllReduceStartThunk : public CclAllReduceThunkBase {
  public:
-  NcclAllReduceStartThunk(ThunkInfo thunk_info,
-                          mlir::lmhlo_gpu::AllReduceStartOp op,
-                          std::vector<Buffer> buffers);
+  CclAllReduceStartThunk(ThunkInfo thunk_info,
+                         mlir::lmhlo_gpu::AllReduceStartOp op,
+                         std::vector<Buffer> buffers);
 
   static const char* GetName() { return "AllReduceStart"; }
 
@@ -102,38 +103,37 @@ class NcclAllReduceStartThunk : public NcclAllReduceThunkBase {
   AsyncExecutor& async_executor() { return async_; }
 
  protected:
-  Status RunNcclCollective(const ExecuteParams& params,
-                           ncclComm_t comm) override;
+  Status RunCclCollective(const ExecuteParams& params,
+                          ncclComm_t comm) override;
 
  private:
   AsyncExecutor async_;
 };
 
-class NcclAllReduceDoneThunk : public NcclCollectiveDoneThunk {
+class CclAllReduceDoneThunk : public CclCollectiveDoneThunk {
  public:
-  NcclAllReduceDoneThunk(ThunkInfo thunk_info,
-                         NcclCollectiveThunk::AsyncExecutor& async)
-      : NcclCollectiveDoneThunk(Thunk::kNcclAllReduceDone, thunk_info, async) {}
+  CclAllReduceDoneThunk(ThunkInfo thunk_info,
+                        CclCollectiveThunk::AsyncExecutor& async)
+      : CclCollectiveDoneThunk(Thunk::kNcclAllReduceDone, thunk_info, async) {}
 };
 
 // -----------------------------------------------------------------------------
 // ReduceScatter thunks
 // -----------------------------------------------------------------------------
 
-class NcclReduceScatterThunkBase : public NcclAllReduceReduceScatterThunkBase {
+class CclReduceScatterThunkBase : public CclAllReduceReduceScatterThunkBase {
  public:
-  using NcclAllReduceReduceScatterThunkBase::
-      NcclAllReduceReduceScatterThunkBase;
+  using CclAllReduceReduceScatterThunkBase::CclAllReduceReduceScatterThunkBase;
 
  protected:
   Status RunReduceScatter(const ExecuteParams& params, se::Stream& stream,
                           ncclComm_t comm);
 };
 
-class NcclReduceScatterThunk : public NcclReduceScatterThunkBase {
+class CclReduceScatterThunk : public CclReduceScatterThunkBase {
  public:
-  NcclReduceScatterThunk(ThunkInfo thunk_info, mlir::lmhlo::ReduceScatterOp op,
-                         std::vector<Buffer> buffers);
+  CclReduceScatterThunk(ThunkInfo thunk_info, mlir::lmhlo::ReduceScatterOp op,
+                        std::vector<Buffer> buffers);
 
   static const char* GetName() { return "ReduceScatter"; }
 
@@ -146,15 +146,15 @@ class NcclReduceScatterThunk : public NcclReduceScatterThunkBase {
   static constexpr bool IsAsync() { return false; }
 
  protected:
-  Status RunNcclCollective(const ExecuteParams& params,
-                           ncclComm_t comm) override;
+  Status RunCclCollective(const ExecuteParams& params,
+                          ncclComm_t comm) override;
 };
 
-class NcclReduceScatterStartThunk : public NcclReduceScatterThunkBase {
+class CclReduceScatterStartThunk : public CclReduceScatterThunkBase {
  public:
-  NcclReduceScatterStartThunk(ThunkInfo thunk_info,
-                              mlir::lmhlo_gpu::ReduceScatterStartOp op,
-                              std::vector<Buffer> buffers);
+  CclReduceScatterStartThunk(ThunkInfo thunk_info,
+                             mlir::lmhlo_gpu::ReduceScatterStartOp op,
+                             std::vector<Buffer> buffers);
 
   static const char* GetName() { return "ReduceScatterStart"; }
 
@@ -169,19 +169,19 @@ class NcclReduceScatterStartThunk : public NcclReduceScatterThunkBase {
   AsyncExecutor& async_executor() { return async_; }
 
  protected:
-  Status RunNcclCollective(const ExecuteParams& params,
-                           ncclComm_t comm) override;
+  Status RunCclCollective(const ExecuteParams& params,
+                          ncclComm_t comm) override;
 
  private:
   AsyncExecutor async_;
 };
 
-class NcclReduceScatterDoneThunk : public NcclCollectiveDoneThunk {
+class CclReduceScatterDoneThunk : public CclCollectiveDoneThunk {
  public:
-  NcclReduceScatterDoneThunk(ThunkInfo thunk_info,
-                             NcclCollectiveThunk::AsyncExecutor& async)
-      : NcclCollectiveDoneThunk(Thunk::kNcclReduceScatterDone, thunk_info,
-                                async) {}
+  CclReduceScatterDoneThunk(ThunkInfo thunk_info,
+                            CclCollectiveThunk::AsyncExecutor& async)
+      : CclCollectiveDoneThunk(Thunk::kNcclReduceScatterDone, thunk_info,
+                               async) {}
 };
 
 // -----------------------------------------------------------------------------
@@ -197,4 +197,4 @@ Status RunReduceScatter(ReductionKind reduction_kind,
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_NCCL_ALL_REDUCE_THUNK_H_
+#endif  // XLA_SERVICE_GPU_CCL_ALL_REDUCE_THUNK_H_

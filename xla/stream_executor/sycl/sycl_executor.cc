@@ -806,51 +806,63 @@ GpuExecutor::CreateDeviceDescription(int device_ordinal) {
   // This means AMPERE.
   builder.set_cuda_compute_capability(8, 0);
 
-ITEX_GPUDevice* device_handle;
+  ITEX_GPUDevice* device_handle;
   ITEX_GPUGetDevice(&device_handle, device_ordinal);
-  int32_t max_workgroup_size = device_handle->template get_info<sycl::info::device::max_work_group_size>();
+  int32_t max_workgroup_size =
+      device_handle
+          ->template get_info<sycl::info::device::max_work_group_size>();
   builder.set_threads_per_block_limit(max_workgroup_size);
   builder.set_threads_per_core_limit(max_workgroup_size);
   builder.set_threads_per_warp(32);
 
-  int32_t core_count = device_handle->template get_info<
-    sycl::ext::intel::info::device::gpu_subslices_per_slice>() * device_handle->template get_info<
-    sycl::ext::intel::info::device::gpu_slices>();
+  int32_t core_count =
+      device_handle->template get_info<
+          sycl::ext::intel::info::device::gpu_subslices_per_slice>() *
+      device_handle
+          ->template get_info<sycl::ext::intel::info::device::gpu_slices>();
   builder.set_core_count(core_count);
 
-  uint64_t memory_size = device_handle->get_info<sycl::info::device::global_mem_size>();
+  uint64_t memory_size =
+      device_handle->get_info<sycl::info::device::global_mem_size>();
   builder.set_device_memory_size(memory_size);
 
-  uint64_t local_mem_size =  device_handle->template get_info<sycl::info::device::local_mem_size>(); 
+  uint64_t local_mem_size =
+      device_handle->template get_info<sycl::info::device::local_mem_size>();
   builder.set_shared_memory_per_block(local_mem_size);
   builder.set_shared_memory_per_core(local_mem_size);
 
   {
     BlockDim block_dim_limit;
     block_dim_limit.x = device_handle->template get_info<
-      sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
-    block_dim_limit.y =  device_handle->template get_info<
-      sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
+        sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
+    block_dim_limit.y = device_handle->template get_info<
+        sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
     block_dim_limit.z = device_handle->template get_info<
-      sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
+        sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
     builder.set_block_dim_limit(block_dim_limit);
   }
 
-  int eu_count =  device_handle->template get_info<
-      sycl::ext::intel::info::device::gpu_eu_count>();
+  int eu_count =
+      device_handle
+          ->template get_info<sycl::ext::intel::info::device::gpu_eu_count>();
   builder.set_fpus_per_core(eu_count);
 
   int32_t memory_clock_khz = device_handle->template get_info<
       sycl::ext::intel::info::device::memory_clock_rate>();
   int32_t memory_bus_width = device_handle->template get_info<
       sycl::ext::intel::info::device::memory_bus_width>();
-  builder.set_memory_bandwidth(2*memory_clock_khz * 1e6 * memory_bus_width / 8);
+  builder.set_memory_bandwidth(2 * memory_clock_khz * 1e6 * memory_bus_width /
+                               8);
 
-
-  int global_mem_cache_size = device_handle->template get_info<sycl::info::device::global_mem_cache_size>();
+  int global_mem_cache_size =
+      device_handle
+          ->template get_info<sycl::info::device::global_mem_cache_size>();
   builder.set_l2_cache_size(global_mem_cache_size);
 
-  int clock_ghz =  device_handle->template get_info<sycl::info::device::max_clock_frequency>() / 1000.;
+  int clock_ghz =
+      device_handle
+          ->template get_info<sycl::info::device::max_clock_frequency>() /
+      1000.;
   builder.set_clock_rate_ghz(clock_ghz);
 
   return builder.Build();

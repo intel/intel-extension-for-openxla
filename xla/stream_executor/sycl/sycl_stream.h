@@ -18,8 +18,8 @@ limitations under the License.
 // Defines the GpuStream type - the CUDA-specific implementation of the generic
 // StreamExecutor Stream interface.
 
-#ifndef ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_STREAM_H_
-#define ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_STREAM_H_
+#ifndef XLA_STREAM_EXECUTOR_SYCL_SYCL_STREAM_H_
+#define XLA_STREAM_EXECUTOR_SYCL_SYCL_STREAM_H_
 
 #include "absl/base/thread_annotations.h"
 #include "xla/stream_executor/stream_executor_internal.h"
@@ -97,4 +97,4 @@ GpuStreamHandle AsGpuStreamValue(Stream* stream);
 }  // namespace gpu
 }  // namespace stream_executor
 
-#endif  // ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_STREAM_H_
+#endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_STREAM_H_

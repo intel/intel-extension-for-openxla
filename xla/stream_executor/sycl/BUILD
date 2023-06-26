@@ -1,4 +1,4 @@
-load("//xla:xla.bzl", "itex_xpu_library")
+load("//xla:xla.bzl", "xpu_library")
 
 package(
     default_visibility = [
@@ -8,19 +8,19 @@ package(
 )
 
 cc_library(
-    name = "itex_gpu_header",
-    srcs = ["itex_gpu_runtime.h"],
+    name = "sycl_gpu_header",
+    srcs = ["sycl_gpu_runtime.h"],
     visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/strings",
     ],
 )
 
-itex_xpu_library(
-    name = "itex_gpu_runtime_imp",
-    srcs = ["itex_gpu_runtime.cc"],
+xpu_library(
+    name = "sycl_gpu_runtime_imp",
+    srcs = ["sycl_gpu_runtime.cc"],
     deps = [
-        ":itex_gpu_header",
+        ":sycl_gpu_header",
         "@com_google_absl//absl/strings",
         "@tsl//tsl/util:env_var",
     ],
@@ -36,7 +36,7 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        ":itex_gpu_header",
+        ":sycl_gpu_header",
         "@com_google_absl//absl/container:flat_hash_set",
         "@tsl//tsl/platform:logging",
         "@tsl//tsl/platform:mutex",
@@ -54,7 +54,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":bfc_allocator",
-        ":itex_gpu_header",
+        ":sycl_gpu_header",
     ],
 )
 
@@ -115,8 +115,8 @@ cc_library(
     srcs = ["sycl_kernel.cc"],
     hdrs = ["sycl_kernel.h"],
     deps = [
+        ":sycl_gpu_runtime_imp",
         ":sycl_types_header",
-        "//xla/stream_executor/sycl:itex_gpu_runtime_imp",
         "@xla//xla/stream_executor:event",
         "@xla//xla/stream_executor:stream_executor_pimpl_header",
         "@xla//xla/stream_executor/platform",

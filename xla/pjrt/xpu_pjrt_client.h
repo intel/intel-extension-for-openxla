@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_COMPILER_XLA_PJRT_XPU_PJRT_CLIENT_H_
-#define ITEX_CORE_COMPILER_XLA_PJRT_XPU_PJRT_CLIENT_H_
+#ifndef XLA_PJRT_XPU_PJRT_CLIENT_H_
+#define XLA_PJRT_XPU_PJRT_CLIENT_H_
 
 #include <functional>
 #include <memory>
@@ -268,4 +268,4 @@ PJRT_Client* CreateWrapperClient(std::unique_ptr<xla::PjRtClient> cpp_client);
 
 }  // namespace pjrt
 
-#endif  // ITEX_CORE_COMPILER_XLA_PJRT_XPU_PJRT_CLIENT_H_
+#endif  // XLA_PJRT_XPU_PJRT_CLIENT_H_

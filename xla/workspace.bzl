@@ -39,13 +39,11 @@ def workspace(path_prefix = "", tf_repo_name = ""):
     new_git_repository(
         name = "xetla",
         # v0.3.1
-        commit = "b18d66e127e0db05c2a3ffed99792c361ce2b7b6",
-        remote = "https://github.com/intel-innersource/libraries.gpu.xetla.git",
+        commit = "2c29086eba7bf8369c49a6da8dd9b2912e954d20",
+        remote = "https://github.com/intel/xetla",
         verbose = True,
         build_file = "//third_party/xetla:BUILD",
         patch_cmds = [
             "git log -1 --format=%H > COMMIT",
-        ], 
+        ],
     )
-
-    # _itex_bind()

@@ -1,7 +1,5 @@
 /* Copyright (c) 2023 Intel Corporation
 
-Copyright 2019 The TensorFlow Authors. All Rights Reserved.
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -133,12 +131,12 @@ StatusOr<bool> ExpandDotDims(HloInstruction* original_dot) {
   std::unique_ptr<HloInstruction> replacement =
       HloInstruction::CreateReshape(original_dot->shape(), dot);
 
-  TF_RETURN_IF_ERROR(computation->ReplaceWithNewInstruction(original_dot,
-                                                std::move(replacement)));
+  TF_RETURN_IF_ERROR(computation->ReplaceWithNewInstruction(
+      original_dot, std::move(replacement)));
   return true;
 }
 
-} // namespace
+}  // namespace
 
 DotExpandDims::DotExpandDims() = default;
 
@@ -146,7 +144,7 @@ StatusOr<bool> DotExpandDims::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool any_changed = false;
-  for (HloComputation *computation :
+  for (HloComputation* computation :
        module->MakeNonfusionComputations(execution_threads)) {
     for (HloInstruction* instr : computation->MakeInstructionPostOrder()) {
       bool changed = false;

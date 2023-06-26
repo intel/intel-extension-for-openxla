@@ -23,7 +23,7 @@ def tf_copts(android_optimization_level_override = "-O2", is_external = False):
         ]
     )
 
-def itex_xetla_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
+def xetla_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
     kwargs["copts"] = kwargs.get("copts", []) + if_dpcpp(["-dpcpp_compile"]) + if_xetla(["--xetla"])
     kwargs["linkopts"] = kwargs.get("linkopts", []) + if_dpcpp(["-link_stage"]) + if_xetla(["--xetla"])
     native.cc_library(
@@ -32,9 +32,9 @@ def itex_xetla_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
         hdrs = hdrs,
         deps = deps,
         **kwargs
-    )    
+    )
 
-def itex_xpu_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
+def xpu_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
     kwargs["copts"] = kwargs.get("copts", []) + if_dpcpp(["-dpcpp_compile"])
     kwargs["linkopts"] = kwargs.get("linkopts", []) + if_dpcpp(["-link_stage"])
     native.cc_library(
@@ -45,7 +45,7 @@ def itex_xpu_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
         **kwargs
     )
 
-def itex_xpu_binary(name, srcs = [], deps = [], *argc, **kwargs):
+def xpu_binary(name, srcs = [], deps = [], *argc, **kwargs):
     kwargs["copts"] = kwargs.get("copts", []) + if_dpcpp(["-dpcpp_compile"])
     kwargs["linkopts"] = kwargs.get("linkopts", []) + if_dpcpp(["-link_stage"])
     native.cc_binary(
@@ -88,25 +88,3 @@ def cc_header_only_library(name, deps = [], includes = [], extra_deps = [], **kw
         deps = extra_deps,
         **kwargs
     )
-
-def if_not_jax(if_true, if_false = []):
-    """Shorthand for select()' on whether build .so for jax
-
-    Returns `if_true` if graph compiler is used.
-    graph compiler allows some accelerated kernel such as MHA in Bert
-    """
-    return select({
-        "//itex:build_for_jax": if_false,
-        "//conditions:default": if_true,
-    })
-
-def if_jax(if_true, if_false = []):
-    """Shorthand for select()' on whether build .so for jax
-
-    Returns `if_true` if graph compiler is used.
-    graph compiler allows some accelerated kernel such as MHA in Bert
-    """
-    return select({
-        "//itex:build_for_jax": if_true,
-        "//conditions:default": if_false,
-    })

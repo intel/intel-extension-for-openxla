@@ -18,8 +18,8 @@ limitations under the License.
 // Defines the GpuTimer type - the CUDA-specific implementation of the generic
 // StreamExecutor Timer interface.
 
-#ifndef ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_TIMER_H_
-#define ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_TIMER_H_
+#ifndef XLA_STREAM_EXECUTOR_SYCL_SYCL_TIMER_H_
+#define XLA_STREAM_EXECUTOR_SYCL_SYCL_TIMER_H_
 
 #include "xla/stream_executor/stream_executor_internal.h"
 #include "xla/stream_executor/sycl/sycl_executor.h"
@@ -90,4 +90,4 @@ struct GpuTimerDeleter {
 }  // namespace gpu
 }  // namespace stream_executor
 
-#endif  // ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_TIMER_H_
+#endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_TIMER_H_

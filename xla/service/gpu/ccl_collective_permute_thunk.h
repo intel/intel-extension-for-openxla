@@ -1,4 +1,6 @@
-/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,21 +15,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_SERVICE_GPU_NCCL_COLLECTIVE_PERMUTE_THUNK_H_
-#define XLA_SERVICE_GPU_NCCL_COLLECTIVE_PERMUTE_THUNK_H_
+#ifndef XLA_SERVICE_GPU_CCL_COLLECTIVE_PERMUTE_THUNK_H_
+#define XLA_SERVICE_GPU_CCL_COLLECTIVE_PERMUTE_THUNK_H_
 
 #include "absl/container/flat_hash_map.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/mlir_hlo/lhlo/IR/lhlo_ops.h"
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/gpu/buffer_allocations.h"
-#include "xla/service/gpu/nccl_collective_thunk.h"
+#include "xla/service/gpu/ccl_collective_thunk.h"
 #include "xla/xla_data.pb.h"
 
 namespace xla {
 namespace gpu {
 
-struct NcclCollectivePermuteConfig {
+struct CclCollectivePermuteConfig {
   // During a collective permute, every node optionally sends its data to
   // another node (including possibly itself) and received data from another
   // node. For each node, remember who it receives data from (source) and who
@@ -52,31 +54,31 @@ struct NcclCollectivePermuteConfig {
     return SourceTargetMapEntry{};
   }
 
-  NcclCollectiveConfig config;
+  CclCollectiveConfig config;
   IdToSourceTargetMap id_to_source_target;
 };
 
 // Thunk that performs a NCCL-based collective permute.
-class NcclCollectivePermuteThunkBase : public NcclCollectiveThunk {
+class CclCollectivePermuteThunkBase : public CclCollectiveThunk {
  public:
-  NcclCollectivePermuteThunkBase(Kind kind, ThunkInfo thunk_info,
-                                 NcclCollectivePermuteConfig config,
-                                 const Buffer& buffer);
+  CclCollectivePermuteThunkBase(Kind kind, ThunkInfo thunk_info,
+                                CclCollectivePermuteConfig config,
+                                const Buffer& buffer);
 
  protected:
   Status RunCollectivePermute(const ExecuteParams& params, se::Stream& stream,
                               ncclComm_t comm);
 
-  const NcclCollectiveConfig& config() const override { return config_.config; }
+  const CclCollectiveConfig& config() const override { return config_.config; }
 
  private:
-  const NcclCollectivePermuteConfig config_;
+  const CclCollectivePermuteConfig config_;
   const Buffer buffer_;
 };
 
-class NcclCollectivePermuteThunk : public NcclCollectivePermuteThunkBase {
+class CclCollectivePermuteThunk : public CclCollectivePermuteThunkBase {
  public:
-  static NcclCollectivePermuteConfig GetNcclCollectivePermuteConfig(
+  static CclCollectivePermuteConfig GetCclCollectivePermuteConfig(
       mlir::lmhlo::CollectivePermuteOp op, int64_t replica_count,
       int64_t partition_count);
 
@@ -88,19 +90,19 @@ class NcclCollectivePermuteThunk : public NcclCollectivePermuteThunkBase {
   static const char* GetName() { return "CollectivePermute"; }
   static constexpr bool IsAsync() { return false; }
 
-  NcclCollectivePermuteThunk(ThunkInfo thunk_info,
-                             mlir::lmhlo::CollectivePermuteOp op,
-                             int64_t replica_count, int64_t partition_count,
-                             const Buffer& buffer);
+  CclCollectivePermuteThunk(ThunkInfo thunk_info,
+                            mlir::lmhlo::CollectivePermuteOp op,
+                            int64_t replica_count, int64_t partition_count,
+                            const Buffer& buffer);
 
  protected:
-  Status RunNcclCollective(const ExecuteParams& params,
-                           ncclComm_t comm) override;
+  Status RunCclCollective(const ExecuteParams& params,
+                          ncclComm_t comm) override;
 };
 
-class NcclCollectivePermuteStartThunk : public NcclCollectivePermuteThunkBase {
+class CclCollectivePermuteStartThunk : public CclCollectivePermuteThunkBase {
  public:
-  static NcclCollectivePermuteConfig GetNcclCollectivePermuteConfig(
+  static CclCollectivePermuteConfig GetCclCollectivePermuteConfig(
       mlir::lmhlo_gpu::CollectivePermuteStartOp op, int64_t replica_count,
       int64_t partition_count);
 
@@ -112,34 +114,33 @@ class NcclCollectivePermuteStartThunk : public NcclCollectivePermuteThunkBase {
   static const char* GetName() { return "CollectivePermuteStart"; }
   static constexpr bool IsAsync() { return true; }
 
-  NcclCollectivePermuteStartThunk(ThunkInfo thunk_info,
-                                  mlir::lmhlo_gpu::CollectivePermuteStartOp op,
-                                  int64_t replica_count,
-                                  int64_t partition_count,
-                                  const Buffer& buffer);
+  CclCollectivePermuteStartThunk(ThunkInfo thunk_info,
+                                 mlir::lmhlo_gpu::CollectivePermuteStartOp op,
+                                 int64_t replica_count, int64_t partition_count,
+                                 const Buffer& buffer);
 
   AsyncExecutor& async_executor() { return async_; }
 
  protected:
-  Status RunNcclCollective(const ExecuteParams& params,
-                           ncclComm_t comm) override;
+  Status RunCclCollective(const ExecuteParams& params,
+                          ncclComm_t comm) override;
 
  private:
   AsyncExecutor async_;
 };
 
-class NcclCollectivePermuteDoneThunk : public NcclCollectiveDoneThunk {
+class CclCollectivePermuteDoneThunk : public CclCollectiveDoneThunk {
  public:
-  NcclCollectivePermuteDoneThunk(ThunkInfo thunk_info,
-                                 NcclCollectiveThunk::AsyncExecutor& async);
+  CclCollectivePermuteDoneThunk(ThunkInfo thunk_info,
+                                CclCollectiveThunk::AsyncExecutor& async);
 };
 
 Status RunCollectivePermute(
-    NcclCollectivePermuteConfig::SourceTargetMapEntry source_target,
+    CclCollectivePermuteConfig::SourceTargetMapEntry source_target,
     DeviceBufferPair& buffer, se::Stream& stream, ncclComm_t comm,
     absl::string_view device_string, int64_t current_id);
 
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_NCCL_COLLECTIVE_PERMUTE_THUNK_H_
+#endif  // XLA_SERVICE_GPU_CCL_COLLECTIVE_PERMUTE_THUNK_H_

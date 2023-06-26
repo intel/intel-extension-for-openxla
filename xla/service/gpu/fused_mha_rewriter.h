@@ -1,6 +1,6 @@
 /* Copyright (c) 2023 Intel Corporation
 
-Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,33 +15,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_COMPILER_XLA_SERVICE_GPU_CUSOLVER_REWRITER_H_
-#define ITEX_CORE_COMPILER_XLA_SERVICE_GPU_CUSOLVER_REWRITER_H_
+#ifndef XLA_SERVICE_GPU_FUSED_MHA_REWRITER_H_
+#define XLA_SERVICE_GPU_FUSED_MHA_REWRITER_H_
 
-#include "xla/hlo/ir/hlo_computation.h"
-#include "xla/hlo/ir/hlo_module.h"
+#include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/hlo_pass_interface.h"
-#include "xla/stream_executor/device_memory_allocator.h"
+#include "xla/stream_executor/dnn.h"
 
 namespace xla {
 namespace gpu {
 
-// Rewrites Cholesky calls into CustomCall HLOs that call into cuSolver.
-class GpusolverRewriter : public HloModulePass {
+class FusedMHARewriter : public HloModulePass {
  public:
-  GpusolverRewriter();
-  absl::string_view name() const override { return "gpusolver-rewriter"; }
+  explicit FusedMHARewriter() {}
+
+  absl::string_view name() const override {
+    return "fused-multi-headed-attention-rewriter";
+  }
 
   using HloPassInterface::Run;
   StatusOr<bool> Run(
       HloModule* module,
       const absl::flat_hash_set<absl::string_view>& execution_threads) override;
-
- private:
-  StatusOr<bool> RunOnComputation(HloComputation* computation);
 };
 
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // ITEX_CORE_COMPILER_XLA_SERVICE_GPU_CUSOLVER_REWRITER_H_
+#endif  // XLA_SERVICE_GPU_FUSED_MHA_REWRITER_H_

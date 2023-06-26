@@ -1,4 +1,6 @@
-/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_XLA_SERVICE_GPU_FUSED_MHA_RUNNER_H_
-#define TENSORFLOW_COMPILER_XLA_SERVICE_GPU_FUSED_MHA_RUNNER_H_
+#ifndef XLA_SERVICE_GPU_GPU_FUSED_MHA_RUNNER_H_
+#define XLA_SERVICE_GPU_GPU_FUSED_MHA_RUNNER_H_
 
 #include <optional>
 
@@ -97,13 +99,15 @@ struct GpufMHAParams {
   std::optional<se::DeviceMemoryBase> bias_buffer;
 };
 
-Status RunGpuFMHA(
-    const GpufMHAConfig& fmha_config, se::DeviceMemoryBase lhs_bmm1_buffer,
-    se::DeviceMemoryBase rhs_bmm1_buffer, se::DeviceMemoryBase rhs_bmm2_buffer,
-    se::DeviceMemoryBase output_buffer, se::DeviceMemoryBase scratch_buffer,
-    se::DeviceMemoryBase mask_buffer, se::DeviceMemoryBase bias_buffer,
-    se::Stream* stream);
+Status RunGpuFMHA(const GpufMHAConfig& fmha_config,
+                  se::DeviceMemoryBase lhs_bmm1_buffer,
+                  se::DeviceMemoryBase rhs_bmm1_buffer,
+                  se::DeviceMemoryBase rhs_bmm2_buffer,
+                  se::DeviceMemoryBase output_buffer,
+                  se::DeviceMemoryBase scratch_buffer,
+                  se::DeviceMemoryBase mask_buffer,
+                  se::DeviceMemoryBase bias_buffer, se::Stream* stream);
 
 }  // namespace gpu
 }  // namespace xla
-#endif  // TENSORFLOW_COMPILER_XLA_SERVICE_GPU_FUSED_MHA_RUNNER_H_
+#endif  // XLA_SERVICE_GPU_GPU_FUSED_MHA_RUNNER_H_

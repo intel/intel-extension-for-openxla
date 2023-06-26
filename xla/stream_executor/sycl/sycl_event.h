@@ -15,8 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_EVENT_H_
-#define ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_EVENT_H_
+#ifndef XLA_STREAM_EXECUTOR_SYCL_SYCL_EVENT_H_
+#define XLA_STREAM_EXECUTOR_SYCL_SYCL_EVENT_H_
 
 #include "tsl/platform/status.h"
 #include "xla/stream_executor/event.h"
@@ -60,4 +60,4 @@ class GpuEvent : public internal::EventInterface {
 }  // namespace gpu
 }  // namespace stream_executor
 
-#endif  // ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_EVENT_H_
+#endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_EVENT_H_

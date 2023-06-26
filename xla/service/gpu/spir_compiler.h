@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_COMPILER_XLA_SERVICE_GPU_SPIR_COMPILER_H_
-#define ITEX_CORE_COMPILER_XLA_SERVICE_GPU_SPIR_COMPILER_H_
+#ifndef XLA_SERVICE_GPU_SPIR_COMPILER_H_
+#define XLA_SERVICE_GPU_SPIR_COMPILER_H_
 
 #include <string>
 #include <utility>
@@ -64,4 +64,4 @@ class SPIRCompiler : public GpuCompiler {
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // ITEX_CORE_COMPILER_XLA_SERVICE_GPU_SPIR_COMPILER_H_
+#endif  // XLA_SERVICE_GPU_SPIR_COMPILER_H_

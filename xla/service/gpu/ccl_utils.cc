@@ -1,4 +1,6 @@
-/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "xla/service/gpu/nccl_utils.h"
+#include "xla/service/gpu/ccl_utils.h"
 
 #include <cstdlib>
 #include <memory>
@@ -38,12 +40,9 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-bool IsGlobalNcclConfig() {
-  static const bool global_nccl_config = std::getenv("NCCL_COMM_ID") != nullptr;
-  return global_nccl_config;
-}
+bool IsGlobalCclConfig() { return false; }
 
-bool IsNcclLaunchModeParallel() {
+bool IsCclLaunchModeParallel() {
   static const bool is_launch_mode_parallel = []() {
     const char* launch_mode = std::getenv("NCCL_LAUNCH_MODE");
     return launch_mode && std::string_view(launch_mode) == "PARALLEL";
@@ -52,7 +51,7 @@ bool IsNcclLaunchModeParallel() {
 }
 
 #if ITEX_USE_CCL
-ccl::reduction ToNcclReduction(ReductionKind kind) {
+ccl::reduction ToCclReduction(ReductionKind kind) {
   switch (kind) {
     case ReductionKind::SUM:
       return ccl::reduction::sum;
@@ -67,83 +66,20 @@ ccl::reduction ToNcclReduction(ReductionKind kind) {
 #endif  // ITEX_USE_CCL
 
 namespace {
-#if ITEX_USE_CCL
-StatusOr<ncclDataType_t> ToNcclDataType(PrimitiveType element_type,
-                                        Thunk::Kind reduction_op) {
-  switch (element_type) {
-    case S8:
-      return ncclInt8;
-    case PRED:
-    case U8:
-      return ncclUint8;
-    case S32:
-      return ncclInt32;
-    case U32:
-      return ncclUint32;
-    case S64:
-      return ncclInt64;
-    case U64:
-      return ncclUint64;
-    case F16:
-      return ncclFloat16;
-    case F32:
-    case C64:
-      return ncclFloat32;
-    case F64:
-    case C128:
-      return ncclFloat64;
-    case S16:
-    case U16:
-      // For all-reduce and reduce-scatter, we expect 16 bit integer types to be
-      // promoted to 32-bit.
-      if (reduction_op == Thunk::kNcclAllReduce ||
-          reduction_op == Thunk::kNcclAllReduceStart ||
-          reduction_op == Thunk::kNcclReduceScatter) {
-        return tsl::errors::InvalidArgument(absl::StrFormat(
-            "Unsupported data type: %s", PrimitiveType_Name(element_type)));
-      }
-      // For collectives that just move data around, we can use ncclFloat16 for
-      // 16-bit integer data types.
-      return ncclFloat16;
-#if defined(__CUDA_BF16_TYPES_EXIST__)
-    case BF16:
-      return ncclBfloat16;
-#endif
-    default:
-      return tsl::errors::InvalidArgument(absl::StrFormat(
-          "Unsupported data type: %s", PrimitiveType_Name(element_type)));
-  }
-}
-
-StatusOr<ncclUniqueId> ToNcclUniqueId(const std::string& id_str) {
-  static_assert(sizeof(ncclUniqueId) == NCCL_UNIQUE_ID_BYTES,
-                "NCCL_UNIQUE_ID_BYTES");
-
-  TF_RET_CHECK(id_str.size() == NCCL_UNIQUE_ID_BYTES);
-  ncclUniqueId id;
-  absl::c_copy(id_str, id.internal);
-  return id;
-}
-#else
-StatusOr<std::string> ToNcclUniqueId(const std::string& id_str) {
+#ifndef ITEX_USE_CCL
+StatusOr<std::string> ToCclUniqueId(const std::string& id_str) {
   return id_str;
 }
 #endif  // ITEX_USE_CCL
 
 StatusOr<std::string> LocalNcclUniqueIdCallback(const NcclCliqueKey&) {
-#if ITEX_USE_CCL
-  ncclUniqueId id;
-  XLA_CUDA_RETURN_IF_ERROR(ncclGetUniqueId(&id));
-  return std::string(id.internal, NCCL_UNIQUE_ID_BYTES);
-#else
+#ifndef ITEX_USE_CCL
   return std::string("");
 #endif  // ITEX_USE_CCL
 }
 
-struct NcclCliqueState {
-#if ITEX_USE_CCL
-  ncclUniqueId unique_id;
-#else
+struct CclCliqueState {
+#ifndef ITEX_USE_CCL
   std::string unique_id;
 #endif  // ITEX_USE_CCL
   int64_t run_id = -1;
@@ -154,32 +90,32 @@ struct NcclCliqueState {
   absl::Mutex mu;
   absl::Notification ready;
   Status status;
-  absl::flat_hash_map<int, std::unique_ptr<NcclComm>> communicators;
+  absl::flat_hash_map<int, std::unique_ptr<CclComm>> communicators;
 };
 
-using NcclClique = Lockable<NcclCliqueState>;
+using CclClique = Lockable<CclCliqueState>;
 
-std::shared_ptr<StatusOr<NcclClique::Lock>> AcquireNcclClique(
+std::shared_ptr<StatusOr<CclClique::Lock>> AcquireCclClique(
     RunId run_id, OpId op_id, NcclCliqueKey clique_key,
     const NcclUniqueIdCallback& unique_id_callback,
     size_t num_local_participants) {
-  static auto& cliques = *new ThreadSafeMap<NcclCliqueKey, NcclClique>;
+  static auto& cliques = *new ThreadSafeMap<NcclCliqueKey, CclClique>;
 
   auto rendezvous_key = std::make_tuple(run_id, op_id, std::move(clique_key));
 
   int64_t terminate_timeout = xla::GetDebugOptionsFromFlags()
                                   .xla_gpu_nccl_termination_timeout_seconds();
 
-  return RendezvousSingle<StatusOr<NcclClique::Lock>>(
+  return RendezvousSingle<StatusOr<CclClique::Lock>>(
       rendezvous_key, num_local_participants,
-      [&]() -> StatusOr<NcclClique::Lock> {
+      [&]() -> StatusOr<CclClique::Lock> {
         const NcclCliqueKey& clique_key = std::get<2>(rendezvous_key);
-        NcclClique::Lock clique = cliques[clique_key].Acquire();
+        CclClique::Lock clique = cliques[clique_key].Acquire();
         if (clique->run_id < 0) {
           // TF_ASSIGN_OR_RETURN(std::string id,
           // unique_id_callback(clique_key));
           std::string id = run_id.ToString();
-          TF_ASSIGN_OR_RETURN(clique->unique_id, ToNcclUniqueId(id));
+          TF_ASSIGN_OR_RETURN(clique->unique_id, ToCclUniqueId(id));
         }
         // If multiple executable are running simultaneously while using
         // multiple hosts, it is possible that different executables could
@@ -195,7 +131,7 @@ std::shared_ptr<StatusOr<NcclClique::Lock>> AcquireNcclClique(
                                : absl::InfiniteDuration());
 }
 #if 0
-void CheckNcclAsyncError(NcclComm& lockable_comm) {
+void CheckNcclAsyncError(CclComm& lockable_comm) {
   ncclComm_t comm = *lockable_comm.Acquire();
   if (comm == nullptr) return;
 
@@ -239,7 +175,7 @@ StatusOr<const NcclUniqueIdCallback*> GetNcclUniqueIdCallback(
     const NcclUniqueIdCallback* unique_id_callback, bool is_local) {
   if (unique_id_callback != nullptr) return unique_id_callback;
 
-  TF_RET_CHECK(is_local || IsGlobalNcclConfig())
+  TF_RET_CHECK(is_local || IsGlobalCclConfig())
       << "If non-local devices are taking part of a collective API on "
          "GPU, the nccl_unique_id_callback must be provided by the client.";
 
@@ -248,21 +184,21 @@ StatusOr<const NcclUniqueIdCallback*> GetNcclUniqueIdCallback(
   return local_callback;
 }
 
-StatusOr<NcclComm::Lock> AcquireNcclComm(
+StatusOr<CclComm::Lock> AcquireCclComm(
     RunId run_id, OpId op_id, std::vector<GlobalDeviceId> participants,
     size_t num_local_participants,
     const NcclUniqueIdCallback& unique_id_callback, int rank) {
   // Ensure that this group of threads have exclusive access to the clique to
   // prevent threads from different groups locking communicators in the clique.
   NcclCliqueKey clique_key(std::move(participants));
-  std::shared_ptr<StatusOr<NcclClique::Lock>> clique = AcquireNcclClique(
+  std::shared_ptr<StatusOr<CclClique::Lock>> clique = AcquireCclClique(
       run_id, op_id, clique_key, unique_id_callback, num_local_participants);
 
   if (!clique->ok()) return clique->status();
 
   struct AllCommunicators {
     absl::Mutex mu;
-    std::vector<NcclComm*> communicators ABSL_GUARDED_BY(mu);
+    std::vector<CclComm*> communicators ABSL_GUARDED_BY(mu);
   };
   static auto& all_communicators = *new AllCommunicators;
 
@@ -275,14 +211,14 @@ StatusOr<NcclComm::Lock> AcquireNcclComm(
   //       while (true) {
   //         absl::SleepFor(absl::Seconds(30));
   //         absl::MutexLock lock(&all_communicators.mu);
-  //         for (NcclComm* comm : all_communicators.communicators) {
+  //         for (CclComm* comm : all_communicators.communicators) {
   //           CheckNcclAsyncError(*comm);
   //         }
   //       }
   //     });
   // (void)check_async_error_thread;  // Silence unused variable warning.
 
-  NcclCliqueState& state = ***clique;
+  CclCliqueState& state = ***clique;
   if (!state.ready.HasBeenNotified()) {
     int nranks = clique_key.devices().size();
     const std::string& id = state.unique_id;
@@ -294,7 +230,7 @@ StatusOr<NcclComm::Lock> AcquireNcclComm(
     size_t num_initialized = [&] {
       absl::MutexLock lock(&state.mu);
       state.status.Update(status);
-      state.communicators[rank] = std::make_unique<NcclComm>(comm);
+      state.communicators[rank] = std::make_unique<CclComm>(comm);
       return state.communicators.size();
     }();
 

@@ -1,7 +1,7 @@
-load("//xla:xla.bzl", "itex_xetla_library")
+load("//xla:xla.bzl", "xetla_library")
 
 # List all kernels here.
-itex_xetla_library(
+xetla_library(
     name = "mha_op",
     srcs = [
         "fmha_forward.h",

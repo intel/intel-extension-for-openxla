@@ -1,5 +1,20 @@
-#ifndef ITEX_CORE_UTILS_ONEDNN_ONEDNN_UTIL_H_
-#define ITEX_CORE_UTILS_ONEDNN_ONEDNN_UTIL_H_
+/* Copyright (c) 2023 Intel Corporation
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#ifndef XLA_SERVICE_ONEDNN_UTIL_H_
+#define XLA_SERVICE_ONEDNN_UTIL_H_
 
 #include <map>
 #include <string>
@@ -126,4 +141,4 @@ inline dnnl::memory CreateDnnlMemory(const dnnl::memory::desc& md,
     return dnnl::memory(md, engine, data_handle);
 }
 }  // namespace xla
-#endif  // ITEX_CORE_UTILS_ONEDNN_ONEDNN_UTIL_H_
+#endif  // XLA_SERVICE_ONEDNN_UTIL_H_

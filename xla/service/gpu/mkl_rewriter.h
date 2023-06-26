@@ -1,5 +1,7 @@
 /* Copyright (c) 2023 Intel Corporation
 
+Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -13,29 +15,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_SERVICE_GPU_DOT_EXPAND_DIMS_H_
-#define XLA_SERVICE_GPU_DOT_EXPAND_DIMS_H_
+#ifndef XLA_SERVICE_GPU_MKL_REWRITER_H_
+#define XLA_SERVICE_GPU_MKL_REWRITER_H_
 
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/service/hlo_pass_interface.h"
+#include "xla/stream_executor/device_memory_allocator.h"
 
 namespace xla {
 namespace gpu {
 
-// Expand dot dims for dimension 1 so that it can call onednn.
-class DotExpandDims : public HloModulePass {
+// Rewrites Cholesky calls into CustomCall HLOs that call into Mkl.
+class MklRewriter : public HloModulePass {
  public:
-  explicit DotExpandDims();
-  absl::string_view name() const override { return "dot-expand-dims"; }
+  MklRewriter();
+  absl::string_view name() const override { return "mkl-rewriter"; }
 
   using HloPassInterface::Run;
   StatusOr<bool> Run(
       HloModule* module,
       const absl::flat_hash_set<absl::string_view>& execution_threads) override;
+
+ private:
+  StatusOr<bool> RunOnComputation(HloComputation* computation);
 };
 
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_DOT_EXPAND_DIMS_H_
+#endif  // XLA_SERVICE_GPU_MKL_REWRITER_H_

@@ -15,8 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_H_
-#define ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_H_
+#ifndef XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_H_
+#define XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_H_
 
 #include <memory>
 #include <string>
@@ -106,4 +106,4 @@ class SyclPlatform : public Platform {
 
 }  // namespace stream_executor
 
-#endif  // ITEX_CORE_COMPILER_XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_H_
+#endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_H_

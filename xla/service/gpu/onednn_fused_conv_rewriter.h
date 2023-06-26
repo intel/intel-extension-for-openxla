@@ -15,8 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_SERVICE_GPU_CUDNN_FUSED_CONV_REWRITER_H_
-#define XLA_SERVICE_GPU_CUDNN_FUSED_CONV_REWRITER_H_
+#ifndef XLA_SERVICE_GPU_ONEDNN_FUSED_CONV_REWRITER_H_
+#define XLA_SERVICE_GPU_ONEDNN_FUSED_CONV_REWRITER_H_
 
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/hlo_pass_interface.h"
@@ -27,11 +27,6 @@ namespace gpu {
 // Rewrites custom-calls targeting cudnnConvolutionForward to
 // cudnnConvolutionBiasActivationForward by fusing operations following forward
 // convolution.  This transform must run after cudnn_conv_rewriter.
-//
-// Semantics of underlying cudnn ops:
-//
-// https://docs.nvidia.com/deeplearning/cudnn/api/index.html#cudnnConvolutionBiasActivationForward
-// https://docs.nvidia.com/deeplearning/cudnn/developer-guide/index.html#scaling-parameters
 //
 // ## Floating-point convs
 //
@@ -94,12 +89,12 @@ namespace gpu {
 //
 // If you have an integer convolution that doesn't fit one of these idioms, this
 // pass returns an error -- cudnn will not be able to run it.
-class CudnnFusedConvRewriter : public HloModulePass {
+class OnednnFusedConvRewriter : public HloModulePass {
  public:
-  explicit CudnnFusedConvRewriter() {}
+  explicit OnednnFusedConvRewriter() {}
 
   absl::string_view name() const override {
-    return "cudnn-fused-convolution-rewriter";
+    return "onednn-fused-convolution-rewriter";
   }
 
   using HloPassInterface::Run;
@@ -111,4 +106,4 @@ class CudnnFusedConvRewriter : public HloModulePass {
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_CUDNN_FUSED_CONV_REWRITER_H_
+#endif  // XLA_SERVICE_GPU_ONEDNN_FUSED_CONV_REWRITER_H_

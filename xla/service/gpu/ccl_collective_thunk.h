@@ -1,4 +1,6 @@
-/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_SERVICE_GPU_NCCL_COLLECTIVE_THUNK_H_
-#define XLA_SERVICE_GPU_NCCL_COLLECTIVE_THUNK_H_
+#ifndef XLA_SERVICE_GPU_CCL_COLLECTIVE_THUNK_H_
+#define XLA_SERVICE_GPU_CCL_COLLECTIVE_THUNK_H_
 
 #include <optional>
 #include <string>
@@ -24,8 +26,8 @@ limitations under the License.
 #include "absl/functional/function_ref.h"
 #include "mlir/IR/BuiltinOps.h"  // from @llvm-project
 #include "xla/service/collective_ops_utils.h"
+#include "xla/service/gpu/ccl_utils.h"
 #include "xla/service/gpu/ir_emission_utils.h"
-#include "xla/service/gpu/nccl_utils.h"
 #include "xla/service/gpu/thunk.h"
 #include "xla/translate/mhlo_to_hlo/attribute_exporter.h"
 #include "xla/xla_data.pb.h"
@@ -35,14 +37,14 @@ using ncclComm_t = ccl::communicator*;
 namespace xla {
 namespace gpu {
 
-class NcclClique;
+class CclClique;
 
-struct NcclCollectiveConfig {
-  NcclCollectiveConfig();
-  NcclCollectiveConfig(NcclCollectiveConfig&&);
-  ~NcclCollectiveConfig();
+struct CclCollectiveConfig {
+  CclCollectiveConfig();
+  CclCollectiveConfig(CclCollectiveConfig&&);
+  ~CclCollectiveConfig();
 
-  NcclCollectiveConfig& operator=(NcclCollectiveConfig&&);
+  CclCollectiveConfig& operator=(CclCollectiveConfig&&);
 
   int64_t operand_count;
   std::vector<PrimitiveType> operand_element_type;
@@ -57,7 +59,7 @@ struct NcclCollectiveConfig {
 };
 
 template <typename OpT>
-void NcclCollectiveConfig::SetCollectiveOpKindAndID(OpT op) {
+void CclCollectiveConfig::SetCollectiveOpKindAndID(OpT op) {
   if (op.getChannelId()) {
     collective_op_kind = RendezvousKey::kCrossModule;
     op_id = static_cast<int64_t>(op.getChannelId()->getHandle());
@@ -71,9 +73,9 @@ void NcclCollectiveConfig::SetCollectiveOpKindAndID(OpT op) {
 }
 
 template <typename OpT>
-NcclCollectiveConfig GetNcclCollectiveConfigForMlir(
+CclCollectiveConfig GetCclCollectiveConfigForMlir(
     OpT op, std::optional<bool> use_global_device_ids) {
-  NcclCollectiveConfig config;
+  CclCollectiveConfig config;
   config.operand_count = op.getInputs().size();
   config.operand_element_type.reserve(config.operand_count);
   for (int i = 0; i < config.operand_count; i++) {
@@ -89,7 +91,7 @@ NcclCollectiveConfig GetNcclCollectiveConfigForMlir(
 }
 
 // Thunk base class for NCCL collective operations.
-class NcclCollectiveThunk : public Thunk {
+class CclCollectiveThunk : public Thunk {
  public:
   using Thunk::Thunk;
 
@@ -124,7 +126,7 @@ class NcclCollectiveThunk : public Thunk {
   //
   // When this is false, the ExecuteOnStream() call will simply return a status
   // error.
-  static bool NcclIsEnabled();
+  static bool CclIsEnabled();
 
   // Logging support.
   static std::string GetDeviceString(const NcclExecuteParams& params);
@@ -132,32 +134,31 @@ class NcclCollectiveThunk : public Thunk {
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
  protected:
-  virtual Status RunNcclCollective(const ExecuteParams& params,
-                                   ncclComm_t comm) = 0;
-  virtual const NcclCollectiveConfig& config() const = 0;
+  virtual Status RunCclCollective(const ExecuteParams& params,
+                                  ncclComm_t comm) = 0;
+  virtual const CclCollectiveConfig& config() const = 0;
 
  private:
   bool first_call_to_execute_ = true;
 };
 
-class NcclCollectiveDoneThunk : public Thunk {
+class CclCollectiveDoneThunk : public Thunk {
  public:
-  NcclCollectiveDoneThunk(Thunk::Kind kind, ThunkInfo thunk_info,
-                          NcclCollectiveThunk::AsyncExecutor& async);
+  CclCollectiveDoneThunk(Thunk::Kind kind, ThunkInfo thunk_info,
+                         CclCollectiveThunk::AsyncExecutor& async);
 
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
  private:
-  NcclCollectiveThunk::AsyncExecutor& async_;
+  CclCollectiveThunk::AsyncExecutor& async_;
 };
 
 // Returns if the given data type is supported by NCCL.
 // Note: Keep this in sync with ToNcclDataType().
-bool IsTypeSupportedByNccl(PrimitiveType element_type,
-                           Thunk::Kind reduction_op);
+bool IsTypeSupportedByCcl(PrimitiveType element_type, Thunk::Kind reduction_op);
 
-// TODO(hanbinyoon): Consider moving to nccl_utils.h when deprecating Thunks.
-StatusOr<NcclComm::Lock> LockNcclComm(
+// TODO(hanbinyoon): Consider moving to ccl_utils.h when deprecating Thunks.
+StatusOr<CclComm::Lock> LockCclComm(
     const NcclExecuteParams& params,
     const std::vector<ReplicaGroup>& replica_groups,
     CollectiveOpGroupMode group_mode, int64_t op_id);
@@ -170,10 +171,10 @@ struct DeviceBufferPair {
 };
 StatusOr<std::vector<DeviceBufferPair>> ConvertToDeviceBuffers(
     const Thunk::ExecuteParams& params,
-    const std::vector<NcclCollectiveThunk::Buffer>& buffers,
+    const std::vector<CclCollectiveThunk::Buffer>& buffers,
     const std::vector<PrimitiveType>& element_types);
 
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_NCCL_COLLECTIVE_THUNK_H_
+#endif  // XLA_SERVICE_GPU_CCL_COLLECTIVE_THUNK_H_

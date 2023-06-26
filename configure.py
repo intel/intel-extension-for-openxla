@@ -1,3 +1,5 @@
+# Copyright (c) 2023 Intel Corporation
+#
 # Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -377,11 +379,11 @@ def get_var(environ_cp,
       Raise the error to avoid infinitely looping.
   """
   if not question:
-    question = ('Do you wish to build Intel® Extension for TensorFlow* '
+    question = ('Do you wish to build Intel® Extension for OpenXLA* '
                 'with %s support?') % query_item
   if not yes_reply:
     yes_reply = ('%s support will be enabled for '
-                 'Intel® Extension for TensorFlow*.') % query_item
+                 'Intel® Extension for OpenXLA*.') % query_item
   if not no_reply:
     no_reply = 'No %s' % yes_reply
 
@@ -537,7 +539,7 @@ def check_bazel_version(min_version):
 
   if curr_version_int < min_version_int:
     print('Please upgrade your bazel installation to version %s or higher to '
-          'build Intel® Extension for TensorFlow*!' % min_version)
+          'build Intel® Extension for OpenXLA*!' % min_version)
     sys.exit(1)
   return curr_version
 

@@ -17,8 +17,6 @@ build --config=gpu
 # build:cpu --define=device=cpu
 # build:cpu --config=onednn_v3
 # build:cpu -c opt
-# # TODO(itex): Enable TBB by default once it's ready.
-# # build:cpu --define=build_with_tbb=true
 
 # This config option is used for GPU backend.
 build:gpu --crosstool_top=@local_config_dpcpp//crosstool_dpcpp:toolchain
@@ -33,11 +31,7 @@ build:onednn_v3 --copt=-DITEX_ONEDNN_3_0 --define=onednn_version=3
 #build:llga-debug --define=build_with_llga_debug=true
 
 # This config option is used for LLGA (OneDnnGraph) graph compiler backend,  currently only available for onednn graph v2
-#build:graph-compiler --define=build_with_graph_compiler=true
-
-# build:jax --config=gpu
-# build:jax --copt=-DITEX_BUILD_JAX
-# build:jax --define=build_for_jax=true
+# build:graph-compiler --define=build_with_graph_compiler=true
 
 build --define=use_fast_cpp_protos=true
 build --define=allow_oversize_protos=true

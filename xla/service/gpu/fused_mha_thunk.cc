@@ -1,4 +1,6 @@
-/* Copyright 2023 The TensorFlow Authors. All Rights Reserved.
+/* Copyright (c) 2023 Intel Corporation
+
+Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,13 +21,13 @@ limitations under the License.
 #include <string>
 
 #include "absl/strings/str_cat.h"
+#include "tsl/platform/logging.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/service/gpu/gpu_conv_runner.h"
 #include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/types.h"
 #include "xla/util.h"
-#include "tsl/platform/logging.h"
 
 namespace xla {
 namespace gpu {
