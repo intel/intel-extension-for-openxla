@@ -23,8 +23,6 @@ _AOT_CONFIG = "AOT_CONFIG"
 
 _PYTHON_LIB_PATH = "PYTHON_LIB_PATH"
 
-_JAX_SHARED_LIBRARY_DIR = "JAX_SHARED_LIBRARY_DIR"
-
 _PYTHON_LIB_DIR = "PYTHON_LIB_DIR"
 
 _PYTHON_BIN_PATH = "PYTHON_BIN_PATH"
@@ -78,7 +76,7 @@ def find_dpcpp_root(repository_ctx):
     """Find DPC++ compiler."""
     sycl_name = ""
     if _DPCPP_TOOLKIT_PATH in repository_ctx.os.environ:
-        sycl_name = repository_ctx.os.environ[_DPCPP_TOOLKIT_PATH].strip()
+        sycl_name = str(repository_ctx.path(repository_ctx.os.environ[_DPCPP_TOOLKIT_PATH].strip()).realpath)
     if sycl_name.startswith("/"):
         return sycl_name
     fail("Cannot find DPC++ compiler, please correct your path")
@@ -91,12 +89,15 @@ def find_dpcpp_include_path(repository_ctx):
         bin_path = repository_ctx.path(base_path + "/" + "bin" + "/" + "clang")
         if not bin_path.exists:
             fail("Cannot find DPC++ compiler, please correct your path")
-    cmd_out = repository_ctx.execute([bin_path, "-xc++", "-E", "-v", "/dev/null", "-o", "/dev/null"])
+    gcc_path = repository_ctx.path("/usr/bin/gcc")
+    gcc_install_dir = repository_ctx.execute([gcc_path, "-print-libgcc-file-name"])
+    gcc_install_dir_opt = "--gcc-install-dir=" + str(repository_ctx.path(gcc_install_dir.stdout.strip()).dirname)
+    cmd_out = repository_ctx.execute([bin_path, gcc_install_dir_opt, "-xc++", "-E", "-v", "/dev/null", "-o", "/dev/null"])
     outlist = cmd_out.stderr.split("\n")
     real_base_path = str(repository_ctx.path(base_path).realpath).strip()
     include_dirs = []
     for l in outlist:
-        if l.startswith(" ") and l.strip().startswith("/"):
+        if l.startswith(" ") and l.strip().startswith("/") and str(repository_ctx.path(l.strip()).realpath) not in include_dirs:
             include_dirs.append(str(repository_ctx.path(l.strip()).realpath))
     return include_dirs
 
@@ -396,10 +397,6 @@ def _sycl_autoconf_imp(repository_ctx):
         dpcpp_defines["%{additional_include_directories}"] = additional_inc
         dpcpp_defines["%{DPCPP_COMPILER_VERSION}"] = str(get_dpcpp_version(repository_ctx))
         dpcpp_defines["%{PYTHON_LIB_PATH}"] = repository_ctx.os.environ[_PYTHON_LIB_PATH]
-        if repository_ctx.os.environ.get(_JAX_SHARED_LIBRARY_DIR) != None:
-            dpcpp_defines["%{JAX_SHARED_LIBRARY_DIR}"] = repository_ctx.os.environ[_JAX_SHARED_LIBRARY_DIR]
-        else:
-            dpcpp_defines["%{JAX_SHARED_LIBRARY_DIR}"] = "dummy"
 
         dpcpp_internal_inc_dirs = find_dpcpp_include_path(repository_ctx)
         dpcpp_internal_inc = "\", \"".join(dpcpp_internal_inc_dirs)

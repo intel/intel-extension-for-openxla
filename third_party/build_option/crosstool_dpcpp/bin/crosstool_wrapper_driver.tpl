@@ -108,8 +108,6 @@ def call_compiler(argv, link = False, dpcpp = True, xetla = False):
   link_flags.append("-Wl,--enable-new-dtags")
   link_flags.append("-Wl,-rpath=%{DPCPP_ROOT_DIR}/lib/")
   link_flags.append("-Wl,-rpath=%{DPCPP_ROOT_DIR}/compiler/lib/intel64_lin/")
-  link_flags.append("-Wl,-rpath=%{JAX_SHARED_LIBRARY_DIR}")
-  link_flags.append("-L%{JAX_SHARED_LIBRARY_DIR}/")
   link_flags.append("-lze_loader")
   link_flags.append("-lOpenCL")
   # link standard libraries(such as libstdc++) from configured python enviroment

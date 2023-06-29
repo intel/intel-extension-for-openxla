@@ -669,6 +669,8 @@ def _impl(ctx):
             supports_pic_feature,
         ]
     sys_inc = [
+        "/usr/lib",
+        "/usr/lib64",
         %{additional_include_directories},
         "%{DPCPP_INTERNAL_INC}",
         "%{DPCPP_RUNTIME_INC}",

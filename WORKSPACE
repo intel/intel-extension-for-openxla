@@ -5,10 +5,6 @@ load("//third_party:version_check.bzl", "check_bazel_version_at_least")
 
 check_bazel_version_at_least("5.3.0")
 
-load("//xla:xla_configure.bzl", "xla_configure")
-
-xla_configure(name = "local_config_xla")
-
 load("//xla:workspace.bzl", "workspace")
 
 workspace()
