@@ -1,3 +1,61 @@
+diff --git a/third_party/tsl/third_party/grpc/upb_platform_fix.patch b/third_party/tsl/third_party/grpc/upb_platform_fix.patch
+index 6edd66067..022c9d155 100644
+--- a/third_party/tsl/third_party/grpc/upb_platform_fix.patch
++++ b/third_party/tsl/third_party/grpc/upb_platform_fix.patch
+@@ -11,3 +11,12 @@ index ad85b202..2311b2e4 100644
+  )
+ 
+  config_setting(
++@@ -24,7 +24,7 @@ exports_files([
++
++ CPPOPTS = [
++     # copybara:strip_for_google3_begin
++-    "-Werror",
+++    # "-Werror",
++     "-Wno-long-long",
++     # copybara:strip_end
++ ]
+diff --git a/third_party/tsl/third_party/llvm/build.patch b/third_party/tsl/third_party/llvm/build.patch
+index 70dca55b3..9e9a00e6b 100644
+--- a/third_party/tsl/third_party/llvm/build.patch
++++ b/third_party/tsl/third_party/llvm/build.patch
+@@ -1,7 +1,36 @@
++diff --git a/mlir/lib/Bytecode/Reader/BytecodeReader.cpp b/mlir/lib/Bytecode/Reader/BytecodeReader.cpp
++index d6f1e18d35ae..27f27ac4d555 100644
++--- a/mlir/lib/Bytecode/Reader/BytecodeReader.cpp
+++++ b/mlir/lib/Bytecode/Reader/BytecodeReader.cpp
++@@ -1262,6 +1262,8 @@ private:
++ };
++ } // namespace
++
+++// TODO: Disable clang opt since it crashes with clang-17 compiler.
+++#pragma clang optimize off
++ LogicalResult BytecodeReader::read(llvm::MemoryBufferRef buffer, Block *block) {
++   EncodingReader reader(buffer.getBuffer(), fileLoc);
++
++@@ -1331,6 +1333,7 @@ LogicalResult BytecodeReader::read(llvm::MemoryBufferRef buffer, Block *block) {
++   // Finally, process the IR section.
++   return parseIRSection(*sectionDatas[bytecode::Section::kIR], block);
++ }
+++#pragma clang optimize on
++
++ LogicalResult BytecodeReader::parseVersion(EncodingReader &reader) {
++   if (failed(reader.parseVarInt(version)))
+ diff --git a/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel b/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel
+ index 2b88729d748b..e12d979b4908 100644
+ --- a/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel
+ +++ b/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel
++@@ -25,6 +25,7 @@ exports_files(["LICENSE.TXT"])
++ # widely available feature to enable unlimited stack frame instead of using
++ # this `Make` variable.
++ llvm_copts = [
+++    "-fvisibility=hidden",
++     "$(STACK_FRAME_UNLIMITED)",
++ ]
++
+ @@ -207,13 +207,15 @@ cc_library(
+          "lib/Support/BLAKE3/llvm_blake3_prefix.h",
+      ] + select({
 diff --git a/third_party/tsl/tsl/framework/contraction/BUILD b/third_party/tsl/tsl/framework/contraction/BUILD
 index c58246b95..450e24f44 100644
 --- a/third_party/tsl/tsl/framework/contraction/BUILD
