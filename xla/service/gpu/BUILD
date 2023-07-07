@@ -210,6 +210,7 @@ cc_library(
     ],
     deps = [
         ":dot_expand_dims",
+        ":gemm_rewriter",
         ":gpu_executable",
         ":ir_emitter",
         "@com_google_absl//absl/strings",
@@ -327,7 +328,6 @@ cc_library(
         "@xla//xla/service/gpu:executable_proto_cc",
         "@xla//xla/service/gpu:fusion_merger",
         "@xla//xla/service/gpu:gemm_broadcast_folding_rewriter",
-        "@xla//xla/service/gpu:gemm_rewriter",
         "@xla//xla/service/gpu:gemm_rewriter_triton",
         "@xla//xla/service/gpu:gpu_constants",
         "@xla//xla/service/gpu:gpu_conv_rewriter",
@@ -550,6 +550,7 @@ cc_library(
     deps = [
         ":scratch_allocator",
         "//xla/service:onednn_util",
+        "//xla/service/gpu/xetla/gemm:gemm_kernel",
         "//xla/stream_executor/sycl:sycl_executor",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/types:span",
@@ -809,6 +810,33 @@ cc_library(
 )
 
 cc_library(
+    name = "gemm_rewriter",
+    srcs = ["gemm_rewriter.cc"],
+    hdrs = ["gemm_rewriter.h"],
+    deps = [
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/strings",
+        "@tsl//tsl/platform:errors",
+        "@tsl//tsl/platform:statusor",
+        "@tsl//tsl/protobuf:dnn_proto_cc",
+        "@xla//xla:literal_comparison",
+        "@xla//xla:status_macros",
+        "@xla//xla:statusor",
+        "@xla//xla:xla_data_proto_cc",
+        "@xla//xla/hlo/evaluator:hlo_evaluator",
+        "@xla//xla/hlo/ir:hlo",
+        "@xla//xla/service:hlo_creation_utils",
+        "@xla//xla/service:hlo_pass",
+        "@xla//xla/service:pattern_matcher",
+        "@xla//xla/service/gpu:backend_configs_cc",
+        "@xla//xla/service/gpu:cublas_cudnn",
+        "@xla//xla/service/gpu:ir_emission_utils",
+        "@xla//xla/service/gpu:matmul_utils",
+        "@xla//xla/stream_executor:blas",
+    ],
+)
+
+cc_library(
     name = "fused_mha_rewriter",
     srcs = ["fused_mha_rewriter.cc"],
     hdrs = ["fused_mha_rewriter.h"],
@@ -835,7 +863,7 @@ xetla_library(
     srcs = ["gpu_fused_mha_runner.cc"],
     hdrs = ["gpu_fused_mha_runner.h"],
     deps = [
-        "//xla/service/gpu/xetla:mha_op",
+        "//xla/service/gpu/xetla/sdp:sdp_kernel",
         "//xla/stream_executor/sycl:sycl_executor",
         "@com_google_absl//absl/strings",
         "@xla//xla:shape_util",

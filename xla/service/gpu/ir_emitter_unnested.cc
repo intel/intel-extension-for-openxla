@@ -122,6 +122,7 @@ limitations under the License.
 #include "xla/service/gpu/launch_dimensions.h"
 #include "xla/service/gpu/matmul_utils.h"
 #include "xla/service/gpu/memset_thunk.h"
+#include "xla/service/gpu/onednn_matmul_utils.h"
 #include "xla/service/gpu/outfeed_thunk.h"
 #include "xla/service/gpu/parallel_loop_emitter.h"
 #include "xla/service/gpu/replica_id_thunk.h"
@@ -584,7 +585,6 @@ IrEmitterUnnested::KernelAndIrArrays IrEmitterUnnested::BuildKernelPrototype(
       kernel_type, llvm::GlobalValue::ExternalLinkage, kernel_name, module_);
 
   AnnotateFunctionAsGpuKernel(module_, kernel, &b_);
-  AnnotateKernelLaunchDimensions(launch_dimensions, kernel_name, module_);
 
   // SYCL: Set function metadata
   if (llvm::Triple(module_->getTargetTriple()).isSPIR()) {
@@ -1190,6 +1190,34 @@ Status IrEmitterUnnested::EmitGemmThunk(mlir::Operation* op) {
   TF_ASSIGN_OR_RETURN(GemmConfig config, GemmConfig::For(gemm));
   auto thunk =
       std::make_unique<GemmThunk>(GetThunkInfo(op), std::move(config), a, b, c);
+
+  AddThunkToThunkSequence(std::move(thunk));
+  return OkStatus();
+}
+
+Status IrEmitterUnnested::EmitCublasLtMatmulThunk(mlir::Operation* op) {
+  auto matmul = mlir::dyn_cast<mlir::lmhlo_gpu::CublasLtMatmulOp>(op);
+  TF_RET_CHECK(matmul != nullptr);
+
+  TF_ASSIGN_OR_RETURN(auto a, GetAllocationSlice(matmul.getA()));
+  TF_ASSIGN_OR_RETURN(auto b, GetAllocationSlice(matmul.getB()));
+  TF_ASSIGN_OR_RETURN(auto c, GetAllocationSlice(matmul.getC()));
+  TF_ASSIGN_OR_RETURN(auto d, GetAllocationSlice(matmul.getD()));
+
+  BufferAllocation::Slice bias, a_scale, b_scale, c_scale, d_scale, d_amax;
+  if (matmul.getBias() != nullptr) {
+    TF_ASSIGN_OR_RETURN(bias, GetAllocationSlice(matmul.getBias()));
+  }
+
+  BufferAllocation::Slice aux;
+  if (matmul.getAux() != nullptr) {
+    TF_ASSIGN_OR_RETURN(aux, GetAllocationSlice(matmul.getAux()));
+  }
+
+  TF_ASSIGN_OR_RETURN(GemmConfig config, cublas_lt::MatmulPlan::For(matmul));
+  auto thunk = std::make_unique<CublasLtMatmulThunk>(
+      GetThunkInfo(op), std::move(config), matmul.getAlgorithm(), a, b, c, d,
+      bias, aux, a_scale, b_scale, c_scale, d_scale, d_amax);
 
   AddThunkToThunkSequence(std::move(thunk));
   return OkStatus();
@@ -5778,6 +5806,10 @@ Status IrEmitterUnnested::EmitOp(mlir::Operation* op) {
 
   if (mlir::isa<mlir::lmhlo_gpu::GEMMOp>(op)) {
     return EmitGemmThunk(op);
+  }
+
+  if (mlir::isa<mlir::lmhlo_gpu::CublasLtMatmulOp>(op)) {
+    return EmitCublasLtMatmulThunk(op);
   }
 
   if (mlir::isa<mlir::lmhlo_gpu::fusedMHAOp,

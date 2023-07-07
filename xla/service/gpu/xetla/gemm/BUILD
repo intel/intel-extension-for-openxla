@@ -2,11 +2,13 @@ load("//xla:xla.bzl", "xetla_library")
 
 # List all kernels here.
 xetla_library(
-    name = "mha_op",
+    name = "gemm_kernel",
     srcs = [
-        "fmha_forward.h",
-        "fmha_policy.h",
-        "fmha_utils.h",
+        "gemm.cc",
+    ],
+    hdrs = [
+        "gemm.h",
+        "hgemm_splitk.h",
     ],
     visibility = ["//visibility:public"],
     deps = [

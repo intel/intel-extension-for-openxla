@@ -48,6 +48,8 @@ Status GemmThunk::ExecuteOnStream(const ExecuteParams& params) {
   se::DeviceMemoryBase lhs_data = get_device_address(lhs_buffer_);
   se::DeviceMemoryBase rhs_data = get_device_address(rhs_buffer_);
   se::DeviceMemoryBase output_data = get_device_address(output_buffer_);
+  se::DeviceMemoryBase add_data;
+  se::DeviceMemoryBase bias_data;
 
   auto& buffer_allocations = *params.buffer_allocations;
   se::OwningScratchAllocator<> scratch_allocator(
@@ -55,8 +57,59 @@ Status GemmThunk::ExecuteOnStream(const ExecuteParams& params) {
       buffer_allocations.memory_allocator());
 
   VLOG(3) << "Running GEMM thunk";
-  return RunGemm(config_, lhs_data, rhs_data, output_data, params.stream,
-                 &scratch_allocator);
+  return RunGemm(config_, lhs_data, rhs_data, add_data, output_data, bias_data,
+                 params.stream, &scratch_allocator);
+}
+
+CublasLtMatmulThunk::CublasLtMatmulThunk(
+    ThunkInfo thunk_info, GemmConfig config, int64_t algorithm_idx,
+    BufferAllocation::Slice a_buffer, BufferAllocation::Slice b_buffer,
+    BufferAllocation::Slice c_buffer, BufferAllocation::Slice d_buffer,
+    BufferAllocation::Slice bias_buffer, BufferAllocation::Slice aux_buffer,
+    BufferAllocation::Slice a_scale, BufferAllocation::Slice b_scale,
+    BufferAllocation::Slice c_scale, BufferAllocation::Slice d_scale,
+    BufferAllocation::Slice d_amax)
+    : Thunk(Kind::kCublasLtMatmul, thunk_info),
+      config_(std::move(config)),
+      algorithm_idx_(algorithm_idx),
+      a_buffer_(a_buffer),
+      b_buffer_(b_buffer),
+      c_buffer_(c_buffer),
+      d_buffer_(d_buffer),
+      bias_buffer_(bias_buffer),
+      aux_buffer_(aux_buffer),
+      a_scale_buffer_(a_scale),
+      b_scale_buffer_(b_scale),
+      c_scale_buffer_(c_scale),
+      d_scale_buffer_(d_scale),
+      d_amax_buffer_(d_amax) {}
+
+Status CublasLtMatmulThunk::ExecuteOnStream(const ExecuteParams& params) {
+  VLOG(3) << "Running cublas_lt matmul thunk";
+  const BufferAllocations& allocs = *params.buffer_allocations;
+
+  se::DeviceMemoryBase a, b, c, d;
+  if (a_buffer_.allocation() != nullptr) {
+    a = allocs.GetDeviceAddress(a_buffer_);
+  }
+  if (b_buffer_.allocation() != nullptr) {
+    b = allocs.GetDeviceAddress(b_buffer_);
+  }
+  if (c_buffer_.allocation() != nullptr) {
+    c = allocs.GetDeviceAddress(c_buffer_);
+  }
+  if (d_buffer_.allocation() != nullptr) {
+    d = allocs.GetDeviceAddress(d_buffer_);
+  }
+
+  se::DeviceMemoryBase bias, a_scale, b_scale, c_scale, d_scale, d_amax;
+  if (bias_buffer_.allocation() != nullptr) {
+    bias = allocs.GetDeviceAddress(bias_buffer_);
+  }
+
+  se::OwningScratchAllocator<> scratch_allocator(allocs.device_ordinal(),
+                                                 allocs.memory_allocator());
+  return RunGemm(config_, a, b, c, d, bias, params.stream, &scratch_allocator);
 }
 
 }  // namespace gpu

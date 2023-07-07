@@ -48,6 +48,41 @@ class GemmThunk : public Thunk {
   const BufferAllocation::Slice output_buffer_;
 };
 
+class CublasLtMatmulThunk : public Thunk {
+ public:
+  CublasLtMatmulThunk(ThunkInfo thunk_info, GemmConfig config,
+                      int64_t algorithm_idx, BufferAllocation::Slice a_buffer,
+                      BufferAllocation::Slice b_buffer,
+                      BufferAllocation::Slice c_buffer,
+                      BufferAllocation::Slice d_buffer,
+                      BufferAllocation::Slice bias_buffer /* may be null */,
+                      BufferAllocation::Slice aux_buffer /* may be null */,
+                      BufferAllocation::Slice a_scale_buffer /* may be null */,
+                      BufferAllocation::Slice b_scale_buffer /* may be null */,
+                      BufferAllocation::Slice c_scale_buffer /* may be null */,
+                      BufferAllocation::Slice d_scale_buffer /* may be null */,
+                      BufferAllocation::Slice d_amax_buffer /* may be null */);
+
+  Status ExecuteOnStream(const ExecuteParams& params) override;
+
+ private:
+  // cublas_lt::MatmulPlan plan_;
+  const GemmConfig config_;
+  int64_t algorithm_idx_;
+  BufferAllocation::Slice a_buffer_;
+  BufferAllocation::Slice b_buffer_;
+  BufferAllocation::Slice c_buffer_;
+  BufferAllocation::Slice d_buffer_;
+  BufferAllocation::Slice bias_buffer_;
+  BufferAllocation::Slice aux_buffer_;
+  BufferAllocation::Slice a_scale_buffer_;
+  BufferAllocation::Slice b_scale_buffer_;
+  BufferAllocation::Slice c_scale_buffer_;
+  BufferAllocation::Slice d_scale_buffer_;
+  BufferAllocation::Slice d_amax_buffer_;
+  // std::optional<se::cuda::BlasLt::MatmulAlgorithm> algorithm_;
+};
+
 }  // namespace gpu
 }  // namespace xla
 

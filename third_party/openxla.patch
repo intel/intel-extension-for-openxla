@@ -560,6 +560,42 @@ index 5ae52feb6..ac3452c57 100644
      } else {
        LOG(FATAL) << "Invalid triple " << target_triple.str();
      }
+diff --git a/xla/service/gpu/matmul_utils.h b/xla/service/gpu/matmul_utils.h
+index e3d78ce0d..9f221bc9a 100644
+--- a/xla/service/gpu/matmul_utils.h
++++ b/xla/service/gpu/matmul_utils.h
+@@ -37,6 +37,23 @@ limitations under the License.
+ #include "xla/stream_executor/scratch_allocator.h"
+ #endif  // GOOGLE_CUDA
+ 
++namespace stream_executor {
++namespace cuda {
++namespace BlasLt {
++enum class Epilogue {
++  kDefault = 1,                   // No special postprocessing
++  kReLU = 2,                      // Apply point-wise ReLU function
++  kBias = 4,                      // Add broadcasted bias vector
++  kBiasThenReLU = kBias | kReLU,  // Apply bias and then ReLU transform
++  kGELU = 32,                // Apply GELU point-wise transform to the results
++  kGELUWithAux = 32 | 1024,  // Apply GELU with auxiliary output.
++  kBiasThenGELU = kBias | kGELU,  // Apply bias and then approximate GELU.
++  kBiasThenGELUWithAux = kBiasThenGELU | 1024,
++};
++}
++}  // namespace cuda
++}  // namespace stream_executor
++
+ namespace xla {
+ namespace gpu {
+ 
+@@ -117,6 +134,7 @@ struct GemmConfig {
+   double beta;
+   std::optional<int64_t> algorithm;
+   int64_t compute_precision;
++  se::cuda::BlasLt::Epilogue epilogue;
+ };
+ 
+ StatusOr<se::blas::ComputationType> GetBlasComputationType(
 diff --git a/xla/service/gpu/stream_executor_util.cc b/xla/service/gpu/stream_executor_util.cc
 index 6f2be2a88..b2a8a1041 100644
 --- a/xla/service/gpu/stream_executor_util.cc

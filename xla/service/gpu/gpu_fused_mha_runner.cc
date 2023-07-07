@@ -22,7 +22,7 @@ limitations under the License.
 #include "xla/layout_util.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/stream_executor_util.h"
-#include "xla/service/gpu/xetla/fmha_forward.h"
+#include "xla/service/gpu/xetla/sdp/fmha_forward.h"
 #include "xla/shape_util.h"
 #include "xla/status_macros.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"

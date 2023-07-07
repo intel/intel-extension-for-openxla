@@ -185,6 +185,12 @@ std::optional<bool> CanShareBufferHint(const HloInstruction* user,
              (user_index.size() == 1 &&
               user->operand(user_index[0]) == operand);
     case HloOpcode::kCustomCall:
+      // The matrix bias operand can be overwritten in-place.
+      if (user->custom_call_target() == kCublasLtMatmulCallTarget) {
+        GemmBackendConfig config =
+            std::move(user->backend_config<GemmBackendConfig>()).value();
+        return (config.beta() != 0.) && user->operand(2) == operand;
+      }
       if (user->custom_call_target() ==
           kCudnnConvBiasActivationForwardCallTarget) {
         CudnnConvBackendConfig config =
