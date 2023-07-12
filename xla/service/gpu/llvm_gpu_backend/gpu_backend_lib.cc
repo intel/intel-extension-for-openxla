@@ -67,6 +67,7 @@ limitations under the License.
 #include "tsl/platform/path.h"
 #include "tsl/util/env_var.h"
 #include "xla/service/dump.h"
+#include "xla/service/gpu/llvm_gpu_backend/utils.h"
 #include "xla/service/llvm_ir/llvm_command_line_options.h"
 #include "xla/service/llvm_ir/llvm_type_conversion_util.h"
 #include "xla/service/llvm_ir/llvm_util.h"
@@ -97,9 +98,65 @@ void InitializePasses(llvm::PassRegistry* pass_registry) {
   llvm::initializeCodeGenPreparePass(*pass_registry);
 }
 
+void DumpModule(const std::string output_filename, const llvm::Module* module) {
+  std::error_code ec;
+  auto out = std::make_unique<llvm::raw_fd_ostream>(
+      llvm::StringRef(output_filename), ec, llvm::sys::fs::OF_None);
+  if (ec) {
+    LOG(FATAL) << "Unable to open " << output_filename
+               << " to dump LLVM IR: " << ec.message();
+    return;
+  }
+  module->print(*out, /*AAW=*/nullptr);
+  out->close();
+}
+
+const llvm::Module* GetModule(llvm::Any IR) {
+  if (llvm::any_isa<const llvm::Module*>(IR))
+    return llvm::any_cast<const llvm::Module*>(IR);
+
+  if (llvm::any_isa<const llvm::Function*>(IR)) {
+    const llvm::Function* F = llvm::any_cast<const llvm::Function*>(IR);
+    return F->getParent();
+  }
+
+  if (llvm::any_isa<const llvm::LazyCallGraph::SCC*>(IR)) {
+    const llvm::LazyCallGraph::SCC* C =
+        llvm::any_cast<const llvm::LazyCallGraph::SCC*>(IR);
+    return C->begin()->getFunction().getParent();
+  }
+
+  if (llvm::any_isa<const llvm::Loop*>(IR)) {
+    const llvm::Loop* L = llvm::any_cast<const llvm::Loop*>(IR);
+    const llvm::Function* F = L->getHeader()->getParent();
+    return F->getParent();
+  }
+
+  return nullptr;
+}
+
+auto DumpCallbackForModule(std::string module_identifier) {
+  int i = 0;
+  return [module_identifier, i](llvm::StringRef pass, llvm::Any ir) mutable {
+    const llvm::Module* module = GetModule(ir);
+    if (!module) {
+      return;
+    }
+
+    const std::string basename = ReplaceFilenameExtension(
+        absl::string_view(tsl::io::Basename(module_identifier)),
+        absl::StrFormat("pass-%02d.before.%s.ll", i++,
+                        absl::string_view(pass.str())));
+    std::string outputs_dir;
+    tsl::io::GetTestUndeclaredOutputsDir(&outputs_dir);
+    DumpModule(tsl::io::JoinPath(outputs_dir, basename), module);
+  };
+}
+
 // Refer to function `EmitAssemblyHelper::RunOptimizationPipeline` defined in
 // clang/lib/CodeGen/BackendUtil.cpp.
 void RunOptimizationPipeline(llvm::Module* module,
+                             const HloModuleConfig& hlo_module_config,
                              llvm::TargetMachine* target_machine) {
   llvm::Optional<llvm::PGOOptions> PGOOpt;
   llvm::PipelineTuningOptions PTO;
@@ -141,6 +198,11 @@ void RunOptimizationPipeline(llvm::Module* module,
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
+  if (hlo_module_config.debug_options().xla_gpu_dump_llvmir()) {
+    PIC.registerBeforeNonSkippedPassCallback(
+        DumpCallbackForModule(module->getModuleIdentifier()));
+  }
+
   llvm::ModulePassManager MPM;
 
   llvm::OptimizationLevel Level = llvm::OptimizationLevel::O2;
@@ -175,7 +237,7 @@ Status LinkAndOptimizeModule(llvm::Module* module,
   bool opt = true;
   tsl::ReadBoolFromEnvVar("DPCPP_LLVM_OPT", true, &opt);
   if (opt) {
-    RunOptimizationPipeline(module, target_machine);
+    RunOptimizationPipeline(module, hlo_module_config, target_machine);
   }
 
   std::string err;
@@ -216,6 +278,9 @@ void SPIRBackendInit(const HloModuleConfig& hlo_module_config) {
   // which contains a lot of load instructions and many arithmetic instructions
   // between those loads.
   FeedLLVMWithFlags({"-memdep-block-scan-limit=500"});
+
+  // intel llvm sycl opt flag.
+  FeedLLVMWithFlags({"-sycl-opt=1"});
 
   llvm_ir::InitializeLLVMCommandLineOptions(
       hlo_module_config.debug_options().xla_backend_extra_options());
@@ -270,8 +335,8 @@ StatusOr<std::string> CompileToSpir(llvm::Module* module,
     // No SPIR target machine?
     llvm::Triple default_target_triple("spir64-unknown-unknown");
 
-    bool reuse = false;
-    tsl::ReadBoolFromEnvVar("TF_LLVM_OPT", false, &reuse);
+    bool reuse = true;
+    tsl::ReadBoolFromEnvVar("TF_LLVM_OPT", true, &reuse);
     if (reuse) {
       // Link with libdevice, and optimize the LLVM module.
       TF_RETURN_IF_ERROR(LinkAndOptimizeModule(module, hlo_module_config,

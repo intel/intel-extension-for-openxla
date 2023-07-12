@@ -4,9 +4,11 @@ cc_library(
     name = "llvm_gpu_backend",
     srcs = [
         "gpu_backend_lib.cc",
+        "utils.cc",
     ],
     hdrs = [
         "gpu_backend_lib.h",
+        "utils.h",
     ],
     deps = [
         "@com_google_absl//absl/base",

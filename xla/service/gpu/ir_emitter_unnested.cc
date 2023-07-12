@@ -5416,6 +5416,8 @@ Status IrEmitterUnnested::EmitUnnestedReduction(
       ComputeReductionCodegenInfo(fusion, fused_computation, first_reduce,
                                   instr_index_groups));
   const TilingScheme& tiling_scheme = reduction_codegen_info.GetTilingScheme();
+  VLOG(2) << "tiling_scheme: " << tiling_scheme.ToString();
+  VLOG(2) << "reduction_is_race_free: " << reduction_codegen_info.IsRaceFree();
 
   // block_y_count is set to instr_index_groups.size(), so that each reduction
   // group can be run in parallel by a different BlockIdy.

@@ -56,6 +56,139 @@ index 70dca55b3..9e9a00e6b 100644
  @@ -207,13 +207,15 @@ cc_library(
           "lib/Support/BLAKE3/llvm_blake3_prefix.h",
       ] + select({
+diff --git a/third_party/tsl/third_party/llvm/opt.patch b/third_party/tsl/third_party/llvm/opt.patch
+new file mode 100644
+index 000000000..e6f74e8c7
+--- /dev/null
++++ b/third_party/tsl/third_party/llvm/opt.patch
+@@ -0,0 +1,18 @@
++diff --git a/llvm/lib/Transforms/Scalar/MemCpyOptimizer.cpp b/llvm/lib/Transforms/Scalar/MemCpyOptimizer.cpp
++index 1a83c713092d..8a00c1f1e553 100644
++--- a/llvm/lib/Transforms/Scalar/MemCpyOptimizer.cpp
+++++ b/llvm/lib/Transforms/Scalar/MemCpyOptimizer.cpp
++@@ -1649,9 +1649,10 @@ PreservedAnalyses MemCpyOptPass::run(Function &F, FunctionAnalysisManager &AM) {
++   auto *DT = &AM.getResult<DominatorTreeAnalysis>(F);
++   auto *MSSA = &AM.getResult<MemorySSAAnalysis>(F);
++ 
++-  bool MadeChange = runImpl(F, &TLI, AA, AC, DT, &MSSA->getMSSA());
++-  if (!MadeChange)
++-    return PreservedAnalyses::all();
+++  // FIXME: Disable MemCpyOptPass to avoid llvm.memcpy issue
+++  // bool MadeChange = runImpl(F, &TLI, AA, AC, DT, &MSSA->getMSSA());
+++  // if (!MadeChange)
+++  //   return PreservedAnalyses::all();
++ 
++   PreservedAnalyses PA;
++   PA.preserveSet<CFGAnalyses>();
+\ No newline at end of file
+diff --git a/third_party/tsl/third_party/llvm/spirv.patch b/third_party/tsl/third_party/llvm/spirv.patch
+new file mode 100644
+index 000000000..691d61193
+--- /dev/null
++++ b/third_party/tsl/third_party/llvm/spirv.patch
+@@ -0,0 +1,88 @@
++diff --git a/llvm/include/llvm/InitializePasses.h b/llvm/include/llvm/InitializePasses.h
++index 5c531ea89cc6..594618fe5414 100644
++--- a/llvm/include/llvm/InitializePasses.h
+++++ b/llvm/include/llvm/InitializePasses.h
++@@ -99,6 +99,7 @@ void initializeCrossDSOCFIPass(PassRegistry&);
++ void initializeCycleInfoWrapperPassPass(PassRegistry &);
++ void initializeDAEPass(PassRegistry&);
++ void initializeDAHPass(PassRegistry&);
+++void initializeDAESYCLPass(PassRegistry&);
++ void initializeDCELegacyPassPass(PassRegistry&);
++ void initializeDSELegacyPassPass(PassRegistry&);
++ void initializeDeadMachineInstructionElimPass(PassRegistry&);
++diff --git a/llvm/lib/Passes/PassBuilderPipelines.cpp b/llvm/lib/Passes/PassBuilderPipelines.cpp
++index 6cc66a0cb132..29c3431f84eb 100644
++--- a/llvm/lib/Passes/PassBuilderPipelines.cpp
+++++ b/llvm/lib/Passes/PassBuilderPipelines.cpp
++@@ -192,6 +192,10 @@ static cl::opt<bool> EnableGlobalAnalyses(
++     "enable-global-analyses", cl::init(true), cl::Hidden,
++     cl::desc("Enable inter-procedural analyses"));
++ 
+++static cl::opt<bool>
+++    SYCLOptimizationMode("sycl-opt", cl::init(false), cl::Hidden,
+++                         cl::desc("Enable SYCL optimization mode."));
+++
++ static cl::opt<bool>
++     RunPartialInlining("enable-partial-inlining", cl::init(false), cl::Hidden,
++                        cl::desc("Run Partial inlinining pass"));
++@@ -354,6 +358,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
++   // Form canonically associated expression trees, and simplify the trees using
++   // basic mathematical properties. For example, this will form (nearly)
++   // minimal multiplication trees.
+++  if (!SYCLOptimizationMode) {
++   FPM.addPass(ReassociatePass());
++ 
++   // Add the primary loop simplification pipeline.
++@@ -431,7 +436,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
++   FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM2),
++                                               /*UseMemorySSA=*/false,
++                                               /*UseBlockFrequencyInfo=*/false));
++-
+++  }
++   // Delete small array after loop unroll.
++   FPM.addPass(SROAPass(SROAOptions::ModifyCFG));
++ 
++@@ -539,6 +544,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++   // Form canonically associated expression trees, and simplify the trees using
++   // basic mathematical properties. For example, this will form (nearly)
++   // minimal multiplication trees.
+++  if (!SYCLOptimizationMode) {
++   FPM.addPass(ReassociatePass());
++ 
++   // Add the primary loop simplification pipeline.
++@@ -620,7 +626,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++   FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM2),
++                                               /*UseMemorySSA=*/false,
++                                               /*UseBlockFrequencyInfo=*/false));
++-
+++  }
++   // Delete small array after loop unroll.
++   FPM.addPass(SROAPass(SROAOptions::ModifyCFG));
++ 
++@@ -677,6 +683,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++   for (auto &C : ScalarOptimizerLateEPCallbacks)
++     C(FPM, Level);
++ 
+++  if (SYCLOptimizationMode)
+++    FPM.addPass(SimplifyCFGPass());
+++  else
++   FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions()
++                                   .convertSwitchRangeToICmp(true)
++                                   .hoistCommonInsts(true)
++@@ -1320,6 +1329,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
++   for (auto &C : VectorizerStartEPCallbacks)
++     C(OptimizePM, Level);
++ 
+++  if (!SYCLOptimizationMode) {
++   LoopPassManager LPM;
++   // First rotate loops that may have been un-rotated by prior passes.
++   // Disable header duplication at -Oz.
++@@ -1343,7 +1353,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
++   OptimizePM.addPass(InjectTLIMappings());
++ 
++   addVectorPasses(Level, OptimizePM, /* IsFullLTO */ false);
++-
+++  }
++   // LoopSink pass sinks instructions hoisted by LICM, which serves as a
++   // canonicalization pass that enables other optimizations. As a result,
++   // LoopSink pass needs to be a very late IR pass to avoid undoing LICM
+\ No newline at end of file
+diff --git a/third_party/tsl/third_party/llvm/workspace.bzl b/third_party/tsl/third_party/llvm/workspace.bzl
+index 28ff9e93f..2456d3098 100644
+--- a/third_party/tsl/third_party/llvm/workspace.bzl
++++ b/third_party/tsl/third_party/llvm/workspace.bzl
+@@ -21,6 +21,8 @@ def repo(name):
+             "//third_party/llvm:build.patch",
+             "//third_party/llvm:mathextras.patch",
+             "//third_party/llvm:toolchains.patch",
++            "//third_party/llvm:spirv.patch",
++            "//third_party/llvm:opt.patch",
+         ],
+         link_files = {"//third_party/llvm:run_lit.sh": "mlir/run_lit.sh"},
+     )
 diff --git a/third_party/tsl/tsl/framework/contraction/BUILD b/third_party/tsl/tsl/framework/contraction/BUILD
 index c58246b95..450e24f44 100644
 --- a/third_party/tsl/tsl/framework/contraction/BUILD
@@ -500,7 +633,7 @@ index 9b968f374..451121332 100644
  
    // Integer convolution must use NHWC or NCHW_VECT_C.
 diff --git a/xla/service/gpu/ir_emission_utils.cc b/xla/service/gpu/ir_emission_utils.cc
-index 5ae52feb6..ac3452c57 100644
+index 5ae52feb6..41ce6b9f0 100644
 --- a/xla/service/gpu/ir_emission_utils.cc
 +++ b/xla/service/gpu/ir_emission_utils.cc
 @@ -105,11 +105,11 @@ bool IsMatrixMultiplication(const HloInstruction& dot) {
@@ -517,7 +650,7 @@ index 5ae52feb6..ac3452c57 100644
        (output_primitive_type == S32 && lhs_shape.element_type() == S8 &&
         rhs_shape.element_type() == S8);
    bool shapes_are_valid =
-@@ -363,6 +363,23 @@ llvm::Value* EmitNVPTXShflDown(llvm::Value* value, llvm::Value* offset,
+@@ -363,6 +363,31 @@ llvm::Value* EmitNVPTXShflDown(llvm::Value* value, llvm::Value* offset,
        intrinsic, {b->getInt32(-1), value, offset, b->getInt32(WarpSize() - 1)});
  }
  
@@ -528,20 +661,28 @@ index 5ae52feb6..ac3452c57 100644
 +  llvm::Intrinsic::ID llvm_intrinsic_id;
 +  CHECK_EQ(value->getType()->getPrimitiveSizeInBits(), 32);
 +  if (value->getType()->isFloatTy()) {
-+    return EmitDeviceFunctionCall("_Z28intel_sub_group_shuffle_downffj",
-+                                  {value, value, offset}, {F32, F32, U32}, F32,
-+                                  {b->getContext()}, b);
++    return EmitDeviceFunctionCall(
++        "__builtin_spirv_OpSubgroupShuffleDownINTEL_f32_f32_i32",
++        {value, value, offset}, {F32, F32, U32}, F32,
++        llvm::AttrBuilder(b->getContext())
++            .addAttribute(llvm::Attribute::NoUnwind)
++            .addAttribute(llvm::Attribute::Convergent),
++        b);
 +  } else {
-+    return EmitDeviceFunctionCall("_Z28intel_sub_group_shuffle_downjjj",
-+                                  {value, value, offset}, {U32, U32, U32}, U32,
-+                                  {b->getContext()}, b);
++    return EmitDeviceFunctionCall(
++        "__builtin_spirv_OpSubgroupShuffleDownINTEL_i32_i32_i32",
++        {value, value, offset}, {U32, U32, U32}, U32,
++        llvm::AttrBuilder(b->getContext())
++            .addAttribute(llvm::Attribute::NoUnwind)
++            .addAttribute(llvm::Attribute::Convergent),
++        b);
 +  }
 +}
 +
  llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
                                       llvm::IRBuilder<>* builder) {
    int bit_width = value->getType()->getPrimitiveSizeInBits();
-@@ -375,6 +392,8 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
+@@ -375,6 +400,8 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
        return EmitNVPTXShflDown(value, offset, builder);
      } else if (target_triple.getArch() == llvm::Triple::amdgcn) {
        return EmitAMDGPUShflDown(value, offset, builder);
@@ -550,7 +691,7 @@ index 5ae52feb6..ac3452c57 100644
      } else {
        LOG(FATAL) << "Invalid triple " << target_triple.str();
      }
-@@ -396,6 +415,9 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
+@@ -396,6 +423,9 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
      } else if (target_triple.getArch() == llvm::Triple::amdgcn) {
        insert_val = EmitAMDGPUShflDown(builder->CreateExtractElement(x, i),
                                        offset, builder);
@@ -723,7 +864,7 @@ index 92f31a6c1..ff12c19d9 100644
  }  // namespace xla
  
 diff --git a/xla/service/gpu/target_util.cc b/xla/service/gpu/target_util.cc
-index 97ee67bd3..02f5976bb 100644
+index 97ee67bd3..a958575bf 100644
 --- a/xla/service/gpu/target_util.cc
 +++ b/xla/service/gpu/target_util.cc
 @@ -40,6 +40,10 @@ struct TargetIntrinsics {
@@ -984,17 +1125,19 @@ index 97ee67bd3..02f5976bb 100644
    } else {
      LOG(FATAL) << "Invalid triple " << target_triple.str();
    }
-@@ -222,6 +316,9 @@ llvm::CallInst* EmitDeviceFunctionCall(
+@@ -222,6 +316,11 @@ llvm::CallInst* EmitDeviceFunctionCall(
            .getCallee());
  
    callee->addFnAttrs(attributes);
 +  // SYCL: SPIR function with mangling name
 +  if (callee_name.find("_Z") != std::string::npos)
 +    callee->setCallingConv(llvm::CallingConv::SPIR_FUNC);
++  if (callee_name.find("__builtin_spirv") != std::string::npos)
++    callee->setCallingConv(llvm::CallingConv::SPIR_FUNC);
  
    return b->CreateCall(callee, llvm_ir::AsArrayRef(operands), name.data());
  }
-@@ -247,6 +344,18 @@ llvm::CallInst* EmitCallToTargetIntrinsic(
+@@ -247,6 +346,18 @@ llvm::CallInst* EmitCallToTargetIntrinsic(
                &gpu_intrinsic_id.amdgpu_intrinsic_or_function);
        return (*builder_func)(b);
      }
@@ -1013,7 +1156,7 @@ index 97ee67bd3..02f5976bb 100644
    } else {
      LOG(FATAL) << "Invalid triple " << target_triple.str();
    }
-@@ -274,6 +383,8 @@ void AnnotateFunctionAsGpuKernel(llvm::Module* module, llvm::Function* func,
+@@ -274,6 +385,8 @@ void AnnotateFunctionAsGpuKernel(llvm::Module* module, llvm::Function* func,
      // Attach information so AMDGPU can recognize function as a AMDGPU kernel.
      func->setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
      func->addFnAttr("amdgpu-flat-work-group-size", "1, 1024");

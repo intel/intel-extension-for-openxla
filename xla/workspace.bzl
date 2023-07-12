@@ -28,7 +28,7 @@ def workspace(path_prefix = "", tf_repo_name = ""):
 
     new_git_repository(
         name = "llvm_spir",
-        commit = "0ef30a3dfeec433b6d4de4e9cc2a6817032b93e3",
+        commit = "0617edd5b3b018d396b83415eee85331fb862a87",
         remote = "https://github.com/KhronosGroup/SPIRV-LLVM-Translator.git",
         build_file = "//third_party/llvm_spir:llvm_spir.BUILD",
         verbose = True,
