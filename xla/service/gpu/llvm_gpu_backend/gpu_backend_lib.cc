@@ -279,8 +279,19 @@ void SPIRBackendInit(const HloModuleConfig& hlo_module_config) {
   // between those loads.
   FeedLLVMWithFlags({"-memdep-block-scan-limit=500"});
 
-  // intel llvm sycl opt flag.
-  FeedLLVMWithFlags({"-sycl-opt=1"});
+  bool vec = false;
+  tsl::ReadBoolFromEnvVar("VECTORIZE", false, &vec);
+  if (vec) {
+    FeedLLVMWithFlags({
+        "-slp-vectorize-hor=false",
+        "-slp-min-reg-size=64",
+        "-slp-max-reg-size=64",
+    });
+  } else {
+    // TODO: sycl-opt disables all LLVM vectorization passes. Evaluate if it is
+    // needed.
+    FeedLLVMWithFlags({"-sycl-opt=1"});
+  }
 
   llvm_ir::InitializeLLVMCommandLineOptions(
       hlo_module_config.debug_options().xla_backend_extra_options());

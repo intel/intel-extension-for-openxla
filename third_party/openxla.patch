@@ -737,6 +737,45 @@ index e3d78ce0d..9f221bc9a 100644
  };
  
  StatusOr<se::blas::ComputationType> GetBlasComputationType(
+diff --git a/xla/service/gpu/parallel_loop_emitter.cc b/xla/service/gpu/parallel_loop_emitter.cc
+index 2d61ce387..44ccdeb03 100644
+--- a/xla/service/gpu/parallel_loop_emitter.cc
++++ b/xla/service/gpu/parallel_loop_emitter.cc
+@@ -178,9 +178,7 @@ ParallelLoopEmitter::EmitIndexAndSetExitBasicBlock(absl::string_view loop_name,
+   // for that dimensions.  This helps LLVM generate vectorized codes
+   // in that cases.
+   llvm::Value* row_index = nullptr;
+-  if (!launch_config_.row_vectorized) {
+-    array_indices.emplace_back(linear_index_base, shape_, b_);
+-  } else {
++  if (launch_config_.row_vectorized) {
+     // Simpler index for row computation.
+     // This will allow LLVM to vectorize.
+     row_index = b_->CreateMul(
+@@ -192,19 +190,19 @@ ParallelLoopEmitter::EmitIndexAndSetExitBasicBlock(absl::string_view loop_name,
+     array_indices.emplace_back(linear_index_base, multidim, shape_, b_);
+   }
+ 
+-  for (int i = 1; i < launch_config_.unroll_factor; ++i) {
++  for (int i = 0; i < launch_config_.unroll_factor; ++i) {
+     llvm::Value* linear_index =
+         b_->CreateAdd(linear_index_base, llvm::ConstantInt::get(index_type, i),
+                       absl::StrCat("linear_index", i),
+                       /*HasNUW=*/true, /*HasNSW=*/true);
+-    if (!launch_config_.row_vectorized) {
+-      array_indices.emplace_back(linear_index, shape_, b_);
+-    } else {
++    if (launch_config_.row_vectorized && i > 0) {
+       std::vector<llvm::Value*> multidim(shape_.rank(), nullptr);
+       multidim.back() = b_->CreateAdd(
+           row_index, llvm::ConstantInt::get(index_type, i),
+           absl::StrCat("row_index_plus", i), /*HasNUW=*/true, /*HasNSW=*/true);
+       array_indices.emplace_back(linear_index, multidim, shape_, b_);
++    } else {
++      array_indices.emplace_back(linear_index, shape_, b_);
+     }
+   }
+ 
 diff --git a/xla/service/gpu/stream_executor_util.cc b/xla/service/gpu/stream_executor_util.cc
 index 6f2be2a88..b2a8a1041 100644
 --- a/xla/service/gpu/stream_executor_util.cc
@@ -1202,6 +1241,48 @@ index d1247b8c6..4d9c249b2 100644
        /*isExternallyInitialized=*/false);
    global->setUnnamedAddr(llvm::GlobalVariable::UnnamedAddr::Global);
  
+diff --git a/xla/service/llvm_ir/ir_array.cc b/xla/service/llvm_ir/ir_array.cc
+index 209e05fa9..cb99afb26 100644
+--- a/xla/service/llvm_ir/ir_array.cc
++++ b/xla/service/llvm_ir/ir_array.cc
+@@ -23,6 +23,7 @@ limitations under the License.
+ #include "llvm/IR/Constants.h"
+ #include "llvm/IR/Instructions.h"
+ #include "llvm/IR/Value.h"
++#include "tsl/platform/logging.h"
+ #include "xla/layout_util.h"
+ #include "xla/permutation_util.h"
+ #include "xla/service/llvm_ir/llvm_type_conversion_util.h"
+@@ -31,7 +32,6 @@ limitations under the License.
+ #include "xla/statusor.h"
+ #include "xla/util.h"
+ #include "xla/xla_data.pb.h"
+-#include "tsl/platform/logging.h"
+ 
+ namespace xla {
+ namespace llvm_ir {
+@@ -514,9 +514,18 @@ llvm::Value* IrArray::EmitArrayElementAddress(const IrArray::Index& index,
+   if (use_linear_index && index.LinearValidOnShape(shape_)) {
+     llvm::Module* module = b->GetInsertBlock()->getParent()->getParent();
+     llvm::Type* type = PrimitiveTypeToIrType(shape_.element_type(), module);
+-    return b->CreateInBoundsGEP(
+-        type, b->CreateBitCast(base_ptr_, type->getPointerTo()), index.linear(),
+-        llvm_ir::AsStringRef(name));
++    // base_ptr + offset
++    llvm::Value* index_operand_0 =
++        llvm::cast<llvm::BinaryOperator>(index.linear())->getOperand(0);
++    // constant index
++    llvm::Value* index_operand_1 =
++        llvm::cast<llvm::BinaryOperator>(index.linear())->getOperand(1);
++    llvm::Value* ptr_address =
++        b->CreateGEP(type, b->CreateBitCast(base_ptr_, type->getPointerTo()),
++                     index_operand_0, "");
++
++    return b->CreateInBoundsGEP(type, ptr_address, index_operand_1,
++                                llvm_ir::AsStringRef(name));
+   }
+ 
+   std::vector<llvm::Value*> actual_index;
 diff --git a/xla/service/llvm_ir/llvm_util.cc b/xla/service/llvm_ir/llvm_util.cc
 index be59801b9..7dbb5e999 100644
 --- a/xla/service/llvm_ir/llvm_util.cc
