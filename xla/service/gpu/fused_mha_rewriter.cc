@@ -34,6 +34,7 @@ limitations under the License.
 #include "xla/service/hlo_creation_utils.h"
 #include "xla/service/pattern_matcher.h"
 #include "xla/stream_executor/dnn.pb.h"
+#include "xla/stream_executor/sycl/hw_info.h"
 
 namespace xla {
 namespace gpu {
@@ -903,6 +904,7 @@ StatusOr<bool> FusedMHARewriter::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool any_changed = false;
+  if (!IsXetlaHardwareSupport()) return any_changed;
   for (HloComputation* comp :
        module->MakeNonfusionComputations(execution_threads)) {
     const DebugOptions& debug_options =

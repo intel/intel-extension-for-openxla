@@ -28,6 +28,19 @@ xpu_library(
 )
 
 cc_library(
+    name = "hw_info",
+    srcs = ["hw_info.cc"],
+    hdrs = [
+        "hw_info.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":sycl_gpu_header",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
     name = "bfc_allocator",
     srcs = ["bfc_allocator.cc"],
     hdrs = [
@@ -36,6 +49,7 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":hw_info",
         ":sycl_gpu_header",
         "@com_google_absl//absl/container:flat_hash_set",
         "@tsl//tsl/platform:logging",

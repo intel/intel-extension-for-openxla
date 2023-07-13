@@ -112,6 +112,7 @@ struct OneDnnMatMulParams {
 
 bool IsXetlaSupport(int64_t batch_size, const MatrixDescriptor& lhs,
                     const MatrixDescriptor& rhs, const MatrixDescriptor& out) {
+  if (!IsXetlaHardwareSupport()) return false;
   if (batch_size != 1) return false;
   if (lhs.transpose == se::blas::Transpose::kTranspose) return false;
   if ((lhs.num_cols < 4096) || (rhs.num_cols < 4096)) return false;

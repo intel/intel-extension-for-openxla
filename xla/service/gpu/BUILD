@@ -841,6 +841,7 @@ cc_library(
     srcs = ["fused_mha_rewriter.cc"],
     hdrs = ["fused_mha_rewriter.h"],
     deps = [
+        "//xla/stream_executor/sycl:hw_info",
         "@tsl//tsl/platform:errors",
         "@tsl//tsl/platform:statusor",
         "@xla//xla:comparison_util",
