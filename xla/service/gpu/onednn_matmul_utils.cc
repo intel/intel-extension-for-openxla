@@ -40,6 +40,7 @@ limitations under the License.
 #include "xla/statusor.h"
 #include "xla/stream_executor/blas.h"
 #include "xla/stream_executor/device_memory.h"
+#include "xla/stream_executor/sycl/hw_info.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
 #include "xla/stream_executor/sycl/sycl_types.h"
 #include "xla/types.h"
