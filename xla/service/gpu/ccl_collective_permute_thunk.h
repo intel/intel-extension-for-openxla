@@ -58,81 +58,34 @@ struct CclCollectivePermuteConfig {
   IdToSourceTargetMap id_to_source_target;
 };
 
-// Thunk that performs a NCCL-based collective permute.
-class CclCollectivePermuteThunkBase : public CclCollectiveThunk {
- public:
-  CclCollectivePermuteThunkBase(Kind kind, ThunkInfo thunk_info,
-                                CclCollectivePermuteConfig config,
-                                const Buffer& buffer);
-
- protected:
-  Status RunCollectivePermute(const ExecuteParams& params, se::Stream& stream,
-                              ncclComm_t comm);
-
-  const CclCollectiveConfig& config() const override { return config_.config; }
-
- private:
-  const CclCollectivePermuteConfig config_;
-  const Buffer buffer_;
-};
-
-class CclCollectivePermuteThunk : public CclCollectivePermuteThunkBase {
- public:
-  static CclCollectivePermuteConfig GetCclCollectivePermuteConfig(
-      mlir::lmhlo::CollectivePermuteOp op, int64_t replica_count,
-      int64_t partition_count);
-
-  static bool CanImplement(mlir::lmhlo::CollectivePermuteOp op);
-  static bool IsDegenerate(mlir::lmhlo::CollectivePermuteOp op,
-                           int64_t replica_count, int64_t partition_count);
-  static CollectiveOpGroupMode GetGroupMode(
-      mlir::lmhlo::CollectivePermuteOp op);
-  static const char* GetName() { return "CollectivePermute"; }
-  static constexpr bool IsAsync() { return false; }
-
-  CclCollectivePermuteThunk(ThunkInfo thunk_info,
-                            mlir::lmhlo::CollectivePermuteOp op,
-                            int64_t replica_count, int64_t partition_count,
-                            const Buffer& buffer);
-
- protected:
-  Status RunCclCollective(const ExecuteParams& params,
-                          ncclComm_t comm) override;
-};
-
-class CclCollectivePermuteStartThunk : public CclCollectivePermuteThunkBase {
+class CclCollectivePermuteStartThunk : public CclCollectiveThunk {
  public:
   static CclCollectivePermuteConfig GetCclCollectivePermuteConfig(
       mlir::lmhlo_gpu::CollectivePermuteStartOp op, int64_t replica_count,
       int64_t partition_count);
 
-  static bool CanImplement(mlir::lmhlo_gpu::CollectivePermuteStartOp op);
+  static Status CheckImplementable(mlir::lmhlo_gpu::CollectivePermuteStartOp op,
+                                   int64_t replica_count,
+                                   int64_t partition_count);
   static bool IsDegenerate(mlir::lmhlo_gpu::CollectivePermuteStartOp op,
                            int64_t replica_count, int64_t partition_count);
   static CollectiveOpGroupMode GetGroupMode(
       mlir::lmhlo_gpu::CollectivePermuteStartOp op);
-  static const char* GetName() { return "CollectivePermuteStart"; }
-  static constexpr bool IsAsync() { return true; }
+  static const char* GetHloOpName() { return "collective-permute-start"; }
 
   CclCollectivePermuteStartThunk(ThunkInfo thunk_info,
                                  mlir::lmhlo_gpu::CollectivePermuteStartOp op,
                                  int64_t replica_count, int64_t partition_count,
                                  const Buffer& buffer);
 
-  AsyncExecutor& async_executor() { return async_; }
-
  protected:
-  Status RunCclCollective(const ExecuteParams& params,
+  const CclCollectiveConfig& config() const override { return config_.config; }
+  Status RunCclCollective(const ExecuteParams& params, se::Stream& stream,
                           ncclComm_t comm) override;
 
  private:
-  AsyncExecutor async_;
-};
-
-class CclCollectivePermuteDoneThunk : public CclCollectiveDoneThunk {
- public:
-  CclCollectivePermuteDoneThunk(ThunkInfo thunk_info,
-                                CclCollectiveThunk::AsyncExecutor& async);
+  const CclCollectivePermuteConfig config_;
+  const Buffer buffer_;
 };
 
 Status RunCollectivePermute(

@@ -10,7 +10,7 @@ COMMON_PIP_DEPS = [
     "MANIFEST.in",
     "xla_setup.py",
 ] + if_dpcpp([
-    "//xla:libitex_xla_extension.so",
+    "//xla:pjrt_plugin_xpu.so",
 ])
 
 py_binary(

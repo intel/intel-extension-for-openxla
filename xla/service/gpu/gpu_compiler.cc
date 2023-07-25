@@ -85,6 +85,7 @@ limitations under the License.
 #include "xla/service/convolution_4d_expander.h"
 #include "xla/service/convolution_pred_expander.h"
 #include "xla/service/copy_insertion.h"
+#include "xla/service/data_parallel_collective_optimizer.h"
 #include "xla/service/dot_decomposer.h"
 #include "xla/service/dot_merger.h"
 #include "xla/service/dump.h"
@@ -98,8 +99,10 @@ limitations under the License.
 #include "xla/service/gather_simplifier.h"
 #include "xla/service/gpu/alias_passthrough_params.h"
 #include "xla/service/gpu/all_reduce_blueconnect.h"
+#include "xla/service/gpu/compile_module_to_llvm_ir.h"
 #include "xla/service/gpu/conditional_thunk.h"
 #include "xla/service/gpu/conv_layout_normalization.h"
+#include "xla/service/gpu/copy_fusion.h"
 #include "xla/service/gpu/dot_dimension_sorter.h"
 #include "xla/service/gpu/dot_expand_dims.h"
 #include "xla/service/gpu/for_thunk.h"
@@ -107,6 +110,7 @@ limitations under the License.
 #include "xla/service/gpu/gemm_broadcast_folding_rewriter.h"
 #include "xla/service/gpu/gemm_rewriter.h"
 #include "xla/service/gpu/gemm_rewriter_triton.h"
+#include "xla/service/gpu/gpu_async_collective_annotator.h"
 #include "xla/service/gpu/gpu_constants.h"
 #include "xla/service/gpu/gpu_conv_rewriter.h"
 #include "xla/service/gpu/gpu_device_info.h"
@@ -117,7 +121,6 @@ limitations under the License.
 #include "xla/service/gpu/gpu_reduce_scatter_creator.h"
 #include "xla/service/gpu/gpu_sanitize_constant_names.h"
 #include "xla/service/gpu/gpu_scatter_expander.h"
-#include "xla/service/gpu/gpu_serializable_autotuner.h"
 #include "xla/service/gpu/gpu_shape_verifier.h"
 #include "xla/service/gpu/hlo_fusion_stats.h"
 #include "xla/service/gpu/horizontal_input_fusion.h"
@@ -137,6 +140,8 @@ limitations under the License.
 #include "xla/service/gpu/runtime_intrinsics.h"
 #include "xla/service/gpu/scatter_slice_simplifier.h"
 #include "xla/service/gpu/sequential_thunk.h"
+#include "xla/service/gpu/topk_specializer.h"
+#include "xla/service/gpu/topk_splitter.h"
 #include "xla/service/gpu/tree_reduction_rewriter.h"
 #include "xla/service/gpu/variadic_op_splitter.h"
 #include "xla/service/gpu/while_thunk.h"
@@ -263,67 +268,12 @@ class GpuFloatSupport : public FloatSupport {
 bool ConvIsLowerable(HloInstruction* conv) {
   return GpuConvRewriter::ConvIsLowerable(conv);
 }
-#if 0
-// CollectivesScheduleLinearizer enforces a total ordering between collectives
-// to work around (1) divergence in initial HLOs across executables that are
-// communicating with each other using HLO collectives, and (2) divergence in
-// executables introduced due to auto tuning, specifically the use of extra
-// scratch space for convolutions.
-// We always apply this pass when not using SPMD (where initial HLO divergence
-// may be possible). This function decided whether to apply this pass when using
-// SPMD partitioning. When using SPMD, if convolutions are present in the code
-// and we are using "online" autotuning (i.e., not AOT) we need to use the pass,
-// else we do not need to enable the pass.
-bool RequiresCollectiveScheduleLinearizer(const HloModule* module) {
-  for (const HloComputation* comp : module->MakeNonfusionComputations()) {
-    for (const HloInstruction* inst : comp->instructions()) {
-      if (GpuConvAlgorithmPicker::IsCandidate(inst)) {
-        return true;
-      }
-    }
-  }
-  // No convolution auto-tuning candidates found in the module.
-  return false;
-}
-#endif
+
 }  // end anonymous namespace
 
 using OwnedThunkSequence = GpuExecutable::OwnedThunkSequence;
 using OwnedGpuRuntimeProgram = GpuExecutable::OwnedGpuRuntimeProgram;
-/*
-StatusOr<std::unique_ptr<Executable>>
-GpuXlaRuntimeAotCompilationResult::LoadExecutable(
-    Compiler* compiler, se::StreamExecutor* executor) const {
-  XlaRuntimeExecutableProto xla_runtime_executable =
-      xla_runtime_gpu_executable_.xla_runtime_executable();
-  TF_ASSIGN_OR_RETURN(HloModuleConfig hlo_module_config,
-                      HloModule::CreateModuleConfigFromProto(
-                          xla_runtime_executable.hlo_module_proto(),
-                          GetDebugOptionsFromFlags()));
-  TF_ASSIGN_OR_RETURN(
-      std::unique_ptr<HloModule> hlo_module,
-      HloModule::CreateFromProto(xla_runtime_executable.hlo_module_proto(),
-                                 hlo_module_config));
-  auto gpu_compiler = tensorflow::down_cast<GpuCompiler*>(compiler);
 
-  std::vector<GpuExecutable::ConstantInfo> constants;
-  for (auto& cst : xla_runtime_gpu_executable_.constants()) {
-    GpuExecutable::ConstantInfo constant = {
-        cst.symbol_name(),
-        {cst.content().begin(), cst.content().end()},
-        cst.allocation_index()};
-    constants.push_back(std::move(constant));
-  }
-
-  return GpuExecutable::LoadFromObjFile(
-      std::move(hlo_module), xla_runtime_executable.obj_file(),
-      xla_runtime_executable.mlir_module(),
-      xla_runtime_gpu_executable_.entry_func_attrs(),
-      GetDebugOptionsFromFlags(), xla_runtime_gpu_executable_.gpu_asm_text(),
-      xla_runtime_gpu_executable_.gpu_binary(), std::move(constants),
-      gpu_compiler->GetGpuVersion(executor), executor);
-}
-*/
 GpuTargetConfig::GpuTargetConfig(const se::GpuTargetConfigProto& proto)
     : gpu_device_info(proto.gpu_device_info()),
       platform_name(proto.platform_name()),
@@ -409,7 +359,25 @@ Status GpuCompiler::OptimizeHloModule(
   // SYCL: Conv swap has accuracy issue in some cases.
   layout_insensitive_algsimp_opts.set_enable_conv_operand_swap(false);
 
+  HloPassPipeline pre_spmd_pipeline("pre-spmd-partitioner");
+  // Run some IR cleanup passes before running the SPMD partitioning
+  // passes.
+  pre_spmd_pipeline.AddPass<CallInliner>();
+  pre_spmd_pipeline.AddPass<ZeroSizedHloElimination>();
+  pre_spmd_pipeline.AddPass<ConditionalCanonicalizer>();
+
+  pre_spmd_pipeline.AddPass<TopkDecomposer>([&](const HloInstruction* instr) {
+    return instr->opcode() == HloOpcode::kTopK;
+  });
+
+  // The SPMD partitioner would mess up the sort+slice structure, so we need to
+  // rewrite Topk before that happens.
+  pre_spmd_pipeline.AddPass<TopkRewriter>(
+      [](const HloSortInstruction*, int64_t) { return true; });
+
+  TF_RETURN_IF_ERROR(pre_spmd_pipeline.Run(hlo_module).status());
   const int64_t num_partitions = hlo_module->config().num_partitions();
+
   if (num_partitions > 1) {
     if (!hlo_module->config().use_spmd_partitioning()) {
       return InvalidArgument(
@@ -467,8 +435,9 @@ Status GpuCompiler::OptimizeHloModule(
   {
     HloPassPipeline pipeline("optimization");
     AddHloVerifier(&pipeline);
+    pipeline.AddPass<TopKSplitter>();
+    pipeline.AddPass<TopkSpecializer>();
     pipeline.AddPass<TopkDecomposer>();
-    pipeline.AddPass<AllToAllDecomposer>();
 
     HloPredicate upcaster_filter = [&](const HloInstruction* instr) {
       return !stream_exec->GetDeviceDescription()
@@ -528,8 +497,7 @@ Status GpuCompiler::OptimizeHloModule(
         /*rewrite_inference_op=*/true,
         /*rewrite_grad_op=*/true);
 
-    pipeline.AddPass<LogisticExpander>(
-        /*expansion_type=*/LogisticExpansionType::kExp);
+    pipeline.AddPass<LogisticExpander>();
     pipeline.AddPass<ConditionalCanonicalizer>();
     pipeline.AddPass<DynamicDimensionSimplifier>();
 
@@ -593,7 +561,10 @@ Status GpuCompiler::OptimizeHloModule(
       pipeline.AddPass<WhileLoopConstantSinking>();
       pipeline.AddPass<WhileLoopSimplifier>();
       pipeline.AddPass<SliceSinker>();
-      pipeline.AddPass<ReshapeMover>();
+
+      ReshapeMoverOptions reshape_mover_options;
+      reshape_mover_options.reshape_of_1d_broadcast_is_cheap = true;
+      pipeline.AddPass<ReshapeMover>(reshape_mover_options);
       pipeline.AddPass<HloConstantFolding>();
       pipeline.AddPass<ConditionalSimplifier>();
       pipeline.AddPass<RealImagExpander>();
@@ -632,10 +603,25 @@ Status GpuCompiler::OptimizeHloModule(
   {
     HloPassPipeline collectives_pipeline("collective-optimizations");
     collectives_pipeline.AddPass<AllReduceFolder>();
-    collectives_pipeline.AddPass<WhileLoopAllReduceCodeMotion>();
     collectives_pipeline.AddPass<ReduceScatterCreator>();
-    collectives_pipeline.AddPass<AllReduceReassociate>();
+    collectives_pipeline.AddPass<AllReduceReassociate>(
+        debug_options.xla_gpu_enable_reassociation_for_converted_ar());
     collectives_pipeline.AddPass<ReduceScatterReassociate>();
+    const DebugOptions& debug_options = hlo_module->config().debug_options();
+    collectives_pipeline.AddPass<WhileLoopAllReduceCodeMotion>(
+        /*enable_reduce_scatter=*/debug_options
+            .xla_gpu_enable_while_loop_reduce_scatter_code_motion());
+    if (debug_options.xla_gpu_enable_data_parallel_collective_optimizer()) {
+      DataParallelCollectiveOptimizer::DataParallelCollectiveConfig config{
+          /*level_to_operate_on=*/0,
+          /*max_pipelining_per_loop=*/INT64_MAX,
+          /*last_run=*/true,
+          /*process_different_sized_ops=*/true,
+          /*pipelining_direction=*/
+          DataParallelCollectiveOptimizer::PipeliningDirection::kForward,
+          /*should_process=*/HloPredicateIsOp<HloOpcode::kAllReduce>};
+      collectives_pipeline.AddPass<DataParallelCollectiveOptimizer>(config);
+    }
 
     // Run algebraic simplifier to reshape(broadcast) into a broadcast when
     // the reshape is just adding a unit dimension. This will help with the
@@ -695,11 +681,22 @@ Status GpuCompiler::OptimizeHloModule(
         HloVerifierOpts{}.MakeLayoutSensitive().WithInstructionCanChangeLayout(
             LayoutAssignment::InstructionCanChangeLayout),
         /*debug_only=*/true);
-    fusion.AddPass<GpuInstructionFusion>(/*may_duplicate=*/false,
-                                         gpu_device_info);
-    fusion.AddPass<GpuInstructionFusion>(/*may_duplicate=*/true,
-                                         gpu_device_info);
-    fusion.AddPass<FusionMerger>(gpu_device_info, ShapeSizeBytesFunction());
+
+    if (debug_options.xla_gpu_enable_priority_fusion()) {
+      fusion.AddPass<GpuInstructionFusion>(/*may_duplicate=*/false,
+                                           gpu_device_info,
+                                           /*priority_fusion=*/true);
+    } else {
+      fusion.AddPass<GpuInstructionFusion>(/*may_duplicate=*/false,
+                                           gpu_device_info);
+      fusion.AddPass<GpuInstructionFusion>(/*may_duplicate=*/true,
+                                           gpu_device_info);
+      fusion.AddPass<FusionMerger>(gpu_device_info, ShapeSizeBytesFunction());
+    }
+    // Running CSE affects how many users an op has. This plays a role in what
+    // we detect as a tiled transpose fusion.
+    fusion.AddPass<HloCSE>(/*is_layout_sensitive=*/true,
+                           /*only_fusion_computations=*/true);
     fusion.AddPass<GpuMultiOutputFusion>(gpu_device_info,
                                          ShapeSizeBytesFunction());
     fusion.AddPass<HloCSE>(/*is_layout_sensitive=*/true,
@@ -727,13 +724,13 @@ Status GpuCompiler::OptimizeHloModule(
   {
     HloPassPipeline pipeline("post-fusion optimization");
     pipeline.AddPass<AllGatherCombiner>(
-        /*combine_threshold_in_bytes=*/1024 * 1024 * 1024,
+        debug_options.xla_gpu_all_gather_combine_threshold_bytes(),
         /*combine_threshold_count=*/256);
     pipeline.AddPass<AllReduceCombiner>(
         debug_options.xla_gpu_all_reduce_combine_threshold_bytes(),
         /*combine_threshold_count=*/256);
     pipeline.AddPass<ReduceScatterCombiner>(
-        /*combine_threshold_in_bytes=*/30 * 1024 * 1024,
+        debug_options.xla_gpu_reduce_scatter_combine_threshold_bytes(),
         /*combine_threshold_count=*/256);
 
     if (debug_options.xla_gpu_all_reduce_contiguous()) {
@@ -746,19 +743,42 @@ Status GpuCompiler::OptimizeHloModule(
       pipeline.AddPass<AllReduceBlueConnect>(blueconnect_num_devices_per_host);
     }
 
-    bool async_all_reduce = debug_options.xla_gpu_enable_async_all_reduce();
-    bool async_collective_permute =
-        debug_options.xla_gpu_enable_async_collective_permute();
-
-    if (async_all_reduce || async_collective_permute) {
+    {
+      // Convert all collectives to their async form, and then annotate the ones
+      // that actually need to run asynchronously with a GPU specific backend
+      // config.
       AsyncCollectiveCreator::CollectiveCreatorConfig config;
-      config.convert_all_reduce = [=](const HloInstruction*) {
-        return async_all_reduce;
-      };
-      config.convert_collective_permute = [=](const HloInstruction*) {
-        return async_collective_permute;
-      };
+      config.convert_all_reduce = HloPredicateTrue;
+      config.convert_collective_permute = HloPredicateTrue;
+      config.convert_all_gather = HloPredicateTrue;
+      config.convert_reduce_scatter = HloPredicateTrue;
+      config.convert_all_to_all = HloPredicateTrue;
       pipeline.AddPass<AsyncCollectiveCreator>(std::move(config));
+
+      auto convert_to_async = [&debug_options](const HloInstruction* inst) {
+        switch (inst->opcode()) {
+          case HloOpcode::kAllReduceStart:
+            return debug_options.xla_gpu_enable_async_all_reduce();
+          case HloOpcode::kAllGatherStart:
+            return debug_options.xla_gpu_enable_async_all_gather();
+          case HloOpcode::kCollectivePermuteStart:
+            return debug_options.xla_gpu_enable_async_collective_permute();
+          case HloOpcode::kAsyncStart: {
+            auto async_inst = Cast<HloAsyncInstruction>(inst);
+            switch (async_inst->async_wrapped_opcode()) {
+              case HloOpcode::kReduceScatter:
+                return debug_options.xla_gpu_enable_async_reduce_scatter();
+              case HloOpcode::kAllToAll:
+                return debug_options.xla_gpu_enable_async_all_to_all();
+              default:
+                return false;
+            }
+          }
+          default:
+            return false;
+        }
+      };
+      pipeline.AddPass<GpuAsyncCollectiveAnnotator>(convert_to_async);
     }
 
     if (!hlo_module->config().use_spmd_partitioning()) {
@@ -813,6 +833,7 @@ Status GpuCompiler::PrepareHloModuleForIrEmitting(HloModule* hlo_module) {
   auto& sub_pipeline =
       pipeline.AddPass<HloPassPipeline>("horizontal-loop-fusion-for-copy");
   // To fuse the copy.
+  sub_pipeline.AddPass<CopyFusion>();
   sub_pipeline.AddPass<GpuHorizontalLoopFusion>("copy_");
   sub_pipeline.AddPass<HloDCE>();
   pipeline.AddPass<GpuSanitizeConstantNames>();
@@ -897,44 +918,6 @@ Status GpuCompiler::OptimizeHloPostLayoutAssignment(
     pipeline.AddPass<SimplifyFPConversions>();
   }
 
-  AutotuningConfig autotune_config =
-      stream_exec
-          ? AutotuningConfig{DeviceConfig{stream_exec, device_allocator}}
-          : AutotuningConfig{
-                DevicelessConfig{gpu_target_config.device_description_str}};
-#if 0
-  // Linearize collective schedule under SPMD partitioning if online autotuning
-  // of convolutions is enabled.
-  const bool enable_collecive_schedule_linearizer_for_spmd =
-      hlo_module->config().use_spmd_partitioning() &&
-      autotune_config.is_online() &&
-      GpuConvAlgorithmPicker::IsEnabled(hlo_module);
-
-  if (enable_collecive_schedule_linearizer_for_spmd) {
-    pipeline.AddPass<CollectivesScheduleLinearizer>(
-        RequiresCollectiveScheduleLinearizer);
-  }
-
-  if (autotune_config.is_offline()) {
-    GpuConvAlgorithmPicker::ClearAutotuneResults();
-    TF_RETURN_IF_ERROR(
-        GpuConvAlgorithmPicker::LoadAutotuneResults(*autotune_results));
-    GemmAlgorithmPicker::ClearAutotuneResults();
-    TF_RETURN_IF_ERROR(
-        GemmAlgorithmPicker::LoadAutotuneResults(*autotune_results));
-    TritonAutotuner::ClearAutotuneResults();
-    TF_RETURN_IF_ERROR(TritonAutotuner::LoadAutotuneResults(*autotune_results));
-  }
-  if (GpuConvAlgorithmPicker::IsEnabled(hlo_module)) {
-    pipeline.AddPass<GpuConvAlgorithmPicker>(autotune_config);
-  }
-  pipeline.AddPass<GemmAlgorithmPicker>(autotune_config);
-  pipeline.AddPass<TritonAutotuner>(
-      autotune_config,
-      debug_options.xla_gpu_force_compilation_parallelism()
-          ? debug_options.xla_gpu_force_compilation_parallelism()
-          : tsl::port::MaxParallelism());
-#endif
   // Clean up new_tuple described above.
   pipeline.AddPass<TupleSimplifier>();
 
@@ -1010,12 +993,6 @@ StatusOr<std::unique_ptr<HloModule>> GpuCompiler::RunHloPassesWithoutDevice(
   return std::move(module);
 }
 
-static std::optional<bool> DummyCanShareBufferFunction(const HloInstruction*,
-                                                       const HloInstruction*,
-                                                       const ShapeIndex&) {
-  return std::nullopt;
-}
-
 StatusOr<std::unique_ptr<BufferAssignment>> GpuCompiler::AssignBuffers(
     HloModule* hlo_module, se::StreamExecutor* stream_exec) {
   const GpuDeviceInfo gpu_device_info = GetGpuDeviceInfo(stream_exec);
@@ -1042,306 +1019,8 @@ StatusOr<std::unique_ptr<BufferAssignment>> GpuCompiler::AssignBuffers(
   return std::move(assignment);
 }
 
-// Lowers MLIR module to the XLA Gpu runtime custom calls.
-static Status LowerToXlaGpuRuntime(mlir::ModuleOp module,
-                                   llvm::StringRef entry_function_name,
-                                   llvm::ArrayRef<int64_t> buffer_sizes,
-                                   ThunkSequence* thunk_sequence,
-                                   const DebugOptions& debug_options) {
-  /*
-  if (!module) {
-    return InternalError("No MLIR module to lower.");
-  }
-
-  mlir::PassManager pm(module->getName(), mlir::PassManager::Nesting::Implicit);
-
-  GpuPipelineOpts opts;
-  opts.enable_cuda_graphs = debug_options.xla_gpu_enable_cuda_graphs();
-  populateXlaGpuRuntimePasses(pm, thunk_sequence, opts);
-
-  if (pm.run(module).failed()) {
-    return InternalError("Failed to lower LMHLO to Gpu runtime custom calls.");
-  }
-  return OkStatus();
-  */
-  return Unimplemented("LowerToXlaGpuRuntime is not supported.");
-}
-
-static StatusOr<OwnedGpuRuntimeProgram> LowerToJitRt(
-    mlir::ModuleOp mlir_module, llvm::StringRef entry_function_name,
-    llvm::ArrayRef<int64_t> buffer_sizes, const HloModuleConfig& module_config,
-    std::unique_ptr<ThunkSequence> thunk_sequence,
-    const HloModule* hlo_module_for_dump = nullptr) {
-  // Forward collective (NCCL) attributes for use by the lowering pipeline.
-  mlir::OpBuilder builder(mlir_module.getContext());
-  mlir::IntegerAttr replica_count_attr =
-      builder.getI64IntegerAttr(module_config.replica_count());
-  mlir::IntegerAttr num_partitions_attr =
-      builder.getI64IntegerAttr(module_config.num_partitions());
-  mlir::func::FuncOp func =
-      mlir_module.lookupSymbol<mlir::func::FuncOp>(entry_function_name);
-  func->setAttr("replica_count", replica_count_attr);
-  func->setAttr("num_partitions", num_partitions_attr);
-
-  // Lower LMHLO operations to the JitRt compatible custom calls.
-  TF_RETURN_IF_ERROR(LowerToXlaGpuRuntime(
-      mlir_module, {entry_function_name.data(), entry_function_name.size()},
-      buffer_sizes, thunk_sequence.get(), module_config.debug_options()));
-
-  // TODO(b/232033540): Pass MLIR module directly to Gpu runtime executable
-  // without forcing serialization.
-  std::string module_str = llvm_ir::DumpToString(mlir_module);
-
-  if (hlo_module_for_dump != nullptr) {
-    DumpToFileInDirOrStdout(*hlo_module_for_dump, "gpu_rt_host", "mlir",
-                            module_str);
-  }
-
-  return std::make_unique<GpuRuntimeProgram>(
-      entry_function_name.str(), std::move(module_str), buffer_sizes.vec(),
-      module_config.debug_options());
-}
-
 using OutputInfoMap =
     absl::flat_hash_map<ShapeIndex, GpuExecutable::OutputInfo>;
-static Status GetMlirAllocationInfo(mlir::func::FuncOp func,
-                                    std::vector<BufferAllocation>* allocations,
-                                    OutputInfoMap* output_info,
-                                    Shape* output_shape,
-                                    EntryFunctionAttributes* entry_func_attrs);
-
-namespace {
-// Removes all globals from the given module that are both uninitialized and
-// have no uses within that module.
-void RemoveUnusedAndUninitializedGlobals(
-    llvm::Module* llvm_module,
-    const std::vector<GpuExecutable::ConstantInfo>& constants) {
-  for (const auto& info : constants) {
-    // Empty content means the constant is initialized in the LLVM IR, so we
-    // must not remove it.
-    if (!info.content.empty()) {
-      llvm::GlobalVariable* global =
-          llvm_module->getGlobalVariable(info.symbol_name);
-      CHECK(global != nullptr);
-      if (global->use_empty()) {
-        global->eraseFromParent();
-      }
-    }
-  }
-}
-}  // namespace
-
-struct CompileModuleResults {
-  std::unique_ptr<llvm::Module> llvm_module;
-  std::unique_ptr<BufferAssignment> buffer_assignment;
-  std::vector<BufferAllocation> allocations;
-  std::variant<OwnedThunkSequence, OwnedGpuRuntimeProgram> executable;
-  EntryFunctionAttributes entry_func_attrs;
-  std::vector<GpuExecutable::ConstantInfo> constants;
-  OutputInfoMap output_info;
-  Shape output_shape;
-  std::string module_name;
-};
-
-static void ForAllThunks(const std::function<void(Thunk*)>& fn,
-                         ThunkSequence* thunk_sequence) {
-  for (std::unique_ptr<Thunk>& thunk : *thunk_sequence) {
-    if (thunk->kind() == Thunk::kConditional) {
-      auto* cond_thunk = static_cast<ConditionalThunk*>(thunk.get());
-      for (const std::unique_ptr<SequentialThunk>& branch_thunks :
-           cond_thunk->branch_thunks()) {
-        ForAllThunks(fn, &branch_thunks->thunks());
-      }
-    } else if (thunk->kind() == Thunk::kFor) {
-      auto* for_thunk = static_cast<ForThunk*>(thunk.get());
-      ForAllThunks(fn, &for_thunk->body_thunk_sequence()->thunks());
-    } else if (thunk->kind() == Thunk::kSequential) {
-      auto* sequential_thunk = static_cast<SequentialThunk*>(thunk.get());
-      ForAllThunks(fn, &sequential_thunk->thunks());
-    } else if (thunk->kind() == Thunk::kWhile) {
-      auto* while_thunk = static_cast<WhileThunk*>(thunk.get());
-      ForAllThunks(fn, &while_thunk->condition_thunk_sequence()->thunks());
-      ForAllThunks(fn, &while_thunk->body_thunk_sequence()->thunks());
-    } else {
-      fn(thunk.get());
-    }
-  }
-}
-
-static bool HasFp8(const HloModule& hlo_module) {
-  for (const HloComputation* computation : hlo_module.computations()) {
-    for (const HloInstruction* instruction : computation->instructions()) {
-      if (ShapeUtil::HasPrimitiveType(instruction->shape(), F8E5M2) ||
-          ShapeUtil::HasPrimitiveType(instruction->shape(), F8E4M3FN)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-// Prints mlir diagnostic messages to VLOG level 2.
-static mlir::LogicalResult DiagnosticHandler(mlir::Diagnostic& diag) {
-  VLOG(2) << diag.str();
-  return mlir::failure();
-}
-
-// The order of `thunk_sequence` corresponds to
-// `hlo_schedule->ThunkLaunchOrder()`.
-static Status CompileModuleToLlvmIrImpl(
-    HloModule* hlo_module, llvm::LLVMContext* llvm_context,
-    const std::string& target_triple, const std::string& data_layout,
-    const std::string& platform_name, se::Platform::Id platform_id,
-    GpuDeviceInfo gpu_device_info,
-    se::CudaComputeCapability cuda_compute_capability,
-    se::RocmComputeCapability rocm_compute_capability,
-    const HloDataflowAnalysis::CanShareBuffer& can_share_buffer_function,
-    int pointer_size, CompileModuleResults* results,
-    se::StreamExecutor* stream_exec = nullptr) {
-  results->llvm_module = std::make_unique<llvm::Module>("", *llvm_context);
-  results->llvm_module->setTargetTriple(target_triple);
-  results->llvm_module->setDataLayout(data_layout);
-
-  TF_RETURN_IF_ERROR(
-      ScheduleGpuModule(hlo_module, pointer_size, gpu_device_info));
-  {
-    HloPassPipeline pipeline("post-scheduling-passes");
-
-    auto is_nop = [](const HloInstruction* instr) {
-      HloOpcode op = instr->opcode();
-      return op == HloOpcode::kParameter || op == HloOpcode::kConstant ||
-             op == HloOpcode::kBitcast || op == HloOpcode::kGetTupleElement;
-    };
-    pipeline.AddPass<ConvertAsyncCollectivesToSync>(is_nop);
-    pipeline.AddPass<OptimizationBarrierExpander>();
-
-    TF_RETURN_IF_ERROR(pipeline.Run(hlo_module).status());
-  }
-
-  auto buffer_size_bytes_function =
-      [pointer_size](const BufferValue& buffer_value) -> int64_t {
-    return GetSizeOfShape(buffer_value.shape(), pointer_size);
-  };
-
-  HloRematerialization::RematerializationSizes sizes;
-  HloRematerialization remat(
-      [pointer_size](const Shape& shape) {
-        return GetSizeOfShape(shape, pointer_size);
-      },
-      // Assume 75% of the total device memory is available for XLA.
-      /*memory_limit_bytes=*/gpu_device_info.device_memory_size * 0.75,
-      /*sizes=*/&sizes,
-      HloRematerialization::RematerializationPass::kPostFusion,
-      /*block_size_limit=*/1, /*block_rematerialization_factor=*/1,
-      /*compact_shape_function=*/nullptr,
-      HloRematerialization::RematerializationMode::kRecomputeAndCompress);
-  TF_ASSIGN_OR_RETURN(bool changed, remat.Run(hlo_module));
-  if (changed) {
-    VLOG(1) << "HloRematerialization saved "
-            << sizes.before_bytes - sizes.after_bytes << " bytes";
-  }
-
-  TF_ASSIGN_OR_RETURN(
-      results->buffer_assignment,
-      BufferAssigner::Run(
-          hlo_module,
-          std::make_unique<SequentialHloOrdering>(hlo_module->schedule()),
-          buffer_size_bytes_function,
-          /*color_alignment=*/
-          [](LogicalBuffer::Color) { return kXlaAllocatedBufferAlignBytes; },
-          /*allocate_buffers_for_constants=*/true,
-          /*colorer=*/BufferAssigner::DefaultColorer(),
-          /*must_not_live_out=*/{}, can_share_buffer_function));
-
-  VLOG(1) << "Buffer Assignment Stats for " << hlo_module->name() << "\n"
-          << results->buffer_assignment->GetStats().ToString();
-  DumpHloModuleIfEnabled(*hlo_module, *results->buffer_assignment,
-                         absl::StrCat("sm_", cuda_compute_capability.ToString(),
-                                      "_gpu_", kAfterOptimizationsDumpName));
-
-  uint64_t start_usecs = tsl::Env::Default()->NowMicros();
-  mlir::DialectRegistry registry;
-  IrEmitterUnnested::GetDependentDialects(registry);
-  mlir::MLIRContext mlir_context(registry);
-  mlir_context.getDiagEngine().registerHandler(DiagnosticHandler);
-  mlir::OwningOpRef<mlir::ModuleOp> mlir_module =
-      mlir::ModuleOp::create(mlir::Builder(&mlir_context).getUnknownLoc());
-
-  TF_RETURN_IF_ERROR(
-      HloToLhloModule(*results->buffer_assignment, *hlo_module, *mlir_module));
-
-  results->module_name =
-      mlir::mhlo::GetDebugNameFromLocation(mlir_module->getLoc());
-
-  if (DumpingEnabledForHloModule(*hlo_module)) {
-    DumpToFileInDirOrStdout(*hlo_module, "lmhlo", mlir_module.get());
-  }
-
-  auto entry_function = mlir::cast<mlir::func::FuncOp>(
-      mlir_module->lookupSymbol(hlo_module->entry_computation()->name()));
-
-  TF_RETURN_IF_ERROR(GetMlirAllocationInfo(
-      entry_function, &results->allocations, &results->output_info,
-      &results->output_shape, &results->entry_func_attrs));
-
-  IrEmitterContext ir_emitter_context(
-      /*hlo_module=*/nullptr, /*buffer_assignment=*/nullptr, platform_name,
-      gpu_device_info, cuda_compute_capability, rocm_compute_capability,
-      &mlir_context, results->llvm_module.get());
-
-  ir_emitter_context.set_allocations(results->allocations);
-
-  TF_ASSIGN_OR_RETURN(
-      auto ir_emitter,
-      IrEmitterUnnested::Create(hlo_module->config(), &ir_emitter_context));
-
-  {
-    XLA_SCOPED_LOGGING_TIMER(absl::StrCat(
-        "GpuCompiler::RunBackend - IR emission for ", hlo_module->name()));
-
-    TF_RETURN_IF_ERROR(ir_emitter->EmitLmhloRegion(&entry_function.getBody()));
-
-    bool supports_runtime_managed_constants =
-        // TODO(b/218907125): Implement this feature for ROCm as well.
-        platform_id != se::rocm::kROCmPlatformId &&
-        hlo_module->config().debug_options().xla_gpu_enable_shared_constants();
-    if (supports_runtime_managed_constants) {
-      // Remove these globals from the generated code to indicate that XLA is
-      // responsible for allocating and initializing them.
-      RemoveUnusedAndUninitializedGlobals(ir_emitter_context.llvm_module(),
-                                          ir_emitter_context.constants());
-    }
-
-    results->constants = std::move(ir_emitter_context.constants());
-    uint64_t end_usecs = tsl::Env::Default()->NowMicros();
-
-    // This won't record values for calls that error out (because if they error
-    // out we have no way of telling how far through the process we got).
-    RecordHloToLlvmDuration(end_usecs - start_usecs);
-  }
-
-  // TODO(ezhulenev): Remove the FP8 check once https://reviews.llvm.org/D140088
-  // is submitted. Currently we can't emit LLVM IR with fp8 types.
-  if (IsXlaRuntimeExecutableEnabled(hlo_module->config()) &&
-      !HasFp8(*hlo_module)) {
-    std::vector<int64_t> buffer_sizes;
-    llvm::transform(
-        results->allocations, std::back_inserter(buffer_sizes),
-        [](const BufferAllocation& allocation) { return allocation.size(); });
-    TF_ASSIGN_OR_RETURN(
-        results->executable,
-        LowerToJitRt(*mlir_module, entry_function.getName(), buffer_sizes,
-                     hlo_module->config(), ir_emitter->ConsumeThunkSequence(),
-                     /*hlo_module_for_dump=*/hlo_module));
-    return OkStatus();
-  }
-
-  auto thunk_sequence = ir_emitter->ConsumeThunkSequence();
-  ForAllThunks([](Thunk* thunk) { thunk->ClearCompileTimeInfo(); },
-               thunk_sequence.get());
-  results->executable = std::move(thunk_sequence);
-  return OkStatus();
-}
 
 static void NullDiagnosticHandler(const llvm::DiagnosticInfo& diag_info,
                                   void* context) {
@@ -1689,332 +1368,13 @@ StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
 
 StatusOr<std::vector<std::unique_ptr<AotCompilationResult>>>
 GpuCompiler::CompileAheadOfTime(std::unique_ptr<HloModuleGroup> module_group,
-                                const AotCompilationOptions& options) {
-  /*
-  CHECK(options.PlatformId() == se::cuda::kCudaPlatformId);
-
-  std::vector<std::unique_ptr<HloModule>> modules =
-      module_group->ConsumeModules();
-  std::vector<std::unique_ptr<AotCompilationResult>> results;
-
-  std::any target_config = options.target_config();
-  auto* gpu_target_config = std::any_cast<GpuTargetConfig>(&target_config);
-  CHECK(gpu_target_config != nullptr || options.executor() != nullptr);
-
-  for (const auto& module : modules) {
-    llvm::LLVMContext llvm_context;
-
-    // Compile the module
-    CompileModuleResults compile_module_results;
-
-    const std::any& target_config = options.target_config();
-    auto* gpu_target_config = std::any_cast<GpuTargetConfig>(&target_config);
-
-    if (gpu_target_config) {
-      // CUDA "CC" major value, -1 if not available.
-      se::CudaComputeCapability cuda_compute_capability{-1, -1};
-      // ROCm gfx arch,  "gfx000" if not available.
-      se::RocmComputeCapability rocm_compute_capability{"gfx000"};
-      if (auto* cuda = std::get_if<se::CudaComputeCapability>(
-              &gpu_target_config->gpu_version)) {
-        cuda_compute_capability = *cuda;
-      } else {
-        rocm_compute_capability =
-            std::get<se::RocmComputeCapability>(gpu_target_config->gpu_version);
-      }
-
-      TF_RETURN_IF_ERROR(CompileModuleToLlvmIrImpl(
-          module.get(), &llvm_context, target_triple_, data_layout_,
-          gpu_target_config->platform_name, options.PlatformId(),
-          gpu_target_config->gpu_device_info, cuda_compute_capability,
-          rocm_compute_capability, GetCanShareBuffer(), pointer_size_,
-          &compile_module_results));
-    } else {
-      CHECK(options.executor() != nullptr);
-      auto stream_exec = options.executor();
-      const stream_executor::DeviceDescription& device_description =
-          stream_exec->GetDeviceDescription();
-      TF_RETURN_IF_ERROR(CompileModuleToLlvmIrImpl(
-          module.get(), &llvm_context, target_triple_, data_layout_,
-          stream_exec->platform()->Name(), options.PlatformId(),
-          GetGpuDeviceInfo(stream_exec),
-          device_description.cuda_compute_capability(),
-          device_description.rocm_compute_capability(), GetCanShareBuffer(),
-          pointer_size_, &compile_module_results));
-    }
-
-    if (user_pre_optimization_hook_) {
-      user_pre_optimization_hook_(*compile_module_results.llvm_module);
-    }
-
-    using BackendCompileResult = std::pair<std::string, std::vector<uint8_t>>;
-    BackendCompileResult backend_result;
-    if (gpu_target_config) {
-      TF_ASSIGN_OR_RETURN(
-          backend_result,
-          CompileToTargetBinary(
-              module->config(), std::move(compile_module_results.llvm_module),
-              gpu_target_config->gpu_version, options.executor(),
-              {options.device_allocator()}, module.get()));
-    } else {
-      TF_ASSIGN_OR_RETURN(
-          backend_result,
-          CompileToTargetBinary(
-              module->config(), std::move(compile_module_results.llvm_module),
-              GetGpuVersion(options.executor()), options.executor(),
-              {options.device_allocator()}, module.get()));
-    }
-
-    auto& compiled_executable = compile_module_results.executable;
-
-    if (!std::holds_alternative<OwnedGpuRuntimeProgram>(compiled_executable)) {
-      return InternalError("Gpu runtime program was not provided");
-    }
-
-    // TODO(ezhulenev): Unify AOT compilation with GpuRuntimeExecutable::Create
-    // (see `gpu/runtime/executable.h`).
-
-    const auto& program = std::get<OwnedGpuRuntimeProgram>(compiled_executable);
-
-    // Options for the default XLA runtime compilation pipeline.
-    runtime::CompilationPipelineOptions copts;
-
-    // Populate mapping from XLA (SE) enums/structs type id to symbol names.
-    copts.populate_type_id_names = RegisterXlaGpuTypeIdNames;
-
-    // For passing LMHLO attributes as XLA (SE) enums/structs to custom calls.
-    copts.populate_attr_encodings = RegisterXlaGpuAttrEncoding;
-
-    // Options for constructing XLA runtime JitExecutable.
-    runtime::JitExecutable::Options opts;
-    opts.specialization = runtime::JitExecutable::Specialization::kDisabled;
-    opts.compiler.register_dialects =
-        runtime::RegisterDefaultXlaGpuRuntimeDialects;
-
-    // Register XLA Gpu runtime custom calls with the linker.
-    opts.compiler.symbols_binding = runtime::ToSymbolsBinding(
-        RegisterXlaGpuRuntimeCustomCalls, RegisterXlaGpuTypeIdNames);
-
-    opts.compiler.create_compilation_pipeline =
-        [copts](xla::runtime::PassManager& passes) {
-          runtime::CreateDefaultXlaGpuRuntimeCompilationPipeline(passes, copts);
-        };
-
-    // Instantiate new JitExecutable from the MLIR source.
-    auto jit_executable = runtime::JitExecutable::Instantiate(
-        program->module, program->entry_point, opts);
-    if (!jit_executable.ok())
-      return InternalError("Failed to compile XLA program: %s",
-                           jit_executable.status().message());
-
-    // For static shapes we can always serialize only the default executable.
-    runtime::Executable& executable = jit_executable->DefaultExecutable().get();
-
-    // Check if XLA runtime executable saved the compilation result.
-    std::unique_ptr<llvm::MemoryBuffer> obj_file = executable.obj_file();
-    if (!obj_file)
-      return InternalError("XLA runtime executable didn't save the obj file");
-
-    std::string data(obj_file->getBuffer().data(),
-                     obj_file->getBuffer().size());
-
-    results.emplace_back(std::make_unique<GpuXlaRuntimeAotCompilationResult>(
-        module->ToProto(), data, program->module,
-        compile_module_results.entry_func_attrs, backend_result.first,
-        backend_result.second, compile_module_results.constants));
-  }
-  return std::move(results);
-  */
-}
+                                const AotCompilationOptions& options) {}
 
 HloCostAnalysis::ShapeSizeFunction GpuCompiler::ShapeSizeBytesFunction() const {
   // Capture just the pointer size, not the entire GpuCompiler object.
   return [pointer_size = pointer_size_](const Shape& shape) {
     return GetSizeOfShape(shape, pointer_size);
   };
-}
-/*
-StatusOr<std::unique_ptr<AotCompilationResult>> GpuCompiler::Export(
-    Executable* executable) const {
-  auto* gpu_executable = tensorflow::down_cast<GpuExecutable*>(executable);
-  if (!gpu_executable) return Internal("GpuExecutable is null");
-  HloModuleProto module_proto = gpu_executable->module().ToProto();
-  TF_ASSIGN_OR_RETURN(auto obj_file, gpu_executable->GetObjFile());
-  TF_ASSIGN_OR_RETURN(auto mlir_module, gpu_executable->GetMlirModule());
-  xla::EntryFunctionAttributes entry_func_attrs =
-      gpu_executable->entry_func_attrs();
-  auto text = gpu_executable->text();
-  auto binary = gpu_executable->binary();
-
-  std::unique_ptr<AotCompilationResult> result =
-      std::make_unique<xla::gpu::GpuXlaRuntimeAotCompilationResult>(
-          module_proto, obj_file, mlir_module, entry_func_attrs, text, binary,
-          gpu_executable->constants());
-  return result;
-}
-*/
-StatusOr<std::unique_ptr<llvm::Module>> CompileModuleToLlvmIr(
-    HloModule* hlo_module, llvm::LLVMContext* llvm_context,
-    const std::string& target_triple, const std::string& data_layout,
-    const std::string& platform_name, const se::Platform::Id platform_id,
-    GpuDeviceInfo gpu_device_info,
-    se::CudaComputeCapability cuda_compute_capability,
-    se::RocmComputeCapability rocm_compute_capability, int pointer_size) {
-  CompileModuleResults results;
-  TF_RETURN_IF_ERROR(CompileModuleToLlvmIrImpl(
-      hlo_module, llvm_context, target_triple, data_layout, platform_name,
-      platform_id, gpu_device_info, cuda_compute_capability,
-      rocm_compute_capability, DummyCanShareBufferFunction, pointer_size,
-      &results));
-  return std::move(results.llvm_module);
-}
-
-// Analyze the function signature to reconstruct a vector of BufferAllocation
-// objects, as well as other output information.
-//
-// This function also serves as a half-baked verifier for function arg
-// attributes, since a full verifier doens't exist yet.
-static Status GetMlirAllocationInfo(mlir::func::FuncOp func,
-                                    std::vector<BufferAllocation>* allocations,
-                                    OutputInfoMap* output_info,
-                                    Shape* output_shape,
-                                    EntryFunctionAttributes* entry_func_attrs) {
-  CHECK(allocations->empty());
-  allocations->reserve(func.getNumArguments());
-
-  std::vector<int64_t> buffer_sizes;
-  for (int i = 0; i < func.getNumArguments(); i++) {
-    mlir::BlockArgument arg = func.getArgument(i);
-
-    TF_RET_CHECK(arg.getType().isa<mlir::ShapedType>());
-    mlir::ShapedType type = arg.getType().cast<mlir::ShapedType>();
-    TF_ASSIGN_OR_RETURN(auto element_type_bytes,
-                        GetElementTypeBytes(type.getElementType()));
-    size_t size = type.getNumElements() * element_type_bytes;
-    buffer_sizes.push_back(size);
-  }
-
-  for (int i = 0; i < func.getNumArguments(); i++) {
-    llvm::ArrayRef<mlir::NamedAttribute> attrs =
-        mlir::function_interface_impl::getArgAttrs(func, i);
-    for (const mlir::NamedAttribute& attr : attrs) {
-      TF_RET_CHECK(attr.getName() == "lmhlo.params" ||
-                   attr.getName() == "lmhlo.param_shape_index" ||
-                   attr.getName() == "lmhlo.constant_name" ||
-                   attr.getName() == "lmhlo.must_alias" ||
-                   attr.getName() == "lmhlo.output_index");
-    }
-  }
-
-  // Encode buffer parameter metadata in a proto for persisting, because BEF
-  // doesn't persist function attributes.
-  for (int i = 0; i < func.getNumArguments(); i++) {
-    auto buffer = entry_func_attrs->add_buffers();
-    if (auto param_attr = func.getArgAttr(i, "lmhlo.params")) {
-      buffer->set_lmhlo_params_present(true);
-      buffer->set_lmhlo_params(param_attr.cast<mlir::IntegerAttr>().getInt());
-    }
-    if (auto shape_index_attr = func.getArgAttr(i, "lmhlo.param_shape_index")) {
-      auto param_shape_index = buffer->mutable_lmhlo_param_shape_index();
-      for (const llvm::APInt& element :
-           shape_index_attr.cast<mlir::DenseIntElementsAttr>()) {
-        param_shape_index->add_indices(element.getSExtValue());
-      }
-    }
-    if (auto constant_name_attr = func.getArgAttr(i, "lmhlo.constant_name")) {
-      buffer->set_lmhlo_constant_name(
-          constant_name_attr.cast<mlir::StringAttr>().str());
-    }
-    if (func.getArgAttr(i, "lmhlo.must_alias")) {
-      buffer->set_lmhlo_must_alias(true);
-    }
-    if (auto output_index_attr = func.getArgAttr(i, "lmhlo.output_index")) {
-      auto output_index = buffer->mutable_lmhlo_output_index();
-      for (const llvm::APInt& element :
-           output_index_attr.cast<mlir::DenseIntElementsAttr>()) {
-        output_index->add_indices(element.getSExtValue());
-      }
-    }
-  }
-  entry_func_attrs->set_result_xla_shape(
-      func->getAttrOfType<mlir::StringAttr>("result_xla_shape")
-          .getValue()
-          .str());
-
-  return GpuExecutable::SetUpMlirAllocation(func, buffer_sizes, allocations,
-                                            output_info, output_shape);
-}
-
-StatusOr<std::unique_ptr<Executable>> CompileLmhloToExecutable(
-    GpuCompiler* compiler, mlir::ModuleOp module, std::string module_name,
-    const HloModuleConfig& module_config,
-    const Compiler::CompileOptions& options,
-    absl::string_view entry_function_name, se::StreamExecutor* stream_exec,
-    std::unique_ptr<llvm::Module> llvm_module,
-    IrEmitterContext* ir_emitter_context) {
-  mlir::func::FuncOp entry_function =
-      mlir::cast<mlir::func::FuncOp>(module.lookupSymbol(llvm::StringRef(
-          entry_function_name.data(), entry_function_name.size())));
-
-  std::vector<BufferAllocation> allocations;
-  OutputInfoMap output_info;
-  Shape output_shape;
-  EntryFunctionAttributes entry_func_attrs;
-  TF_RETURN_IF_ERROR(GetMlirAllocationInfo(entry_function, &allocations,
-                                           &output_info, &output_shape,
-                                           &entry_func_attrs));
-
-  TF_RET_CHECK(!allocations.empty());
-
-  ir_emitter_context->set_allocations(allocations);
-
-  TF_ASSIGN_OR_RETURN(auto ir_emitter, IrEmitterUnnested::Create(
-                                           module_config, ir_emitter_context));
-  TF_RETURN_IF_ERROR(ir_emitter->EmitLmhloRegion(&entry_function.getBody()));
-
-  bool supports_runtime_managed_constants =
-      // TODO(b/218907125): Implement this feature for ROCm as well.
-      compiler->PlatformId() != se::rocm::kROCmPlatformId;
-  if (supports_runtime_managed_constants) {
-    // Remove these globals from the generated code to indicate that XLA is
-    // responsible for allocating and initializing them.
-    RemoveUnusedAndUninitializedGlobals(ir_emitter_context->llvm_module(),
-                                        ir_emitter_context->constants());
-  }
-
-  using BackendCompileResult = std::pair<std::string, std::vector<uint8_t>>;
-  TF_ASSIGN_OR_RETURN(BackendCompileResult backend_result,
-                      compiler->CompileToTargetBinary(
-                          module_config, std::move(llvm_module),
-                          compiler->GetGpuVersion(stream_exec), stream_exec,
-                          options, /*debug_module=*/nullptr));
-
-  if (IsXlaRuntimeExecutableEnabled(module_config)) {
-    std::vector<int64_t> buffer_sizes;
-    llvm::transform(
-        allocations, std::back_inserter(buffer_sizes),
-        [](const BufferAllocation& allocation) { return allocation.size(); });
-    TF_ASSIGN_OR_RETURN(
-        auto executable,
-        LowerToJitRt(module, entry_function.getName(), buffer_sizes,
-                     module_config, ir_emitter->ConsumeThunkSequence()));
-
-    GpuVersion gpu_version = compiler->GetGpuVersion(stream_exec);
-    return GpuExecutable::Create(
-        {std::move(backend_result.first), std::move(backend_result.second),
-         gpu_version, std::move(executable), entry_func_attrs,
-         std::move(ir_emitter_context->constants()), std::move(output_info),
-         module_name, output_shape, std::move(allocations)});
-  }
-
-  auto thunk_sequence = ir_emitter->ConsumeThunkSequence();
-
-  GpuVersion gpu_version = compiler->GetGpuVersion(stream_exec);
-  return GpuExecutable::Create(
-      {std::move(backend_result.first), std::move(backend_result.second),
-       gpu_version, std::move(thunk_sequence), entry_func_attrs,
-       std::move(ir_emitter_context->constants()), std::move(output_info),
-       module_name, output_shape, std::move(allocations)});
 }
 
 }  // namespace gpu

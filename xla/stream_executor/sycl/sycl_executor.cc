@@ -56,8 +56,6 @@ limitations under the License.
 #include "xla/stream_executor/sycl/sycl_event.h"
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
-#include "xla/stream_executor/sycl/sycl_timer.h"
-#include "xla/stream_executor/timer.h"
 
 // LOG(ERROR) uses a const named ERROR, so a macro with the same name is
 // always unwanted. This happens on Windows that defines such a macro.
@@ -86,10 +84,10 @@ static GpuEvent* AsGpuEvent(Event* event) {
 
 // Given a platform-independent timer datatype, returns the internal CUDA
 // platform implementation pointer.
-static GpuTimer* AsGpuTimer(Timer* timer) {
-  DCHECK(timer != nullptr);
-  return static_cast<GpuTimer*>(timer->implementation());
-}
+// static GpuTimer* AsGpuTimer(Timer* timer) {
+//   DCHECK(timer != nullptr);
+//   return static_cast<GpuTimer*>(timer->implementation());
+// }
 
 GpuExecutor::~GpuExecutor() {
   CHECK(kernel_to_gpu_binary_.empty()) << "GpuExecutor has live kernels.";
@@ -667,13 +665,13 @@ void GpuExecutor::DeallocateStream(Stream* stream) {
   gpu_stream->Destroy();
 }
 
-bool GpuExecutor::AllocateTimer(Timer* timer) {
-  return AsGpuTimer(timer)->Init();
-}
+// bool GpuExecutor::AllocateTimer(Timer* timer) {
+//   return AsGpuTimer(timer)->Init();
+// }
 
-void GpuExecutor::DeallocateTimer(Timer* timer) {
-  AsGpuTimer(timer)->Destroy();
-}
+// void GpuExecutor::DeallocateTimer(Timer* timer) {
+//   AsGpuTimer(timer)->Destroy();
+// }
 
 bool GpuExecutor::CreateStreamDependency(Stream* dependent, Stream* other) {
   ITEX_GPUStream* stream_handle1 = AsGpuStreamValue(dependent);
@@ -682,13 +680,13 @@ bool GpuExecutor::CreateStreamDependency(Stream* dependent, Stream* other) {
   return true;
 }
 
-bool GpuExecutor::StartTimer(Stream* stream, Timer* timer) {
-  return AsGpuTimer(timer)->Start(AsGpuStream(stream));
-}
+// bool GpuExecutor::StartTimer(Stream* stream, Timer* timer) {
+//   return AsGpuTimer(timer)->Start(AsGpuStream(stream));
+// }
 
-bool GpuExecutor::StopTimer(Stream* stream, Timer* timer) {
-  return AsGpuTimer(timer)->Stop(AsGpuStream(stream));
-}
+// bool GpuExecutor::StopTimer(Stream* stream, Timer* timer) {
+//   return AsGpuTimer(timer)->Stop(AsGpuStream(stream));
+// }
 
 tsl::Status GpuExecutor::BlockHostUntilDone(Stream* stream) {
   ITEX_GPUStream* stream_handle = AsGpuStreamValue(stream);
@@ -750,10 +748,10 @@ GpuExecutor::GetStreamImplementation() {
   return std::unique_ptr<internal::StreamInterface>(new GpuStream(this));
 }
 
-std::unique_ptr<internal::TimerInterface>
-GpuExecutor::GetTimerImplementation() {
-  return std::unique_ptr<internal::TimerInterface>(new GpuTimer(this));
-}
+// std::unique_ptr<internal::TimerInterface>
+// GpuExecutor::GetTimerImplementation() {
+//   return std::unique_ptr<internal::TimerInterface>(new GpuTimer(this));
+// }
 
 #define L0_SAFE_CALL(call)                 \
   {                                        \

@@ -158,7 +158,7 @@ auto DumpCallbackForModule(std::string module_identifier) {
 void RunOptimizationPipeline(llvm::Module* module,
                              const HloModuleConfig& hlo_module_config,
                              llvm::TargetMachine* target_machine) {
-  llvm::Optional<llvm::PGOOptions> PGOOpt;
+  std::optional<llvm::PGOOptions> PGOOpt;
   llvm::PipelineTuningOptions PTO;
   PTO.LoopUnrolling = 1;
   PTO.LoopInterleaving = 1;

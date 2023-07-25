@@ -29,6 +29,7 @@ limitations under the License.
 #include "xla/service/gpu/ccl_utils.h"
 #include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/thunk.h"
+#include "xla/service/llvm_ir/llvm_util.h"
 #include "xla/translate/mhlo_to_hlo/attribute_exporter.h"
 #include "xla/xla_data.pb.h"
 
@@ -91,9 +92,10 @@ CclCollectiveConfig GetCclCollectiveConfigForMlir(
 }
 
 // Thunk base class for NCCL collective operations.
+// Thunk base class for NCCL collective operations.
 class CclCollectiveThunk : public Thunk {
  public:
-  using Thunk::Thunk;
+  CclCollectiveThunk(Kind kind, ThunkInfo thunk_info, bool is_sync);
 
   struct Buffer {
     int64_t element_count;
@@ -127,20 +129,26 @@ class CclCollectiveThunk : public Thunk {
   // When this is false, the ExecuteOnStream() call will simply return a status
   // error.
   static bool CclIsEnabled();
+  static Status CheckImplementable();
 
   // Logging support.
   static std::string GetDeviceString(const NcclExecuteParams& params);
 
+  AsyncExecutor* async_executor() { return async_.get(); }
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
  protected:
   virtual Status RunCclCollective(const ExecuteParams& params,
-                                  ncclComm_t comm) = 0;
+                                  se::Stream& stream, ncclComm_t comm) = 0;
   virtual const CclCollectiveConfig& config() const = 0;
 
  private:
+  bool IsAsync() const { return async_ != nullptr; }
   bool first_call_to_execute_ = true;
+  std::unique_ptr<AsyncExecutor> async_;  // null if not async.
 };
+
+Status IsValidOperand(mlir::Value operand, Thunk::Kind reduction_op);
 
 class CclCollectiveDoneThunk : public Thunk {
  public:
@@ -155,7 +163,26 @@ class CclCollectiveDoneThunk : public Thunk {
 
 // Returns if the given data type is supported by NCCL.
 // Note: Keep this in sync with ToNcclDataType().
-bool IsTypeSupportedByCcl(PrimitiveType element_type, Thunk::Kind reduction_op);
+bool IsTypeSupportedByNccl(PrimitiveType element_type,
+                           Thunk::Kind reduction_op);
+
+template <typename CclThunkType, typename OpT>
+Status AddOpDescription(Status status, OpT op, int64_t replica_count,
+                        int64_t partition_count) {
+  if (status.ok()) {
+    return status;
+  }
+  CollectiveOpGroupMode group_mode = CclThunkType::GetGroupMode(op);
+  return Status(
+      status.code(),
+      absl::StrFormat(
+          "%s\n"
+          "%s with replica_count: %d, partition_count: %d, group_mode: %s, "
+          "operand_count: %d\n%s",
+          status.message(), CclThunkType::GetHloOpName(), replica_count,
+          partition_count, CollectiveOpGroupModeToString(group_mode),
+          op->getNumOperands() / 2, llvm_ir::DumpToString(op.getOperation())));
+}
 
 // TODO(hanbinyoon): Consider moving to ccl_utils.h when deprecating Thunks.
 StatusOr<CclComm::Lock> LockCclComm(

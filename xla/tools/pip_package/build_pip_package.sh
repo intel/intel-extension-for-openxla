@@ -112,13 +112,13 @@ function prepare_src() {
   
   # xla
   cp xla/tools/pip_package/xla_setup.py ${XLA_TMPDIR}/setup.py
-  mkdir -p ${XLA_TMPDIR}/intel_extension_for_openxla/python
+  mkdir -p ${XLA_TMPDIR}/jax_plugins/openxla_xpu
   if [ -d ${XLA_TMPDIR}/xla ] ; then
-    mv -f ${XLA_TMPDIR}/xla/* ${XLA_TMPDIR}/intel_extension_for_openxla
-    cp -rf xla/python/* ${XLA_TMPDIR}/intel_extension_for_openxla/python
-    mv -f ${XLA_TMPDIR}/intel_extension_for_openxla/python/__init__.py ${XLA_TMPDIR}/intel_extension_for_openxla/__init__.py
-    # emit_version_info ${XLA_TMPDIR}/intel_extension_for_openxla/python/version.py
-    chmod +x ${XLA_TMPDIR}/intel_extension_for_openxla/__init__.py
+    ls -al ${XLA_TMPDIR}
+    mv -f ${XLA_TMPDIR}/xla/* ${XLA_TMPDIR}/jax_plugins/openxla_xpu/
+    cp -rf xla/python/* ${XLA_TMPDIR}/jax_plugins/openxla_xpu/
+    # emit_version_info ${XLA_TMPDIR}/jax_plugins/python/version.py
+    chmod +x ${XLA_TMPDIR}/jax_plugins/openxla_xpu/__init__.py
     rm -rf ${XLA_TMPDIR}/xla
   fi
 }

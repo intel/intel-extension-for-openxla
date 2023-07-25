@@ -43,10 +43,12 @@ limitations under the License.
 
 namespace xla {
 namespace gpu {
+using mlir::lmhlo_gpu::AllReduceStartOp;
+using mlir::lmhlo_gpu::ReduceScatterStartOp;
 
 Status RunAllReduce(ReductionKind reduction_kind,
                     std::vector<DeviceBufferPair>& buffers, se::Stream& stream,
-                    ncclComm_t comm, bool allow_all_reduce_kernel) {
+                    ncclComm_t comm) {
   int device_ordinal = stream.parent()->device_ordinal();
   VLOG(3) << "Performing all-reduce from device ordinal: " << device_ordinal;
 
@@ -75,12 +77,6 @@ Status RunAllReduce(ReductionKind reduction_kind,
 }
 
 namespace {
-
-bool IsValidOperand(mlir::Value operand, Thunk::Kind reduction_op) {
-  Shape shape = TypeToShape(operand.getType());
-  return LayoutUtil::IsDenseArray(shape) &&
-         IsTypeSupportedByCcl(shape.element_type(), reduction_op);
-}
 
 // Generally, the reduction op should be the only operation in the block, except
 // the terminator. However, if the type is bf16, the `FloatNormalization`
@@ -133,14 +129,17 @@ StatusOr<mlir::Operation*> FindReductionOp(mlir::Block& block) {
 namespace impl {
 
 template <typename OpT>
-bool CanImplement(OpT op, Thunk::Kind reduction_op) {
-  return absl::c_all_of(op.getInputs(),
-                        [reduction_op](mlir::Value operand) {
-                          return IsValidOperand(operand, reduction_op);
-                        }) &&
-         CclAllReduceReduceScatterThunkBase::MatchAllReduceComputation(
-             op.getComputation())
-             .has_value();
+Status CheckImplementable(OpT op, Thunk::Kind reduction_op) {
+  TF_RETURN_IF_ERROR(CclCollectiveThunk::CheckImplementable());
+  for (mlir::Value operand : op.getInputs()) {
+    TF_RETURN_IF_ERROR(IsValidOperand(operand, reduction_op));
+  }
+  if (!CclAllReduceReduceScatterThunkBase::MatchAllReduceComputation(
+           op.getComputation())
+           .has_value()) {
+    return tsl::errors::Unimplemented("Unrecognized reduction computation");
+  }
+  return OkStatus();
 }
 
 template <typename OpT>
@@ -215,8 +214,8 @@ CclAllReduceReduceScatterThunkBase::MatchAllReduceComputation(
 
 CclAllReduceReduceScatterThunkBase::CclAllReduceReduceScatterThunkBase(
     Thunk::Kind kind, ThunkInfo thunk_info, CclAllReduceConfig config,
-    std::vector<Buffer> buffers)
-    : CclCollectiveThunk(kind, thunk_info),
+    std::vector<Buffer> buffers, bool is_sync)
+    : CclCollectiveThunk(kind, thunk_info, is_sync),
       config_(std::move(config)),
       buffers_(std::move(buffers)) {
   CHECK_EQ(config_.config.operand_count, buffers_.size());
@@ -230,47 +229,22 @@ Status CclAllReduceThunkBase::RunAllReduce(const ExecuteParams& params,
       ConvertToDeviceBuffers(params, buffers_,
                              config_.config.operand_element_type));
   return ::xla::gpu::RunAllReduce(config_.reduction_kind, device_buffers,
-                                  stream, comm,
-                                  /*allow_all_reduce_kernel=*/false);
+                                  stream, comm);
 }
 
-CclAllReduceThunk::CclAllReduceThunk(ThunkInfo thunk_info,
-                                     mlir::lmhlo::AllReduceOp op,
-                                     std::vector<Buffer> buffers)
-    : CclAllReduceThunkBase(Thunk::kNcclAllReduce, thunk_info,
-                            impl::GetCclAllReduceConfig(op),
-                            std::move(buffers)) {}
+CclAllReduceStartThunk::CclAllReduceStartThunk(ThunkInfo thunk_info,
+                                               AllReduceStartOp op,
+                                               std::vector<Buffer> buffers)
+    : CclAllReduceReduceScatterThunkBase(Thunk::kNcclAllReduceStart, thunk_info,
+                                         impl::GetCclAllReduceConfig(op),
+                                         std::move(buffers), op.getIsSync()) {}
 
-bool CclAllReduceThunk::CanImplement(mlir::lmhlo::AllReduceOp op) {
-  return impl::CanImplement(op, Thunk::kNcclAllReduce);
-}
-
-bool CclAllReduceThunk::IsDegenerate(mlir::lmhlo::AllReduceOp op,
-                                     int64_t replica_count,
-                                     int64_t partition_count) {
-  return impl::IsDegenerate(op, replica_count, partition_count);
-}
-
-CollectiveOpGroupMode CclAllReduceThunk::GetGroupMode(
-    mlir::lmhlo::AllReduceOp op) {
-  return impl::GetGroupMode(op);
-}
-
-Status CclAllReduceThunk::RunCclCollective(const ExecuteParams& params,
-                                           ncclComm_t comm) {
-  return RunAllReduce(params, *params.stream, comm);
-}
-
-CclAllReduceStartThunk::CclAllReduceStartThunk(
-    ThunkInfo thunk_info, mlir::lmhlo_gpu::AllReduceStartOp op,
-    std::vector<Buffer> buffers)
-    : CclAllReduceThunkBase(Thunk::kNcclAllReduceStart, thunk_info,
-                            impl::GetCclAllReduceConfig(op),
-                            std::move(buffers)) {}
-
-bool CclAllReduceStartThunk::CanImplement(
-    mlir::lmhlo_gpu::AllReduceStartOp op) {
-  return impl::CanImplement(op, Thunk::kNcclAllReduceStart);
+Status CclAllReduceStartThunk::CheckImplementable(AllReduceStartOp op,
+                                                  int64_t replica_count,
+                                                  int64_t partition_count) {
+  return AddOpDescription<CclAllReduceStartThunk>(
+      impl::CheckImplementable(op, Thunk::kNcclAllReduceStart), op,
+      replica_count, partition_count);
 }
 
 bool CclAllReduceStartThunk::IsDegenerate(mlir::lmhlo_gpu::AllReduceStartOp op,
@@ -285,12 +259,14 @@ CollectiveOpGroupMode CclAllReduceStartThunk::GetGroupMode(
 }
 
 Status CclAllReduceStartThunk::RunCclCollective(const ExecuteParams& params,
+                                                se::Stream& stream,
                                                 ncclComm_t comm) {
-  return async_.Execute(
-      [this](const ExecuteParams& params, se::Stream& stream, ncclComm_t comm) {
-        return RunAllReduce(params, stream, comm);
-      },
-      params, comm);
+  TF_ASSIGN_OR_RETURN(
+      std::vector<DeviceBufferPair> device_buffers,
+      ConvertToDeviceBuffers(params, buffers_,
+                             config_.config.operand_element_type));
+  return ::xla::gpu::RunAllReduce(config_.reduction_kind, device_buffers,
+                                  stream, comm);
 }
 
 Status CclReduceScatterThunkBase::RunReduceScatter(const ExecuteParams& params,
@@ -304,44 +280,19 @@ Status CclReduceScatterThunkBase::RunReduceScatter(const ExecuteParams& params,
                                       stream, comm);
 }
 
-CclReduceScatterThunk::CclReduceScatterThunk(
-    ThunkInfo thunk_info, mlir::lmhlo::ReduceScatterOp op,
-    std::vector<CclAllReduceThunk::Buffer> buffers)
-    : CclReduceScatterThunkBase(Thunk::kNcclReduceScatter, thunk_info,
-                                impl::GetCclAllReduceConfig(op),
-                                std::move(buffers)) {}
-
-/*static*/ bool CclReduceScatterThunk::CanImplement(
-    mlir::lmhlo::ReduceScatterOp op) {
-  return impl::CanImplement(op, Thunk::kNcclReduceScatter);
-}
-
-/*static*/ bool CclReduceScatterThunk::IsDegenerate(
-    mlir::lmhlo::ReduceScatterOp op, int64_t replica_count,
-    int64_t partition_count) {
-  return impl::IsDegenerate(op, replica_count, partition_count);
-}
-
-/*static*/ CollectiveOpGroupMode CclReduceScatterThunk::GetGroupMode(
-    mlir::lmhlo::ReduceScatterOp op) {
-  return impl::GetGroupMode(op);
-}
-
-Status CclReduceScatterThunk::RunCclCollective(const ExecuteParams& params,
-                                               ncclComm_t comm) {
-  return RunReduceScatter(params, *params.stream, comm);
-}
-
 CclReduceScatterStartThunk::CclReduceScatterStartThunk(
-    ThunkInfo thunk_info, mlir::lmhlo_gpu::ReduceScatterStartOp op,
-    std::vector<CclAllReduceThunk::Buffer> buffers)
-    : CclReduceScatterThunkBase(Thunk::kNcclReduceScatterStart, thunk_info,
-                                impl::GetCclAllReduceConfig(op),
-                                std::move(buffers)) {}
+    ThunkInfo thunk_info, ReduceScatterStartOp op,
+    std::vector<CclCollectiveThunk::Buffer> buffers)
+    : CclAllReduceReduceScatterThunkBase(
+          Thunk::kNcclReduceScatterStart, thunk_info,
+          impl::GetCclAllReduceConfig(op), std::move(buffers), op.getIsSync()) {
+}
 
-/*static*/ bool CclReduceScatterStartThunk::CanImplement(
-    mlir::lmhlo_gpu::ReduceScatterStartOp op) {
-  return impl::CanImplement(op, Thunk::kNcclReduceScatterStart);
+/*static*/ Status CclReduceScatterStartThunk::CheckImplementable(
+    ReduceScatterStartOp op, int64_t replica_count, int64_t partition_count) {
+  return AddOpDescription<CclReduceScatterStartThunk>(
+      impl::CheckImplementable(op, Thunk::kNcclReduceScatterStart), op,
+      replica_count, partition_count);
 }
 
 /*static*/ bool CclReduceScatterStartThunk::IsDegenerate(
@@ -356,12 +307,14 @@ CclReduceScatterStartThunk::CclReduceScatterStartThunk(
 }
 
 Status CclReduceScatterStartThunk::RunCclCollective(const ExecuteParams& params,
+                                                    se::Stream& stream,
                                                     ncclComm_t comm) {
-  return async_.Execute(
-      [this](const ExecuteParams& params, se::Stream& stream, ncclComm_t comm) {
-        return RunReduceScatter(params, stream, comm);
-      },
-      params, comm);
+  TF_ASSIGN_OR_RETURN(
+      std::vector<DeviceBufferPair> device_buffers,
+      ConvertToDeviceBuffers(params, buffers_,
+                             config_.config.operand_element_type));
+  return ::xla::gpu::RunReduceScatter(config_.reduction_kind, device_buffers,
+                                      stream, comm);
 }
 
 Status RunReduceScatter(ReductionKind reduction_kind,

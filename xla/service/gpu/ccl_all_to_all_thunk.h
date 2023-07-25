@@ -33,44 +33,8 @@ struct CclAllToAllConfig {
   bool has_split_dimension;
 };
 
-// Base class for thunks that performs a NCCL-based All-to-All among CUDA
-// GPU-based replicas.
-class CclAllToAllThunkBase : public CclCollectiveThunk {
- public:
-  CclAllToAllThunkBase(Kind kind, ThunkInfo thunk_info,
-                       CclAllToAllConfig config, std::vector<Buffer> buffers);
-
- protected:
-  Status RunAllToAll(const ExecuteParams& params, se::Stream& stream,
-                     ncclComm_t comm);
-  const CclCollectiveConfig& config() const override { return config_.config; }
-
- private:
-  const CclAllToAllConfig config_;
-  const std::vector<Buffer> buffers_;
-};
-
-class CclAllToAllThunk : public CclAllToAllThunkBase {
- public:
-  CclAllToAllThunk(ThunkInfo thunk_info, mlir::lmhlo::AllToAllOp op,
-                   std::vector<Buffer> buffers);
-
-  // Returns whether the given instruction can be lowered to a nccl all-to-all
-  // call.
-  static bool CanImplement(mlir::lmhlo::AllToAllOp op);
-
-  static const char* GetName() { return "AllToAll"; }
-  static bool IsDegenerate(mlir::lmhlo::AllToAllOp op, int64_t replica_count,
-                           int64_t partition_count);
-  static CollectiveOpGroupMode GetGroupMode(mlir::lmhlo::AllToAllOp op);
-  static constexpr bool IsAsync() { return false; }
-
- protected:
-  Status RunCclCollective(const ExecuteParams& params,
-                          ncclComm_t comm) override;
-};
-
-class CclAllToAllStartThunk : public CclAllToAllThunkBase {
+// Thunk that performs a NCCL-based All-to-All among CUDA GPU-based replicas.
+class CclAllToAllStartThunk : public CclCollectiveThunk {
  public:
   CclAllToAllStartThunk(ThunkInfo thunk_info,
                         mlir::lmhlo_gpu::AllToAllStartOp op,
@@ -78,23 +42,24 @@ class CclAllToAllStartThunk : public CclAllToAllThunkBase {
 
   // Returns whether the given instruction can be lowered to a nccl all-to-all
   // call.
-  static bool CanImplement(mlir::lmhlo_gpu::AllToAllStartOp op);
+  static Status CheckImplementable(mlir::lmhlo_gpu::AllToAllStartOp op,
+                                   int64_t replica_count,
+                                   int64_t partition_count);
 
-  static const char* GetName() { return "AllToAllStart"; }
+  static const char* GetHloOpName() { return "all-to-all-start"; }
   static bool IsDegenerate(mlir::lmhlo_gpu::AllToAllStartOp op,
                            int64_t replica_count, int64_t partition_count);
   static CollectiveOpGroupMode GetGroupMode(
       mlir::lmhlo_gpu::AllToAllStartOp op);
 
-  static constexpr bool IsAsync() { return true; }
-  AsyncExecutor& async_executor() { return async_; }
-
  protected:
-  Status RunCclCollective(const ExecuteParams& params,
+  const CclCollectiveConfig& config() const override { return config_.config; }
+  Status RunCclCollective(const ExecuteParams& params, se::Stream& stream,
                           ncclComm_t comm) override;
 
  private:
-  AsyncExecutor async_;
+  const CclAllToAllConfig config_;
+  const std::vector<Buffer> buffers_;
 };
 
 class CclAllToAllDoneThunk : public CclCollectiveDoneThunk {

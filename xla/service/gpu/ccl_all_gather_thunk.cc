@@ -32,6 +32,7 @@ limitations under the License.
 
 namespace xla {
 namespace gpu {
+using mlir::lmhlo_gpu::AllGatherStartOp;
 
 namespace impl {
 template <typename OpT>
@@ -40,101 +41,22 @@ CclAllGatherConfig GetCclAllGatherConfig(OpT op) {
   config.config = GetCclCollectiveConfigForMlir(op, op.getUseGlobalDeviceIds());
   return config;
 }
-
-template <typename OpT>
-bool CanImplement(OpT op) {
-  return absl::c_all_of(op.getInputs(), [&](mlir::Value operand) {
+Status CheckImplementable(AllGatherStartOp op) {
+  TF_RETURN_IF_ERROR(CclCollectiveThunk::CheckImplementable());
+  for (mlir::Value operand : op.getInputs()) {
+    TF_RETURN_IF_ERROR(IsValidOperand(operand, Thunk::kNcclAllGather));
     Shape shape = GetShape(operand);
-    return LayoutUtil::IsDenseArray(shape) &&
-           IsTypeSupportedByCcl(shape.element_type(), Thunk::kNcclAllGather) &&
-           LayoutUtil::MinorToMajor(shape).back() == op.getAllGatherDimension();
-  });
+    if (!ShapeUtil::IsEffectivelyMostMajorDimension(
+            shape, op.getAllGatherDimension())) {
+      return tsl::errors::Unimplemented(absl::StrFormat(
+          "all-gather dim %u is not the most major in input shape %s",
+          op.getAllGatherDimension(), shape.ToString(/*print_layout=*/true)));
+    }
+  }
+  return OkStatus();
 }
+
 }  // namespace impl
-
-CclAllGatherThunkBase::CclAllGatherThunkBase(Kind kind, ThunkInfo thunk_info,
-                                             CclAllGatherConfig config,
-                                             std::vector<Buffer> buffers)
-    : CclCollectiveThunk(kind, thunk_info),
-      config_(std::move(config)),
-      buffers_(std::move(buffers)) {
-  CHECK_EQ(config_.config.operand_count, buffers_.size());
-}
-
-Status CclAllGatherThunkBase::RunAllGather(const ExecuteParams& params,
-                                           se::Stream& stream,
-                                           ncclComm_t comm) {
-  TF_ASSIGN_OR_RETURN(
-      std::vector<DeviceBufferPair> device_buffers,
-      ConvertToDeviceBuffers(params, buffers_,
-                             config_.config.operand_element_type));
-  return xla::gpu::RunAllGather(device_buffers, stream, comm);
-}
-
-CclAllGatherThunk::CclAllGatherThunk(
-    ThunkInfo thunk_info, mlir::lmhlo::AllGatherOp op,
-    std::vector<CclAllGatherThunk::Buffer> buffers)
-    : CclAllGatherThunkBase(Thunk::kNcclAllGather, thunk_info,
-                            impl::GetCclAllGatherConfig(op),
-                            std::move(buffers)) {}
-
-/*static*/ bool CclAllGatherThunk::CanImplement(mlir::lmhlo::AllGatherOp op) {
-  return impl::CanImplement(op);
-}
-
-/*static*/ bool CclAllGatherThunk::IsDegenerate(mlir::lmhlo::AllGatherOp op,
-                                                int64_t replica_count,
-                                                int64_t partition_count) {
-  return impl::GetCclAllGatherConfig(op).config.IsDegenerate(replica_count,
-                                                             partition_count);
-}
-
-/*static*/ CollectiveOpGroupMode CclAllGatherThunk::GetGroupMode(
-    mlir::lmhlo::AllGatherOp op) {
-  return impl::GetCclAllGatherConfig(op).config.group_mode;
-}
-
-Status CclAllGatherThunk::RunCclCollective(const ExecuteParams& params,
-                                           ncclComm_t comm) {
-  return RunAllGather(params, *params.stream, comm);
-}
-
-CclAllGatherStartThunk::CclAllGatherStartThunk(
-    ThunkInfo thunk_info, mlir::lmhlo_gpu::AllGatherStartOp op,
-    std::vector<CclAllGatherThunk::Buffer> buffers)
-    : CclAllGatherThunkBase(Thunk::kNcclAllGatherStart, thunk_info,
-                            impl::GetCclAllGatherConfig(op),
-                            std::move(buffers)) {}
-
-/*static*/ bool CclAllGatherStartThunk::CanImplement(
-    mlir::lmhlo_gpu::AllGatherStartOp op) {
-  return impl::CanImplement(op);
-}
-
-/*static*/ bool CclAllGatherStartThunk::IsDegenerate(
-    mlir::lmhlo_gpu::AllGatherStartOp op, int64_t replica_count,
-    int64_t partition_count) {
-  return impl::GetCclAllGatherConfig(op).config.IsDegenerate(replica_count,
-                                                             partition_count);
-}
-
-/*static*/ CollectiveOpGroupMode CclAllGatherStartThunk::GetGroupMode(
-    mlir::lmhlo_gpu::AllGatherStartOp op) {
-  return impl::GetCclAllGatherConfig(op).config.group_mode;
-}
-
-Status CclAllGatherStartThunk::RunCclCollective(const ExecuteParams& params,
-                                                ncclComm_t comm) {
-  return async_.Execute(
-      [this](const ExecuteParams& params, se::Stream& stream, ncclComm_t comm) {
-        return RunAllGather(params, stream, comm);
-      },
-      params, comm);
-}
-
-CclAllGatherDoneThunk::CclAllGatherDoneThunk(
-    ThunkInfo thunk_info, CclCollectiveThunk::AsyncExecutor& async)
-    : CclCollectiveDoneThunk(Thunk::kNcclAllGatherDone, thunk_info, async) {}
 
 Status RunAllGather(std::vector<DeviceBufferPair>& buffers, se::Stream& stream,
                     ncclComm_t comm) {
@@ -164,6 +86,44 @@ Status RunAllGather(std::vector<DeviceBufferPair>& buffers, se::Stream& stream,
 
   VLOG(3) << "Done performing all-gather for ordinal: " << device_ordinal;
   return OkStatus();
+}
+
+CclAllGatherStartThunk::CclAllGatherStartThunk(
+    ThunkInfo thunk_info, AllGatherStartOp op,
+    std::vector<CclCollectiveThunk::Buffer> buffers)
+    : CclCollectiveThunk(Thunk::kNcclAllGatherStart, thunk_info,
+                         op.getIsSync()),
+      config_(impl::GetCclAllGatherConfig(op)),
+      buffers_(std::move(buffers)) {
+  CHECK_EQ(config_.config.operand_count, buffers_.size());
+}
+
+/*static*/ Status CclAllGatherStartThunk::CheckImplementable(
+    AllGatherStartOp op, int64_t replica_count, int64_t partition_count) {
+  return AddOpDescription<CclAllGatherStartThunk>(
+      impl::CheckImplementable(op), op, replica_count, partition_count);
+}
+
+/*static*/ bool CclAllGatherStartThunk::IsDegenerate(
+    mlir::lmhlo_gpu::AllGatherStartOp op, int64_t replica_count,
+    int64_t partition_count) {
+  return impl::GetCclAllGatherConfig(op).config.IsDegenerate(replica_count,
+                                                             partition_count);
+}
+
+/*static*/ CollectiveOpGroupMode CclAllGatherStartThunk::GetGroupMode(
+    mlir::lmhlo_gpu::AllGatherStartOp op) {
+  return impl::GetCclAllGatherConfig(op).config.group_mode;
+}
+
+Status CclAllGatherStartThunk::RunCclCollective(const ExecuteParams& params,
+                                                se::Stream& stream,
+                                                ncclComm_t comm) {
+  TF_ASSIGN_OR_RETURN(
+      std::vector<DeviceBufferPair> device_buffers,
+      ConvertToDeviceBuffers(params, buffers_,
+                             config_.config.operand_element_type));
+  return xla::gpu::RunAllGather(device_buffers, stream, comm);
 }
 
 }  // namespace gpu

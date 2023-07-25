@@ -34,17 +34,18 @@ limitations under the License.
 
 namespace xla {
 namespace gpu {
+using mlir::lmhlo_gpu::CollectivePermuteStartOp;
+
 namespace impl {
 
-template <typename OpT>
-CollectiveOpGroupMode GetGroupMode(OpT op) {
+CollectiveOpGroupMode GetGroupMode(CollectivePermuteStartOp op) {
   return GetCollectiveOpGroupMode(op.getChannelId().has_value(), std::nullopt)
       .value();
 }
 
-template <typename OpT>
 CclCollectivePermuteConfig GetCclCollectivePermuteConfig(
-    OpT op, int64_t replica_count, int64_t partition_count) {
+    CollectivePermuteStartOp op, int64_t replica_count,
+    int64_t partition_count) {
   CclCollectivePermuteConfig collective_permute_config;
   auto& config = collective_permute_config.config;
 
@@ -84,8 +85,8 @@ CclCollectivePermuteConfig GetCclCollectivePermuteConfig(
 
 // The collective permute is degenerate if all source-target pairs are identity,
 // and all the IDs appear in the list.
-template <typename OpT>
-bool IsDegenerate(OpT op, int64_t replica_count, int64_t partition_count) {
+bool IsDegenerate(CollectivePermuteStartOp op, int64_t replica_count,
+                  int64_t partition_count) {
   const std::vector<std::pair<int64_t, int64_t>> source_target_pairs =
       ConvertNx2Attribute(op.getSourceTargetPairs()).value();
   // Each ID can appear only once as a source and as a target. So if all pairs
@@ -100,23 +101,48 @@ bool IsDegenerate(OpT op, int64_t replica_count, int64_t partition_count) {
                         });
 }
 
-template <typename OpT>
-bool CanImplement(OpT op) {
-  const Shape shape = GetShape(op.getOperand());
-  return IsTypeSupportedByCcl(shape.element_type(),
-                              Thunk::kNcclCollectivePermute);
+Status CheckImplementable(CollectivePermuteStartOp op) {
+  TF_RETURN_IF_ERROR(CclCollectiveThunk::CheckImplementable());
+  return IsValidOperand(op.getOperand(), Thunk::kNcclCollectivePermute);
 }
 
 }  // namespace impl
 
-CclCollectivePermuteThunkBase::CclCollectivePermuteThunkBase(
-    Kind kind, ThunkInfo thunk_info, CclCollectivePermuteConfig config,
-    const Buffer& buffer)
-    : CclCollectiveThunk(kind, thunk_info),
-      config_(std::move(config)),
+CclCollectivePermuteStartThunk::CclCollectivePermuteStartThunk(
+    ThunkInfo thunk_info, CollectivePermuteStartOp op, int64_t replica_count,
+    int64_t partition_count, const Buffer& buffer)
+    : CclCollectiveThunk(Thunk::kNcclCollectivePermuteStart, thunk_info,
+                         op.getIsSync()),
+      config_(
+          GetCclCollectivePermuteConfig(op, replica_count, partition_count)),
       buffer_(buffer) {}
 
-Status CclCollectivePermuteThunkBase::RunCollectivePermute(
+/*static*/ CclCollectivePermuteConfig
+CclCollectivePermuteStartThunk::GetCclCollectivePermuteConfig(
+    CollectivePermuteStartOp op, int64_t replica_count,
+    int64_t partition_count) {
+  return impl::GetCclCollectivePermuteConfig(op, replica_count,
+                                             partition_count);
+}
+
+/*static*/ Status CclCollectivePermuteStartThunk::CheckImplementable(
+    CollectivePermuteStartOp op, int64_t replica_count,
+    int64_t partition_count) {
+  return AddOpDescription<CclCollectivePermuteStartThunk>(
+      impl::CheckImplementable(op), op, replica_count, partition_count);
+}
+
+/*static*/ bool CclCollectivePermuteStartThunk::IsDegenerate(
+    CollectivePermuteStartOp op, int64_t replica_count,
+    int64_t partition_count) {
+  return impl::IsDegenerate(op, replica_count, partition_count);
+}
+
+/*static*/ CollectiveOpGroupMode CclCollectivePermuteStartThunk::GetGroupMode(
+    CollectivePermuteStartOp op) {
+  return impl::GetGroupMode(op);
+}
+Status CclCollectivePermuteStartThunk::RunCclCollective(
     const ExecuteParams& params, se::Stream& stream, ncclComm_t comm) {
   TF_ASSIGN_OR_RETURN(
       std::vector<DeviceBufferPair> device_buffers,
@@ -143,89 +169,6 @@ Status CclCollectivePermuteThunkBase::RunCollectivePermute(
                                           stream, comm, device_string,
                                           current_id);
 }
-
-/*static*/ CclCollectivePermuteConfig
-CclCollectivePermuteThunk::GetCclCollectivePermuteConfig(
-    mlir::lmhlo::CollectivePermuteOp op, int64_t replica_count,
-    int64_t partition_count) {
-  return impl::GetCclCollectivePermuteConfig(op, replica_count,
-                                             partition_count);
-}
-
-/*static*/ bool CclCollectivePermuteThunk::CanImplement(
-    mlir::lmhlo::CollectivePermuteOp op) {
-  return impl::CanImplement(op);
-}
-
-/*static*/ bool CclCollectivePermuteThunk::IsDegenerate(
-    mlir::lmhlo::CollectivePermuteOp op, int64_t replica_count,
-    int64_t partition_count) {
-  return impl::IsDegenerate(op, replica_count, partition_count);
-}
-
-/*static*/ CollectiveOpGroupMode CclCollectivePermuteThunk::GetGroupMode(
-    mlir::lmhlo::CollectivePermuteOp op) {
-  return impl::GetGroupMode(op);
-}
-
-CclCollectivePermuteThunk::CclCollectivePermuteThunk(
-    ThunkInfo thunk_info, mlir::lmhlo::CollectivePermuteOp op,
-    int64_t replica_count, int64_t partition_count, const Buffer& buffer)
-    : CclCollectivePermuteThunkBase(
-          Thunk::kNcclCollectivePermute, thunk_info,
-          GetCclCollectivePermuteConfig(op, replica_count, partition_count),
-          buffer) {}
-
-Status CclCollectivePermuteThunk::RunCclCollective(const ExecuteParams& params,
-                                                   ncclComm_t comm) {
-  return RunCollectivePermute(params, *params.stream, comm);
-}
-
-/*static*/ CclCollectivePermuteConfig
-CclCollectivePermuteStartThunk::GetCclCollectivePermuteConfig(
-    mlir::lmhlo_gpu::CollectivePermuteStartOp op, int64_t replica_count,
-    int64_t partition_count) {
-  return impl::GetCclCollectivePermuteConfig(op, replica_count,
-                                             partition_count);
-}
-
-/*static*/ bool CclCollectivePermuteStartThunk::CanImplement(
-    mlir::lmhlo_gpu::CollectivePermuteStartOp op) {
-  return impl::CanImplement(op);
-}
-
-/*static*/ bool CclCollectivePermuteStartThunk::IsDegenerate(
-    mlir::lmhlo_gpu::CollectivePermuteStartOp op, int64_t replica_count,
-    int64_t partition_count) {
-  return impl::IsDegenerate(op, replica_count, partition_count);
-}
-
-/*static*/ CollectiveOpGroupMode CclCollectivePermuteStartThunk::GetGroupMode(
-    mlir::lmhlo_gpu::CollectivePermuteStartOp op) {
-  return impl::GetGroupMode(op);
-}
-
-CclCollectivePermuteStartThunk::CclCollectivePermuteStartThunk(
-    ThunkInfo thunk_info, mlir::lmhlo_gpu::CollectivePermuteStartOp op,
-    int64_t replica_count, int64_t partition_count, const Buffer& buffer)
-    : CclCollectivePermuteThunkBase(
-          Thunk::kNcclCollectivePermuteStart, thunk_info,
-          GetCclCollectivePermuteConfig(op, replica_count, partition_count),
-          buffer) {}
-
-Status CclCollectivePermuteStartThunk::RunCclCollective(
-    const ExecuteParams& params, ncclComm_t comm) {
-  return async_.Execute(
-      [this](const ExecuteParams& params, se::Stream& stream, ncclComm_t comm) {
-        return RunCollectivePermute(params, stream, comm);
-      },
-      params, comm);
-}
-
-CclCollectivePermuteDoneThunk::CclCollectivePermuteDoneThunk(
-    ThunkInfo thunk_info, CclCollectiveThunk::AsyncExecutor& async)
-    : CclCollectiveDoneThunk(Thunk::kNcclCollectivePermuteDone, thunk_info,
-                             async) {}
 
 Status RunCollectivePermute(
     CclCollectivePermuteConfig::SourceTargetMapEntry source_target,

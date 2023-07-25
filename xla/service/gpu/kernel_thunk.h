@@ -52,7 +52,7 @@ class KernelThunk : public Thunk {
   // must correspond to each arg directly, not to their base allocation (e.g.
   // they can be the result of an mlir::memref::ViewOp).
   KernelThunk(ThunkInfo thunk_info, std::vector<BufferAllocation::Slice> args,
-              const std::string& kernel_name,
+              std::vector<bool> written, const std::string& kernel_name,
               const LaunchDimensions& launch_dimensions,
               std::vector<mlir::Value> values);
   KernelThunk(const KernelThunk&) = delete;
@@ -75,6 +75,8 @@ class KernelThunk : public Thunk {
   const std::vector<BufferAllocation::Slice>& arguments() const {
     return args_;
   }
+  const std::vector<bool>& written() const { return written_; }
+
   const std::string& kernel_name() const { return kernel_name_; }
   const LaunchDimensions& launch_dimensions() const {
     return launch_dimensions_;
@@ -84,6 +86,9 @@ class KernelThunk : public Thunk {
  private:
   // Buffer slices passed to the kernel as arguments.
   const std::vector<BufferAllocation::Slice> args_;
+
+  // args_[i] is written iff (written_[i] == true).
+  const std::vector<bool> written_;
 
   // Entry kernel name for the computation.
   const std::string kernel_name_;

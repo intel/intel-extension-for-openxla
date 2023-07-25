@@ -118,16 +118,22 @@ StatusOr<LocalClient*> GetXpuXlaClient(
 
 StreamExecutorXpuDevice::StreamExecutorXpuDevice(
     int id, std::unique_ptr<LocalDeviceState> local_device_state,
-    std::string device_kind, std::string device_vendor, int node_id)
+    std::string device_kind, std::string device_vendor, int node_id,
+    int slice_index)
     : PjRtStreamExecutorDevice(id, std::move(local_device_state),
                                std::move(device_kind), node_id),
-      device_vendor_(std::move(device_vendor)) {
-  attributes_ = {
+      device_vendor_(std::move(device_vendor)),
+      slice_index_(slice_index) {
+  description().SetAttributes({
       {"device_vendor", "Intel"},
-  };
-  to_string_ = absl::StrFormat("IntelXpuDevice(id=%i, process_index=%i)", id,
-                               process_index());
+      {"slice_index", static_cast<int64_t>(slice_index)},
+  });
+  description().SetToString(
+      absl::StrFormat("IntelXpuDevice(id=%i, process_index=%i, slice_index=%i)",
+                      id, process_index(), slice_index));
 }
+
+int StreamExecutorXpuDevice::slice_index() const { return slice_index_; }
 
 absl::string_view StreamExecutorXpuDevice::device_vendor() {
   return device_vendor_;

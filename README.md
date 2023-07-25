@@ -28,17 +28,16 @@ Verified Hardware Platforms:
 - Ubuntu 22.04, Red Hat 8.6 (64-bit), SUSE Linux Enterprise Server(SLES) 15 SP3/SP4
   - Intel® Data Center GPU Max Series
 - Intel® oneAPI Base Toolkit 2023.1
-- Jax/Jaxlib 0.4.7
+- Jax/Jaxlib 0.4.13
 - Python 3.8-3.10
 - pip 19.0 or later (requires manylinux2014 support)
 
 
 ### Install GPU Drivers
 
-|Release|OS|Intel GPU|Install Intel GPU Driver|
-|-|-|-|-|
-|v1.2.0|Ubuntu 22.04, Red Hat 8.6|Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-flex-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [602](https://dgpu-docs.intel.com/releases/stable_602_20230323.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.05.25593.18-601~22.04`|
-|v1.2.0|Ubuntu 22.04, Red Hat 8.6, SLES 15 SP3/SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-max-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [602](https://dgpu-docs.intel.com/releases/stable_602_20230323.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.05.25593.18-601~22.04`|
+|OS|Intel GPU|Install Intel GPU Driver|
+|-|-|-|
+|Ubuntu 22.04, Red Hat 8.6, SLES 15 SP3/SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-max-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [602](https://dgpu-docs.intel.com/releases/stable_602_20230323.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.05.25593.18-601~22.04`|
 
 ## Build and Install
 ```bash
@@ -48,11 +47,11 @@ Verified Hardware Platforms:
     $ source /opt/intel/oneapi/tbb/latest/env/vars.sh
     
     $ git clone https://github.com/intel/intel-extension-for-openxla.git
-    $ pip install jax==0.4.7 jaxlib==0.4.7
+    $ pip install jax==0.4.13 jaxlib==0.4.13
     $ ./configure        # Choose Yes for all.
     $ bazel build //xla/tools/pip_package:build_pip_package
     $ ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-    $ pip install intel_extension_for_openxla-0.1.0-cp39-cp39-linux_x86_64.whl
+    $ pip install openxla_xpu-0.1.0-cp39-cp39-linux_x86_64.whl
    ```
 This repo pulls public openxla code as its third_party. For development, one often wants to make changes to the XLA repository as well. You can override the pinned xla repo with a local checkout by:
 ```
@@ -61,16 +60,15 @@ bazel build --override_repository=xla=/path/to/xla //xla/tools/pip_package:build
 
 **Notes**: 
 *  This project won't release any whl or .so library, only source code, so this "build and install" is only for testing purpose.
-* Besides python whl, we can also build .so `bazel build //xla:libitex_xla_extension.so` and run with ENV `PJRT_NAMES_AND_LIBRARY_PATHS`, the same as https://intel.github.io/intel-extension-for-tensorflow/latest/docs/guide/OpenXLA_Support_on_GPU.html
+* Besides python whl, we can also build .so `bazel build //xla:pjrt_plugin_xpu.so` and run with ENV `PJRT_NAMES_AND_LIBRARY_PATHS`, the same as https://intel.github.io/intel-extension-for-tensorflow/latest/docs/guide/OpenXLA_Support_on_GPU.html
 
 ## 4. Run JAX Example
 
 * **Run the below jax python code.**    
-When running jax code, please `import intel_extension_for_openxla`, otherwise "XPU" device can not be detected. `jax.local_devices()` can check which device is running.
+When running jax code, `jax.local_devices()` can check which device is running.
 ```python
 import jax
 import jax.numpy as jnp
-import intel_extension_for_openxla
 import jax
 print("jax.local_devices(): ", jax.local_devices())
 
@@ -89,7 +87,7 @@ print(lax_conv())
 ```
 * **Reference result:**
 ```
-jax.local_devices():  [IntelXpuDevice(id=0, process_index=0)]
+jax.local_devices():  [xpu(id=0), xpu(id=1)]
 [[[[2.0449753 2.093208  2.1844783 1.9769732 1.5857391 1.6942389]
    [1.9218378 2.2862523 2.1549542 1.8367321 1.3978379 1.3860377]
    [1.9456574 2.062028  2.0365305 1.901286  1.5255247 1.1421617]
@@ -107,7 +105,7 @@ jax.local_devices():  [IntelXpuDevice(id=0, process_index=0)]
 ## 5. FAQ
 
 * **Q**: It can't detect xpu device.    
-  **A**:  Don't forget `import intel_extension_for_openxla` in jax code.    
+  **A**:
     Print `jax.local_devices()` to check which device is running.     
    `export OCL_ICD_ENABLE_TRACE=1` to checks if it has driver error log.    
    `export ONEDNN_VERBOSE=2` It shows detailed OneDNN execution info.    

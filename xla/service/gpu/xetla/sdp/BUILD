@@ -4,9 +4,13 @@ load("//xla:xla.bzl", "xetla_library")
 xetla_library(
     name = "sdp_kernel",
     srcs = [
+        "sdp.cc",
+    ],
+    hdrs = [
         "fmha_forward.h",
         "fmha_policy.h",
         "fmha_utils.h",
+        "sdp.h",
     ],
     visibility = ["//visibility:public"],
     deps = [

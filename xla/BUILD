@@ -1,5 +1,5 @@
 cc_binary(
-    name = "libitex_xla_extension.so",
+    name = "pjrt_plugin_xpu.so",
     linkshared = True,
     visibility = ["//visibility:public"],
     deps = select({

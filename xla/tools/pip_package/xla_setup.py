@@ -29,7 +29,7 @@ from setuptools import setup
 from setuptools.command.install import install as InstallCommandBase
 from setuptools.dist import Distribution
 
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'intel_extension_for_openxla/python')) # pylint: disable=line-too-long
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'jax_plugins/python')) # pylint: disable=line-too-long
 # from version import __version__
 
 
@@ -42,7 +42,7 @@ _VERSION = "0.1.0"
 
 REQUIRED_PACKAGES = []
 
-project_name = 'intel_extension_for_openxla'
+project_name = 'openxla_xpu'
 DEV_VERSION_SUFFIX = ""
 if "--weekly_build" in sys.argv:
         today_number = date.today().strftime("%Y%m%d")
@@ -57,7 +57,7 @@ if '--project_name' in sys.argv:
 REQUIRED_PACKAGES.append('wheel')
 CONSOLE_SCRIPTS = []
 
-_ext_path = 'intel_extension_for_openxla'
+_ext_path = 'jax_plugins.openxla_xpu'
 
 class BinaryDistribution(Distribution):
 
@@ -93,8 +93,7 @@ class InstallCommand(InstallCommandBase):
   def finalize_options(self):
     ret = InstallCommandBase.finalize_options(self)  # pylint: disable=assignment-from-no-return
     self.install_headers = os.path.join(self.install_platlib, \
-                           'intel_extension_for_openxla',
-                                        'include')
+                                        'jax_plugins', 'include')
     self.install_lib = self.install_platlib
     return ret
 
@@ -124,11 +123,11 @@ setup(
     package_data={
         _ext_path: [
             'python/*.so',
-            'libitex_xla_extension.so'
-        ] + matches + env_check_tool,
+            'pjrt_plugin_xpu.so'
+        ] + matches,
     },
     exclude_package_data={
-        'intel_extension_for_openxla': ['tools']
+        'jax_plugins': ['tools']
     },
     python_requires='>=3.8',
     zip_safe=False,

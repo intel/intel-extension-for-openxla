@@ -40,7 +40,10 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-bool IsGlobalCclConfig() { return false; }
+bool IsGlobalCclConfig() {
+  static const bool global_nccl_config = std::getenv("NCCL_COMM_ID") != nullptr;
+  return global_nccl_config;
+}
 
 bool IsCclLaunchModeParallel() {
   static const bool is_launch_mode_parallel = []() {
@@ -66,22 +69,16 @@ ccl::reduction ToCclReduction(ReductionKind kind) {
 #endif  // ITEX_USE_CCL
 
 namespace {
-#ifndef ITEX_USE_CCL
-StatusOr<std::string> ToCclUniqueId(const std::string& id_str) {
+StatusOr<std::string> ToNcclUniqueId(const std::string& id_str) {
   return id_str;
 }
-#endif  // ITEX_USE_CCL
 
 StatusOr<std::string> LocalNcclUniqueIdCallback(const NcclCliqueKey&) {
-#ifndef ITEX_USE_CCL
   return std::string("");
-#endif  // ITEX_USE_CCL
 }
 
 struct CclCliqueState {
-#ifndef ITEX_USE_CCL
   std::string unique_id;
-#endif  // ITEX_USE_CCL
   int64_t run_id = -1;
 
   // `mu` guards `communicators` and `status` during initialization.
@@ -115,7 +112,7 @@ std::shared_ptr<StatusOr<CclClique::Lock>> AcquireCclClique(
           // TF_ASSIGN_OR_RETURN(std::string id,
           // unique_id_callback(clique_key));
           std::string id = run_id.ToString();
-          TF_ASSIGN_OR_RETURN(clique->unique_id, ToCclUniqueId(id));
+          TF_ASSIGN_OR_RETURN(clique->unique_id, ToNcclUniqueId(id));
         }
         // If multiple executable are running simultaneously while using
         // multiple hosts, it is possible that different executables could
@@ -152,7 +149,7 @@ void CheckNcclAsyncError(CclComm& lockable_comm) {
 #endif
 }  // namespace
 #if ITEX_USE_CCL
-StatusOr<std::pair<ncclDataType_t, int>> ToNcclDataTypeAndCountMultiplier(
+StatusOr<std::pair<ncclDataType_t, int>> ToCclDataTypeAndCountMultiplier(
     PrimitiveType element_type, Thunk::Kind reduction_op) {
   TF_ASSIGN_OR_RETURN(ncclDataType_t dtype,
                       ToNcclDataType(element_type, reduction_op));
@@ -187,10 +184,11 @@ StatusOr<const NcclUniqueIdCallback*> GetNcclUniqueIdCallback(
 StatusOr<CclComm::Lock> AcquireCclComm(
     RunId run_id, OpId op_id, std::vector<GlobalDeviceId> participants,
     size_t num_local_participants,
-    const NcclUniqueIdCallback& unique_id_callback, int rank) {
+    const NcclUniqueIdCallback& unique_id_callback, int rank,
+    int64_t stream_id) {
   // Ensure that this group of threads have exclusive access to the clique to
   // prevent threads from different groups locking communicators in the clique.
-  NcclCliqueKey clique_key(std::move(participants));
+  NcclCliqueKey clique_key(std::move(participants), stream_id);
   std::shared_ptr<StatusOr<CclClique::Lock>> clique = AcquireCclClique(
       run_id, op_id, clique_key, unique_id_callback, num_local_participants);
 
@@ -202,22 +200,6 @@ StatusOr<CclComm::Lock> AcquireCclComm(
   };
   static auto& all_communicators = *new AllCommunicators;
 
-  // // Launch a thread that periodically checks all NCCL communicators for
-  // // asynchronous errors. If an asynchronous error is observed, the
-  // communicator
-  // // is aborted and an error message logged.
-  // static auto check_async_error_thread = tsl::Env::Default()->StartThread(
-  //     tsl::ThreadOptions(), "nccl_async_error_thread", [&] {
-  //       while (true) {
-  //         absl::SleepFor(absl::Seconds(30));
-  //         absl::MutexLock lock(&all_communicators.mu);
-  //         for (CclComm* comm : all_communicators.communicators) {
-  //           CheckNcclAsyncError(*comm);
-  //         }
-  //       }
-  //     });
-  // (void)check_async_error_thread;  // Silence unused variable warning.
-
   CclCliqueState& state = ***clique;
   if (!state.ready.HasBeenNotified()) {
     int nranks = clique_key.devices().size();
@@ -225,7 +207,8 @@ StatusOr<CclComm::Lock> AcquireCclComm(
 
     ccl::communicator* comm =
         new ccl::communicator(nranks, rank, state.unique_id);
-
+    // Status status = XLA_CUDA_STATUS(ncclCommInitRank(&comm, nranks, id,
+    // rank));
     Status status = tsl::OkStatus();
     size_t num_initialized = [&] {
       absl::MutexLock lock(&state.mu);

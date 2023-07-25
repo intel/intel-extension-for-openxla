@@ -56,6 +56,7 @@ void IrEmitterContext::emit_constant(int64_t num_elements,
       return llvm::ConstantAggregateZero::get(global_type);
     }
 
+    // SYCL: always set info.content.
     info.content = content;
     std::vector<uint8_t> padded(kMinConstAllocationInBytes, 0);
     absl::c_copy(content, padded.begin());

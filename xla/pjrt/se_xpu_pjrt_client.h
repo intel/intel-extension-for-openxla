@@ -30,14 +30,16 @@ class StreamExecutorXpuDevice : public PjRtStreamExecutorDevice {
   StreamExecutorXpuDevice(int id,
                           std::unique_ptr<LocalDeviceState> local_device_state,
                           std::string device_kind, std::string device_vendor,
-                          int node_id);
+                          int node_id, int slice_index = 0);
 
+  int slice_index() const;
   absl::string_view device_vendor();
   absl::string_view ToString() const override;
 
  private:
   std::string device_vendor_;
   std::string to_string_;
+  int slice_index_;
 };
 
 StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorXpuClient(

@@ -160,17 +160,6 @@ cc_library(
 )
 
 cc_library(
-    name = "sycl_timer",
-    srcs = ["sycl_timer.cc"],
-    hdrs = ["sycl_timer.h"],
-    deps = [
-        ":sycl_executor_header",
-        ":sycl_stream",
-        "@xla//xla/stream_executor:stream_executor_headers",
-    ],
-)
-
-cc_library(
     name = "sycl_executor",
     srcs = ["sycl_executor.cc"],
     hdrs = ["sycl_executor.h"],
@@ -179,7 +168,6 @@ cc_library(
         ":sycl_kernel",
         ":sycl_platform_id",
         ":sycl_stream",
-        ":sycl_timer",
         "//xla/stream_executor/sycl:gpu_pool_allocator",
         "@com_google_absl//absl/strings",
         "@xla//xla/stream_executor:event",

@@ -17,24 +17,24 @@ limitations under the License.
 
 #include "xla/service/gpu/gpu_fused_mha_runner.h"
 
+#include <sycl/ext/oneapi/bfloat16.hpp>
+#include <sycl/half_type.hpp>
+
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "xla/layout_util.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/stream_executor_util.h"
-#include "xla/service/gpu/xetla/sdp/fmha_forward.h"
+#include "xla/service/gpu/xetla/sdp/sdp.h"
 #include "xla/shape_util.h"
 #include "xla/status_macros.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
 #include "xla/util.h"
 
-// #include <sycl/ext/oneapi/bfloat16.hpp>
-#include <sycl/half_type.hpp>
-
 namespace xla {
 namespace gpu {
 
-using bfloat16 = ::gpu::xetla::bf16;
+using bfloat16 = sycl::ext::oneapi::bfloat16;
 using half = sycl::half;
 
 namespace {
@@ -115,22 +115,31 @@ Status RunFusedMHAScaleBiasSoftmax(GpufMHAParams params, se::Stream* stream,
   int H = lhs_bmm1_dims[rank - 1];
   int T = rhs_bmm1_dims[rank - 1];
 
-  auto lhs_bmm1_ptr = reinterpret_cast<ElementType*>(lhs_bmm1_buffer.opaque());
-  auto rhs_bmm1_ptr = reinterpret_cast<ElementType*>(rhs_bmm1_buffer.opaque());
-  auto rhs_bmm2_ptr = reinterpret_cast<ElementType*>(rhs_bmm2_buffer.opaque());
-  auto output_ptr = reinterpret_cast<OutputType*>(output_buffer.opaque());
-  auto bias_ptr = reinterpret_cast<BiasType*>(bias_buffer.opaque());
+  auto lhs_bmm1_ptr = reinterpret_cast<void*>(lhs_bmm1_buffer.opaque());
+  auto rhs_bmm1_ptr = reinterpret_cast<void*>(rhs_bmm1_buffer.opaque());
+  auto rhs_bmm2_ptr = reinterpret_cast<void*>(rhs_bmm2_buffer.opaque());
+  auto output_ptr = reinterpret_cast<void*>(output_buffer.opaque());
+  auto bias_ptr = reinterpret_cast<void*>(bias_buffer.opaque());
 
   // Recalculate scale since scale attr has accuracy issue.
   if ((scale - 1.0f) > 1e-6) scale = 1.0f / sqrt(H);
-  if (bias_ptr)
-    ::gpu::xetla::fmha_forward<ElementType, true, false>(
+  if (std::is_same_v<ElementType, bfloat16>)
+    if (bias_ptr)
+      ::gpu::xetla::fmha_forward_bf16_bias(
+          *dpcpp_stream, lhs_bmm1_ptr, rhs_bmm1_ptr, rhs_bmm2_ptr, bias_ptr,
+          nullptr, 1.0f, output_ptr, B, N, H, F, T, scale);
+    else
+      ::gpu::xetla::fmha_forward_bf16(*dpcpp_stream, lhs_bmm1_ptr, rhs_bmm1_ptr,
+                                      rhs_bmm2_ptr, bias_ptr, nullptr, 1.0f,
+                                      output_ptr, B, N, H, F, T, scale);
+  else if (bias_ptr)
+    ::gpu::xetla::fmha_forward_fp16_bias(
         *dpcpp_stream, lhs_bmm1_ptr, rhs_bmm1_ptr, rhs_bmm2_ptr, bias_ptr,
         nullptr, 1.0f, output_ptr, B, N, H, F, T, scale);
   else
-    ::gpu::xetla::fmha_forward<ElementType, false, false>(
-        *dpcpp_stream, lhs_bmm1_ptr, rhs_bmm1_ptr, rhs_bmm2_ptr, bias_ptr,
-        nullptr, 1.0f, output_ptr, B, N, H, F, T, scale);
+    ::gpu::xetla::fmha_forward_fp16(*dpcpp_stream, lhs_bmm1_ptr, rhs_bmm1_ptr,
+                                    rhs_bmm2_ptr, bias_ptr, nullptr, 1.0f,
+                                    output_ptr, B, N, H, F, T, scale);
   return OkStatus();
 }
 

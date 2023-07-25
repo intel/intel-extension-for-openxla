@@ -72,6 +72,10 @@ class MatmulPlan {
       }
     }
 
+    Shape bias_shape;
+    if (op.getBias() != nullptr) {
+      bias_shape = GetShape(op.getBias());
+    }
     TF_ASSIGN_OR_RETURN(
         GemmConfig config,
         GemmConfig::For(
@@ -79,6 +83,7 @@ class MatmulPlan {
             dot_dims.getLhsContractingDimensions(), GetShape(op.getB()),
             dot_dims.getRhsBatchingDimensions(),
             dot_dims.getRhsContractingDimensions(), GetShape(op.getC()),
+            op.getBias() == nullptr ? nullptr : &bias_shape,
             GetShape(op.getD()), op.getAlphaReal().convertToDouble(),
             op.getAlphaImag().convertToDouble(), op.getBeta().convertToDouble(),
             op.getAlgorithm(), compute_precision));

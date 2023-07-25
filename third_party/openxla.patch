@@ -16,32 +16,10 @@ index 6edd66067..022c9d155 100644
 +     # copybara:strip_end
 + ]
 diff --git a/third_party/tsl/third_party/llvm/build.patch b/third_party/tsl/third_party/llvm/build.patch
-index 70dca55b3..9e9a00e6b 100644
+index bbf8f587a..ab0df933f 100644
 --- a/third_party/tsl/third_party/llvm/build.patch
 +++ b/third_party/tsl/third_party/llvm/build.patch
-@@ -1,7 +1,36 @@
-+diff --git a/mlir/lib/Bytecode/Reader/BytecodeReader.cpp b/mlir/lib/Bytecode/Reader/BytecodeReader.cpp
-+index d6f1e18d35ae..27f27ac4d555 100644
-+--- a/mlir/lib/Bytecode/Reader/BytecodeReader.cpp
-++++ b/mlir/lib/Bytecode/Reader/BytecodeReader.cpp
-+@@ -1262,6 +1262,8 @@ private:
-+ };
-+ } // namespace
-+
-++// TODO: Disable clang opt since it crashes with clang-17 compiler.
-++#pragma clang optimize off
-+ LogicalResult BytecodeReader::read(llvm::MemoryBufferRef buffer, Block *block) {
-+   EncodingReader reader(buffer.getBuffer(), fileLoc);
-+
-+@@ -1331,6 +1333,7 @@ LogicalResult BytecodeReader::read(llvm::MemoryBufferRef buffer, Block *block) {
-+   // Finally, process the IR section.
-+   return parseIRSection(*sectionDatas[bytecode::Section::kIR], block);
-+ }
-++#pragma clang optimize on
-+
-+ LogicalResult BytecodeReader::parseVersion(EncodingReader &reader) {
-+   if (failed(reader.parseVarInt(version)))
- diff --git a/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel b/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel
+@@ -2,6 +2,14 @@ diff --git a/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel b/utils/bazel/llv
  index 2b88729d748b..e12d979b4908 100644
  --- a/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel
  +++ b/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel
@@ -56,9 +34,34 @@ index 70dca55b3..9e9a00e6b 100644
  @@ -207,13 +207,15 @@ cc_library(
           "lib/Support/BLAKE3/llvm_blake3_prefix.h",
       ] + select({
+@@ -44,3 +52,24 @@ index 2b88729d748b..e12d979b4908 100644
+          "//conditions:default": [
+              "BLAKE3_NO_AVX2",
+              "BLAKE3_NO_AVX512",
++diff --git a/mlir/lib/Bytecode/Reader/BytecodeReader.cpp b/mlir/lib/Bytecode/Reader/BytecodeReader.cpp
++index 177372c68046..40d49dc13b2f 100644
++--- a/mlir/lib/Bytecode/Reader/BytecodeReader.cpp
+++++ b/mlir/lib/Bytecode/Reader/BytecodeReader.cpp
++@@ -1549,6 +1549,8 @@ private:
++   const std::shared_ptr<llvm::SourceMgr> &bufferOwnerRef;
++ };
++
+++// TODO: Disable clang opt since it crashes with clang-17 compiler.
+++#pragma clang optimize off
++ LogicalResult BytecodeReader::Impl::read(
++     Block *block, llvm::function_ref<bool(Operation *)> lazyOpsCallback) {
++   EncodingReader reader(buffer.getBuffer(), fileLoc);
++@@ -1628,6 +1630,7 @@ LogicalResult BytecodeReader::Impl::read(
++   // Finally, process the IR section.
++   return parseIRSection(*sectionDatas[bytecode::Section::kIR], block);
++ }
+++#pragma clang optimize on
++
++ LogicalResult BytecodeReader::Impl::parseVersion(EncodingReader &reader) {
++   if (failed(reader.parseVarInt(version)))
 diff --git a/third_party/tsl/third_party/llvm/opt.patch b/third_party/tsl/third_party/llvm/opt.patch
 new file mode 100644
-index 000000000..e6f74e8c7
+index 000000000..81183a1f8
 --- /dev/null
 +++ b/third_party/tsl/third_party/llvm/opt.patch
 @@ -0,0 +1,18 @@
@@ -80,30 +83,17 @@ index 000000000..e6f74e8c7
 + 
 +   PreservedAnalyses PA;
 +   PA.preserveSet<CFGAnalyses>();
-\ No newline at end of file
 diff --git a/third_party/tsl/third_party/llvm/spirv.patch b/third_party/tsl/third_party/llvm/spirv.patch
 new file mode 100644
-index 000000000..691d61193
+index 000000000..5b8db357e
 --- /dev/null
 +++ b/third_party/tsl/third_party/llvm/spirv.patch
-@@ -0,0 +1,88 @@
-+diff --git a/llvm/include/llvm/InitializePasses.h b/llvm/include/llvm/InitializePasses.h
-+index 5c531ea89cc6..594618fe5414 100644
-+--- a/llvm/include/llvm/InitializePasses.h
-++++ b/llvm/include/llvm/InitializePasses.h
-+@@ -99,6 +99,7 @@ void initializeCrossDSOCFIPass(PassRegistry&);
-+ void initializeCycleInfoWrapperPassPass(PassRegistry &);
-+ void initializeDAEPass(PassRegistry&);
-+ void initializeDAHPass(PassRegistry&);
-++void initializeDAESYCLPass(PassRegistry&);
-+ void initializeDCELegacyPassPass(PassRegistry&);
-+ void initializeDSELegacyPassPass(PassRegistry&);
-+ void initializeDeadMachineInstructionElimPass(PassRegistry&);
+@@ -0,0 +1,76 @@
 +diff --git a/llvm/lib/Passes/PassBuilderPipelines.cpp b/llvm/lib/Passes/PassBuilderPipelines.cpp
-+index 6cc66a0cb132..29c3431f84eb 100644
++index 34d3b9d7467e..bd26295c6527 100644
 +--- a/llvm/lib/Passes/PassBuilderPipelines.cpp
 ++++ b/llvm/lib/Passes/PassBuilderPipelines.cpp
-+@@ -192,6 +192,10 @@ static cl::opt<bool> EnableGlobalAnalyses(
++@@ -180,6 +180,10 @@ static cl::opt<bool> EnableGlobalAnalyses(
 +     "enable-global-analyses", cl::init(true), cl::Hidden,
 +     cl::desc("Enable inter-procedural analyses"));
 + 
@@ -114,7 +104,7 @@ index 000000000..691d61193
 + static cl::opt<bool>
 +     RunPartialInlining("enable-partial-inlining", cl::init(false), cl::Hidden,
 +                        cl::desc("Run Partial inlinining pass"));
-+@@ -354,6 +358,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
++@@ -396,6 +400,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
 +   // Form canonically associated expression trees, and simplify the trees using
 +   // basic mathematical properties. For example, this will form (nearly)
 +   // minimal multiplication trees.
@@ -122,7 +112,7 @@ index 000000000..691d61193
 +   FPM.addPass(ReassociatePass());
 + 
 +   // Add the primary loop simplification pipeline.
-+@@ -431,7 +436,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
++@@ -467,7 +472,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
 +   FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM2),
 +                                               /*UseMemorySSA=*/false,
 +                                               /*UseBlockFrequencyInfo=*/false));
@@ -131,7 +121,7 @@ index 000000000..691d61193
 +   // Delete small array after loop unroll.
 +   FPM.addPass(SROAPass(SROAOptions::ModifyCFG));
 + 
-+@@ -539,6 +544,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++@@ -573,6 +578,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
 +   // Form canonically associated expression trees, and simplify the trees using
 +   // basic mathematical properties. For example, this will form (nearly)
 +   // minimal multiplication trees.
@@ -139,7 +129,7 @@ index 000000000..691d61193
 +   FPM.addPass(ReassociatePass());
 + 
 +   // Add the primary loop simplification pipeline.
-+@@ -620,7 +626,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++@@ -647,7 +653,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
 +   FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM2),
 +                                               /*UseMemorySSA=*/false,
 +                                               /*UseBlockFrequencyInfo=*/false));
@@ -148,9 +138,9 @@ index 000000000..691d61193
 +   // Delete small array after loop unroll.
 +   FPM.addPass(SROAPass(SROAOptions::ModifyCFG));
 + 
-+@@ -677,6 +683,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
-+   for (auto &C : ScalarOptimizerLateEPCallbacks)
-+     C(FPM, Level);
++@@ -705,6 +711,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++ 
++   invokeScalarOptimizerLateEPCallbacks(FPM, Level);
 + 
 ++  if (SYCLOptimizationMode)
 ++    FPM.addPass(SimplifyCFGPass());
@@ -158,15 +148,15 @@ index 000000000..691d61193
 +   FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions()
 +                                   .convertSwitchRangeToICmp(true)
 +                                   .hoistCommonInsts(true)
-+@@ -1320,6 +1329,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
-+   for (auto &C : VectorizerStartEPCallbacks)
-+     C(OptimizePM, Level);
++@@ -1338,6 +1347,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
++ 
++   invokeVectorizerStartEPCallbacks(OptimizePM, Level);
 + 
 ++  if (!SYCLOptimizationMode) {
 +   LoopPassManager LPM;
 +   // First rotate loops that may have been un-rotated by prior passes.
 +   // Disable header duplication at -Oz.
-+@@ -1343,7 +1353,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
++@@ -1361,7 +1371,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
 +   OptimizePM.addPass(InjectTLIMappings());
 + 
 +   addVectorPasses(Level, OptimizePM, /* IsFullLTO */ false);
@@ -175,196 +165,74 @@ index 000000000..691d61193
 +   // LoopSink pass sinks instructions hoisted by LICM, which serves as a
 +   // canonicalization pass that enables other optimizations. As a result,
 +   // LoopSink pass needs to be a very late IR pass to avoid undoing LICM
-\ No newline at end of file
 diff --git a/third_party/tsl/third_party/llvm/workspace.bzl b/third_party/tsl/third_party/llvm/workspace.bzl
-index 28ff9e93f..2456d3098 100644
+index 0d5a44fe7..a418b02fc 100644
 --- a/third_party/tsl/third_party/llvm/workspace.bzl
 +++ b/third_party/tsl/third_party/llvm/workspace.bzl
-@@ -21,6 +21,8 @@ def repo(name):
-             "//third_party/llvm:build.patch",
-             "//third_party/llvm:mathextras.patch",
-             "//third_party/llvm:toolchains.patch",
+@@ -17,6 +17,8 @@ def repo(name):
+         ],
+         build_file = "//third_party/llvm:llvm.BUILD",
+         patch_file = [
 +            "//third_party/llvm:spirv.patch",
 +            "//third_party/llvm:opt.patch",
-         ],
-         link_files = {"//third_party/llvm:run_lit.sh": "mlir/run_lit.sh"},
-     )
+             "//third_party/llvm:generated.patch",  # Autogenerated, don't remove.
+             "//third_party/llvm:build.patch",
+             "//third_party/llvm:mathextras.patch",
 diff --git a/third_party/tsl/tsl/framework/contraction/BUILD b/third_party/tsl/tsl/framework/contraction/BUILD
-index c58246b95..450e24f44 100644
+index 980ca390d..2374e6d10 100644
 --- a/third_party/tsl/tsl/framework/contraction/BUILD
 +++ b/third_party/tsl/tsl/framework/contraction/BUILD
-@@ -78,7 +78,7 @@ cc_library(
+@@ -104,7 +104,6 @@ cc_library(
          "//tsl:macos_arm64": [],
          "//conditions:default": [
              "TENSORFLOW_USE_CUSTOM_CONTRACTION_KERNEL",
 -            "TENSORFLOW_USE_MKLDNN_CONTRACTION_KERNEL",
-+            # "TENSORFLOW_USE_MKLDNN_CONTRACTION_KERNEL",
          ],
      }),
      deps = [
-@@ -94,7 +94,9 @@ cc_library(
+@@ -121,7 +120,7 @@ cc_library(
          "//tsl:linux_ppc64le": [],
          "//tsl:linux_s390x": [],
          "//tsl:macos_arm64": [],
 -        "//conditions:default": ["@mkl_dnn_v1//:mkl_dnn"],
-+        "//conditions:default": [
-+            # "@mkl_dnn_v1//:mkl_dnn"
-+        ],
++        "//conditions:default": [],
      }),
  )
  
-diff --git a/third_party/tsl/tsl/protobuf/dnn.proto b/third_party/tsl/tsl/protobuf/dnn.proto
-index ee3763f38..daad67f44 100644
---- a/third_party/tsl/tsl/protobuf/dnn.proto
-+++ b/third_party/tsl/tsl/protobuf/dnn.proto
-@@ -174,3 +174,10 @@ message ConvolutionDescriptorProto {
-   // Tensorflow node name, same as in NodeDef, for debugging purposes.
-   string name = 7;
- }
-+
-+// FusedMHAKind kind
-+enum FusedMHAKind {
-+  BMM1_OUTPUT_UNKNOWN = 0;
-+  BMM1_OUTPUT_INPUT_TYPE = 1;
-+  BMM1_OUTPUT_FLOAT = 2;
-+}
 diff --git a/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td b/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td
-index 1b1ba831b..74b354d94 100644
+index 72fd56b2a..c49b8abec 100644
 --- a/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td
 +++ b/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td
-@@ -303,4 +303,63 @@ def LHLOGPU_AllToAllDoneOp: LHLOGPU_Op<"all_to_all_done"> {
-   let arguments = (ins MHLO_Token:$token);
- }
- 
-+def LHLOGPU_fusedMHAOp : LHLOGPU_Op<"fMHA"> {
-+  let arguments = (ins
-+    Arg<LHLO_Buffer, "", [MemRead]>:$lhs_bmm1,
-+    Arg<LHLO_Buffer, "", [MemRead]>:$rhs_bmm1,
-+    Arg<LHLO_Buffer, "", [MemRead]>:$rhs_bmm2,
-+    Arg<LHLO_Buffer, "", [MemWrite]>:$output,
-+    Arg<LHLO_Buffer, "", [MemWrite]>:$scratch,
-+    MHLO_DotDimensionNumbers:$bmm1_dot_dimension_numbers,
-+    MHLO_DotDimensionNumbers:$bmm2_dot_dimension_numbers,
-+    I64ArrayAttr:$intermediate_tensor_dimensions,
-+    I64ArrayAttr:$intermediate_tensor_layout,
+@@ -317,6 +317,7 @@ def LHLOGPU_fusedMHAOp : LHLOGPU_Op<"fMHA"> {
+     MHLO_DotDimensionNumbers:$bmm2_dot_dimension_numbers,
+     I64ArrayAttr:$intermediate_tensor_dimensions,
+     I64ArrayAttr:$intermediate_tensor_layout,
 +    F64Attr:$fmha_scale,
-+    OptionalAttr<F64Attr>:$dropout_rate,
-+    FusedMhaDagSignatureAttr:$fused_mha_dag,
-+    FusedMHAAlgorithmConfigAttr:$algorithm_config,
-+    OptionalAttr<I64Attr>:$seed);
-+}
-+
-+def LHLOGPU_fusedMHAWithScaledMaskOp : LHLOGPU_Op<"fMHAWithScaledMask"> {
-+  let arguments = (ins
-+    Arg<LHLO_Buffer, "", [MemRead]>:$lhs_bmm1,
-+    Arg<LHLO_Buffer, "", [MemRead]>:$rhs_bmm1,
-+    Arg<LHLO_Buffer, "", [MemRead]>:$rhs_bmm2,
-+    Arg<LHLO_Buffer, "", [MemRead]>:$mask,
-+    Arg<Optional<LHLO_Buffer>, "", [MemRead]>:$bias,
-+    Arg<LHLO_Buffer, "", [MemWrite]>:$output,
-+    Arg<LHLO_Buffer, "", [MemWrite]>:$scratch,
-+    MHLO_DotDimensionNumbers:$bmm1_dot_dimension_numbers,
-+    MHLO_DotDimensionNumbers:$bmm2_dot_dimension_numbers,
-+    I64ArrayAttr:$intermediate_tensor_dimensions,
-+    I64ArrayAttr:$intermediate_tensor_layout,
-+    F64Attr:$fmha_scale,
-+    OptionalAttr<F64Attr>:$dropout_rate,
-+    FusedMhaDagSignatureAttr:$fused_mha_dag,
-+    FusedMHAAlgorithmConfigAttr:$algorithm_config,
-+    OptionalAttr<I64Attr>:$seed
-+    );
-+}
-+
-+def LHLOGPU_fusedMHAWithScaledBiasOp : LHLOGPU_Op<"fMHAWithScaledBias"> {
-+  let arguments = (ins
-+    Arg<LHLO_Buffer, "", [MemRead]>:$lhs_bmm1,
-+    Arg<LHLO_Buffer, "", [MemRead]>:$rhs_bmm1,
-+    Arg<LHLO_Buffer, "", [MemRead]>:$rhs_bmm2,
-+    Arg<LHLO_Buffer, "", [MemRead]>:$bias,
-+    Arg<LHLO_Buffer, "", [MemWrite]>:$output,
-+    Arg<LHLO_Buffer, "", [MemWrite]>:$scratch,
-+    MHLO_DotDimensionNumbers:$bmm1_dot_dimension_numbers,
-+    MHLO_DotDimensionNumbers:$bmm2_dot_dimension_numbers,
-+    I64ArrayAttr:$intermediate_tensor_dimensions,
-+    I64ArrayAttr:$intermediate_tensor_layout,
-+    F64Attr:$fmha_scale,
-+    OptionalAttr<F64Attr>:$dropout_rate,
-+    FusedMhaDagSignatureAttr:$fused_mha_dag,
-+    FusedMHAAlgorithmConfigAttr:$algorithm_config,
-+    OptionalAttr<I64Attr>:$seed
-+    );
-+}
-+
- #endif // LHLO_GPU_OPS
+     OptionalAttr<F64Attr>:$dropout_rate,
+     FusedMhaDagSignatureAttr:$fused_mha_dag,
+     FusedMHAAlgorithmConfigAttr:$algorithm_config,
 diff --git a/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops_enums.td b/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops_enums.td
-index 02dbcb5e6..94e0d78be 100644
+index 2a527ac55..94e0d78be 100644
 --- a/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops_enums.td
 +++ b/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops_enums.td
-@@ -109,4 +109,51 @@ def CublasLtMatmulEpilogue: I32EnumAttr<"CublasLtMatmulEpilogue",
- 
- def CublasLtMatmulEpilogueAttr : EnumAttr<LmhloGpuDialect, CublasLtMatmulEpilogue, "epilogue">;
- 
-+def FusedMHAAlgorithmConfigAttr : AttrDef<
-+  LmhloGpuDialect, "FusedMHAAlgorithmConfig"> {
-+  let mnemonic = "fHMA_algorithm_config";
-+  let parameters = (ins
-+  "int64_t":$algorithm,
-+   // These 2 fields are a TableGen transliteration of AlgorithmProto.
-+   // Currently only knobs ids and values are relevant for fMHA but this
-+   // Attr can be used to add algorithm related fields.
-+   // The next two fields are aligned arrays of knob IDs and values to
-+   // represent the knob_id -> knob_value map.
-+   I64ArrayParameter:$knob_ids,
-+   I64ArrayParameter:$knob_values,
-+   "int64_t":$workspace_size
-+ );
-+  let assemblyFormat = "`<` struct(params) `>`";
-+ let summary = "GPU Fused Multi Headed Attention Algorithm configuration";
-+}
-+
-+def FusedMhaDagDefault : I32EnumAttrCase<"Default", 0>;
-+def FusedMhaDagScaleBiasMaskSoftmax : I32EnumAttrCase<"ScaleBiasMaskSoftmax", 1>;
-+def FusedMhaDagScaleBiasMaskSoftmaxDropout : I32EnumAttrCase<"ScaleBiasMaskSoftmaxDropout", 2>;
-+def FusedMhaDagScaleMaskSoftmax : I32EnumAttrCase<"ScaleMaskSoftmax", 3>;
-+def FusedMhaDagScaleMaskSoftmaxDropout : I32EnumAttrCase<"ScaleMaskSoftmaxDropout", 4>;
-+def FusedMhaDagSoftmaxDropout : I32EnumAttrCase<"SoftmaxDropout", 5>;
-+def FusedMhaDagSoftmax : I32EnumAttrCase<"Softmax", 6>;
-+def FusedMhaDagScaleBiasSoftmaxDropout : I32EnumAttrCase<"ScaleBiasSoftmaxDropout", 7>;
-+def FusedMhaDagScaleBiasSoftmax : I32EnumAttrCase<"ScaleBiasSoftmax", 8>;
+@@ -136,6 +136,7 @@ def FusedMhaDagSoftmaxDropout : I32EnumAttrCase<"SoftmaxDropout", 5>;
+ def FusedMhaDagSoftmax : I32EnumAttrCase<"Softmax", 6>;
+ def FusedMhaDagScaleBiasSoftmaxDropout : I32EnumAttrCase<"ScaleBiasSoftmaxDropout", 7>;
+ def FusedMhaDagScaleBiasSoftmax : I32EnumAttrCase<"ScaleBiasSoftmax", 8>;
 +def FusedMhaDagScaleSoftmax : I32EnumAttrCase<"ScaleSoftmax", 9>;
-+
-+def FusedMhaDagSignature: I32EnumAttr<"FusedMhaDagSignature",
-+    "DAG configuration for Fused Multi-Headed Attention",
-+    [FusedMhaDagDefault, 
-+    FusedMhaDagScaleBiasMaskSoftmax, 
-+    FusedMhaDagScaleBiasMaskSoftmaxDropout, 
-+    FusedMhaDagScaleMaskSoftmax, 
-+    FusedMhaDagScaleMaskSoftmaxDropout, 
-+    FusedMhaDagSoftmaxDropout,
-+    FusedMhaDagSoftmax,
-+    FusedMhaDagScaleBiasSoftmaxDropout,
+ 
+ def FusedMhaDagSignature: I32EnumAttr<"FusedMhaDagSignature",
+     "DAG configuration for Fused Multi-Headed Attention",
+@@ -147,7 +148,8 @@ def FusedMhaDagSignature: I32EnumAttr<"FusedMhaDagSignature",
+     FusedMhaDagSoftmaxDropout,
+     FusedMhaDagSoftmax,
+     FusedMhaDagScaleBiasSoftmaxDropout,
+-    FusedMhaDagScaleBiasSoftmax]> {
 +    FusedMhaDagScaleBiasSoftmax,
 +    FusedMhaDagScaleSoftmax]> {
-+  let genSpecializedAttr = 0;
-+  let cppNamespace = "::mlir::lmhlo_gpu";
-+}
-+
-+def FusedMhaDagSignatureAttr : EnumAttr<LmhloGpuDialect, FusedMhaDagSignature, "fused_mha_dag">;
-+
- #endif // LHLO_GPU_OPS_ENUMS
-diff --git a/xla/service/algebraic_simplifier.h b/xla/service/algebraic_simplifier.h
-index a915ce2ca..957bb76e0 100644
---- a/xla/service/algebraic_simplifier.h
-+++ b/xla/service/algebraic_simplifier.h
-@@ -388,7 +388,7 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
-   virtual bool IsValidLayout(const Shape& shape) { return true; }
-   // Allow backend targets to determine whether a layout is inefficient.
-   virtual bool ShouldStrengthReduceDotToReduce(const HloInstruction* hlo) {
--    return true;
-+    return false;
-   }
- 
-  protected:
+   let genSpecializedAttr = 0;
+   let cppNamespace = "::mlir::lmhlo_gpu";
+ }
 diff --git a/xla/service/dump.cc b/xla/service/dump.cc
 index ad67a9e0f..dd6687d38 100644
 --- a/xla/service/dump.cc
@@ -378,213 +246,70 @@ index ad67a9e0f..dd6687d38 100644
    // Enable debug info so that it is easier to see the corresponding HLO node.
    if (file_prefix == "lmhlo") {
      print_flags.enableDebugInfo(/*enable=*/true,
-diff --git a/xla/service/gpu/backend_configs.proto b/xla/service/gpu/backend_configs.proto
-index 02fe31a08..56848c8c4 100644
---- a/xla/service/gpu/backend_configs.proto
-+++ b/xla/service/gpu/backend_configs.proto
-@@ -88,3 +88,25 @@ message BitcastBackendConfig {
-   LayoutProto source_layout = 1;
-   LayoutProto result_layout = 2;
- }
-+
-+// Backend config for a fused Multi-Headed Attention (fMHA) that runs through
-+// cudnn.
-+message CudnnfMHABackendConfig {
-+  // Opaque algorithm number and tuning knobs chosen for this fMHA.
-+  stream_executor.dnn.AlgorithmProto algorithm = 8;
-+
-+  // The scaling factor multiplied with the BMM1 result. fmha_scale is 0 if the
-+  // MHA pattern has no scaling.
-+  double fmha_scale = 10;
-+
-+  // Dropout factor in MHA
-+  double dropout_rate = 13;
-+
-+  xla.DotDimensionNumbers bmm1_dot_dimension_numbers = 11;
-+  xla.DotDimensionNumbers bmm2_dot_dimension_numbers = 12;
-+
-+  xla.ShapeProto intermediate_tensor_shape = 14;
-+
-+  // Random seed used by dropout
-+  int64 seed = 15;
-+}
-\ No newline at end of file
 diff --git a/xla/service/gpu/cublas_cudnn.cc b/xla/service/gpu/cublas_cudnn.cc
-index e899e224a..f8418752f 100644
+index 240e69ac4..d7132822d 100644
 --- a/xla/service/gpu/cublas_cudnn.cc
 +++ b/xla/service/gpu/cublas_cudnn.cc
-@@ -56,6 +56,26 @@ const absl::string_view kCudnnConvReorderFilterCallTarget =
- const absl::string_view kCudnnConvReorderFilterAndBiasCallTarget =
-     "__cudnn$convReorderFilterAndBias";
- 
-+// fMHA call targets.
-+const absl::string_view kCudnnfMHABmmBmmCallTarget = "__cudnn$fmhaBmmBmm";
-+const absl::string_view kCudnnfMHASoftmaxCallTarget = "__cudnn$fmhaSoftmax";
-+const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxCallTarget =
-+    "__cudnn$fmhaScaleBiasMaskSoftmax";
-+const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget =
-+    "__cudnn$fmhaScaleBiasMaskSoftmaxDropout";
-+const absl::string_view kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget =
-+    "__cudnn$fmhaScaleBiasSoftmaxDropout";
+@@ -65,6 +65,8 @@ const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget =
+     "__cudnn$fhmaScaleBiasMaskSoftmaxDropout";
+ const absl::string_view kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget =
+     "__cudnn$fhmaScaleBiasSoftmaxDropout";
 +const absl::string_view kCudnnfMHAScaleSoftmaxCallTarget =
 +    "__cudnn$fmhaScaleSoftmax";
-+const absl::string_view kCudnnfMHAScaleBiasSoftmaxCallTarget =
-+    "__cudnn$fmhaScaleBiasSoftmax";
-+const absl::string_view kCudnnfMHAScaleMaskSoftmaxCallTarget =
-+    "__cudnn$fmhaScaleMaskSoftmax";
-+const absl::string_view kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget =
-+    "__cudnn$fmhaScaleMaskSoftmaxDropout";
-+const absl::string_view kCudnnfMHASoftmaxDropoutCallTarget =
-+    "__cudnn$fmhaSoftmaxDropout";
-+
- bool IsCustomCallToDnnConvolution(const HloInstruction& hlo) {
-   if (hlo.opcode() != HloOpcode::kCustomCall) {
-     return false;
-@@ -76,6 +96,20 @@ bool IsCudnnConvolutionReorder(const HloInstruction& hlo) {
-          target == kCudnnConvReorderFilterAndBiasCallTarget;
- }
- 
-+bool IsCustomCallTofMHA(const HloInstruction& hlo) {
-+  const auto& target = hlo.custom_call_target();
-+  return target == kCudnnfMHABmmBmmCallTarget ||
-+         target == kCudnnfMHASoftmaxCallTarget ||
-+         target == kCudnnfMHAScaleBiasMaskSoftmaxCallTarget ||
-+         target == kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget ||
-+         target == kCudnnfMHAScaleMaskSoftmaxCallTarget ||
-+         target == kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget ||
-+         target == kCudnnfMHASoftmaxDropoutCallTarget ||
+ const absl::string_view kCudnnfMHAScaleBiasSoftmaxCallTarget =
+     "__cudnn$fhmaScaleBiasSoftmax";
+ const absl::string_view kCudnnfMHAScaleMaskSoftmaxCallTarget =
+@@ -102,6 +104,7 @@ bool IsCustomCallTofMHA(const HloInstruction& hlo) {
+          target == kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget ||
+          target == kCudnnfMHAScaleMaskSoftmaxCallTarget ||
+          target == kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget ||
 +         target == kCudnnfMHAScaleSoftmaxCallTarget ||
-+         target == kCudnnfMHAScaleBiasSoftmaxCallTarget ||
-+         target == kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget;
-+}
-+
- StatusOr<CudnnConvKind> GetCudnnConvKind(
-     const HloCustomCallInstruction* instr) {
-   absl::string_view target = instr->custom_call_target();
-@@ -107,5 +141,55 @@ std::string CudnnConvKindToString(CudnnConvKind kind) {
+          target == kCudnnfMHASoftmaxDropoutCallTarget ||
+          target == kCudnnfMHAScaleBiasSoftmaxCallTarget ||
+          target == kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget;
+@@ -150,6 +153,8 @@ StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(
+     return CudnnfMHAKind::kScaleMaskSoftmax;
+   if (target == kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget)
+     return CudnnfMHAKind::kScaleMaskSoftmaxDropout;
++  if (target == kCudnnfMHAScaleSoftmaxCallTarget)
++    return CudnnfMHAKind::kScaleSoftmax;
+   if (target == kCudnnfMHASoftmaxDropoutCallTarget)
+     return CudnnfMHAKind::kSoftmaxDropout;
+   if (target == kCudnnfMHASoftmaxCallTarget) return CudnnfMHAKind::kSoftmax;
+@@ -181,6 +186,8 @@ std::string CudnnfMHAKindToString(CudnnfMHAKind kind) {
+       return "fmha_bias_softmax_with_dropout";
+     case CudnnfMHAKind::kScaleBiasSoftmax:
+       return "fmha_bias_softmax";
++    case CudnnfMHAKind::kScaleSoftmax:
++      return "fmha_scale_softmax";
    }
  }
  
-+StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(
-+    const HloCustomCallInstruction* instr) {
-+  absl::string_view target = instr->custom_call_target();
-+  if (target == kCudnnfMHABmmBmmCallTarget) return CudnnfMHAKind::kBmmBmm;
-+  if (target == kCudnnfMHAScaleBiasMaskSoftmaxCallTarget)
-+    return CudnnfMHAKind::kScaleBiasMaskSoftmax;
-+  if (target == kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget)
-+    return CudnnfMHAKind::kScaleBiasMaskSoftmaxDropout;
-+  if (target == kCudnnfMHAScaleMaskSoftmaxCallTarget)
-+    return CudnnfMHAKind::kScaleMaskSoftmax;
-+  if (target == kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget)
-+    return CudnnfMHAKind::kScaleMaskSoftmaxDropout;
-+  if (target == kCudnnfMHASoftmaxDropoutCallTarget)
-+    return CudnnfMHAKind::kSoftmaxDropout;
-+  if (target == kCudnnfMHASoftmaxCallTarget) return CudnnfMHAKind::kSoftmax;
-+  if (target == kCudnnfMHAScaleSoftmaxCallTarget)
-+    return CudnnfMHAKind::kScaleSoftmax;
-+  if (target == kCudnnfMHAScaleBiasSoftmaxCallTarget)
-+    return CudnnfMHAKind::kScaleBiasSoftmax;
-+  if (target == kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget)
-+    return CudnnfMHAKind::kScaleBiasSoftmaxDropout;
-+
-+  return InternalError("Unexpected call target: %s", target);
-+}
-+
-+std::string CudnnfMHAKindToString(CudnnfMHAKind kind) {
-+  switch (kind) {
-+    case CudnnfMHAKind::kBmmBmm:
-+      return "fused_batched_matmuls";
-+    case CudnnfMHAKind::kSoftmax:
-+      return "fmha_softmax";
-+    case CudnnfMHAKind::kSoftmaxDropout:
-+      return "fmha_softmax_with_dropout";
-+    case CudnnfMHAKind::kScaleMaskSoftmax:
-+      return "fmha_scaled_masked_softmax";
-+    case CudnnfMHAKind::kScaleMaskSoftmaxDropout:
-+      return "fmha_scaled_masked_softmax_with_dropout";
-+    case CudnnfMHAKind::kScaleBiasMaskSoftmax:
-+      return "fmha_scaled_bias_masked_softmax";
-+    case CudnnfMHAKind::kScaleBiasMaskSoftmaxDropout:
-+      return "fmha_scaled_bias_masked_softmax_with_dropout";
-+    case CudnnfMHAKind::kScaleBiasSoftmaxDropout:
-+      return "fmha_bias_softmax_with_dropout";
-+    case CudnnfMHAKind::kScaleBiasSoftmax:
-+      return "fmha_bias_softmax";
-+    case CudnnfMHAKind::kScaleSoftmax:
-+      return "fmha_scale_softmax";
-+  }
-+}
-+
- }  // namespace gpu
- }  // namespace xla
 diff --git a/xla/service/gpu/cublas_cudnn.h b/xla/service/gpu/cublas_cudnn.h
-index 258571ccc..4e8c6eec9 100644
+index 50eddecea..45dc4fdb3 100644
 --- a/xla/service/gpu/cublas_cudnn.h
 +++ b/xla/service/gpu/cublas_cudnn.h
-@@ -45,6 +45,19 @@ enum class CudnnConvKind {
-                        // (optionally) side_input) => output
- };
- 
-+enum class CudnnfMHAKind {
-+  kBmmBmm,
-+  kScaleBiasMaskSoftmax,
-+  kScaleBiasMaskSoftmaxDropout,
-+  kScaleMaskSoftmax,
-+  kScaleMaskSoftmaxDropout,
-+  kSoftmaxDropout,
-+  kSoftmax,
+@@ -53,6 +53,7 @@ enum class CudnnfMHAKind {
+   kScaleMaskSoftmaxDropout,
+   kSoftmaxDropout,
+   kSoftmax,
 +  kScaleSoftmax,
-+  kScaleBiasSoftmax,
-+  kScaleBiasSoftmaxDropout,
-+};
-+
- StatusOr<CudnnConvKind> GetCudnnConvKind(const HloCustomCallInstruction* instr);
- 
- // Converts a CudnnConvKind value to a string.
-@@ -126,6 +139,38 @@ bool IsCustomCallToDnnConvolution(const HloInstruction& hlo);
- // reordering helper (required for int8x32 convolutions).
- bool IsCudnnConvolutionReorder(const HloInstruction& hlo);
- 
-+// The fused_mha_rewriter phase where each of the MHA signatures are pattern
-+// matched and rewritten into a custom-call with specific custom-call target.
-+// The custom-call target specifies the MHA signature. For example,  BMM1 - Bias
-+// - Scale - Mask - Softmax - BMM2 pattern can have the target as
-+// cudnn$fmhaBiasScaleMaskSoftmax.
-+// The fMHA signatures currently supported by cudnn are:
-+// 1.BMM1 - BMM2
-+// 2. BMM1 - Scale - Bias - Mask - Softmax - BMM2
-+// 3. BMM1 - Scale - Bias - Mask - Softmax - Dropout - BMM2
-+// 4. BMM1 - Scale - Mask - Softmax - BMM2
-+// 5. BMM1 - Scale - Mask - Softmax - Dropout - BMM2
-+// 6. BMM1 - Softmax - Dropout - BMM2
-+// 7. BMM1 - Softmax - BMM2
-+// 8. BMM1 - scale - Bias - Softmax - BMM2
-+// 9. BMM1 - scale - Softmax - BMM2
-+extern const absl::string_view kCudnnfMHABmmBmmCallTarget;
-+extern const absl::string_view kCudnnfMHASoftmaxCallTarget;
-+extern const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxCallTarget;
-+extern const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget;
-+extern const absl::string_view kCudnnfMHAScaleMaskSoftmaxCallTarget;
-+extern const absl::string_view kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget;
-+extern const absl::string_view kCudnnfMHASoftmaxDropoutCallTarget;
-+extern const absl::string_view kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget;
-+extern const absl::string_view kCudnnfMHAScaleBiasSoftmaxCallTarget;
+   kScaleBiasSoftmax,
+   kScaleBiasSoftmaxDropout,
+ };
+@@ -161,6 +162,7 @@ extern const absl::string_view kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget;
+ extern const absl::string_view kCudnnfMHASoftmaxDropoutCallTarget;
+ extern const absl::string_view kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget;
+ extern const absl::string_view kCudnnfMHAScaleBiasSoftmaxCallTarget;
 +extern const absl::string_view kCudnnfMHAScaleSoftmaxCallTarget;
-+
-+bool IsCustomCallTofMHA(const HloInstruction& hlo);
-+
-+StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(const HloCustomCallInstruction* instr);
-+
-+std::string CudnnfMHAKindToString(CudnnfMHAKind kind);
-+
- }  // namespace gpu
- }  // namespace xla
+ 
+ bool IsCustomCallTofMHA(const HloInstruction& hlo);
  
 diff --git a/xla/service/gpu/elemental_ir_emitter.cc b/xla/service/gpu/elemental_ir_emitter.cc
-index f2afe628f..ac1a907c2 100644
+index f0709a7f1..ce93976fb 100644
 --- a/xla/service/gpu/elemental_ir_emitter.cc
 +++ b/xla/service/gpu/elemental_ir_emitter.cc
-@@ -321,12 +321,13 @@ StatusOr<llvm::Value*> GpuElementalIrEmitter::EmitTanh(PrimitiveType prim_type,
+@@ -323,12 +323,13 @@ StatusOr<llvm::Value*> GpuElementalIrEmitter::EmitTanh(PrimitiveType prim_type,
                  value->getType(), "tanh");
  }
  
@@ -620,7 +345,7 @@ index 12f5f03ac..d9e4a4170 100644
    StatusOr<std::vector<llvm::Value*>> EmitThreadLocalCall(
        const HloComputation& callee, absl::Span<llvm::Value* const> parameters,
 diff --git a/xla/service/gpu/gpu_layout_assignment.cc b/xla/service/gpu/gpu_layout_assignment.cc
-index 9b968f374..451121332 100644
+index 590f5ff41..6dcb1939b 100644
 --- a/xla/service/gpu/gpu_layout_assignment.cc
 +++ b/xla/service/gpu/gpu_layout_assignment.cc
 @@ -66,7 +66,7 @@ HeuristicLayoutAssignment(const HloInstruction* instr,
@@ -633,10 +358,10 @@ index 9b968f374..451121332 100644
  
    // Integer convolution must use NHWC or NCHW_VECT_C.
 diff --git a/xla/service/gpu/ir_emission_utils.cc b/xla/service/gpu/ir_emission_utils.cc
-index 5ae52feb6..41ce6b9f0 100644
+index 5603f6b87..9a78219a3 100644
 --- a/xla/service/gpu/ir_emission_utils.cc
 +++ b/xla/service/gpu/ir_emission_utils.cc
-@@ -105,11 +105,11 @@ bool IsMatrixMultiplication(const HloInstruction& dot) {
+@@ -107,11 +107,11 @@ bool IsMatrixMultiplication(const HloInstruction& dot) {
    const DotDimensionNumbers& dim_numbers = dot.dot_dimension_numbers();
  
    PrimitiveType output_primitive_type = dot.shape().element_type();
@@ -650,7 +375,7 @@ index 5ae52feb6..41ce6b9f0 100644
        (output_primitive_type == S32 && lhs_shape.element_type() == S8 &&
         rhs_shape.element_type() == S8);
    bool shapes_are_valid =
-@@ -363,6 +363,31 @@ llvm::Value* EmitNVPTXShflDown(llvm::Value* value, llvm::Value* offset,
+@@ -365,6 +365,31 @@ llvm::Value* EmitNVPTXShflDown(llvm::Value* value, llvm::Value* offset,
        intrinsic, {b->getInt32(-1), value, offset, b->getInt32(WarpSize() - 1)});
  }
  
@@ -682,7 +407,7 @@ index 5ae52feb6..41ce6b9f0 100644
  llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
                                       llvm::IRBuilder<>* builder) {
    int bit_width = value->getType()->getPrimitiveSizeInBits();
-@@ -375,6 +400,8 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
+@@ -377,6 +402,8 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
        return EmitNVPTXShflDown(value, offset, builder);
      } else if (target_triple.getArch() == llvm::Triple::amdgcn) {
        return EmitAMDGPUShflDown(value, offset, builder);
@@ -691,7 +416,7 @@ index 5ae52feb6..41ce6b9f0 100644
      } else {
        LOG(FATAL) << "Invalid triple " << target_triple.str();
      }
-@@ -396,6 +423,9 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
+@@ -398,6 +425,9 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
      } else if (target_triple.getArch() == llvm::Triple::amdgcn) {
        insert_val = EmitAMDGPUShflDown(builder->CreateExtractElement(x, i),
                                        offset, builder);
@@ -702,7 +427,7 @@ index 5ae52feb6..41ce6b9f0 100644
        LOG(FATAL) << "Invalid triple " << target_triple.str();
      }
 diff --git a/xla/service/gpu/matmul_utils.h b/xla/service/gpu/matmul_utils.h
-index e3d78ce0d..9f221bc9a 100644
+index c46ba6922..dedac9e37 100644
 --- a/xla/service/gpu/matmul_utils.h
 +++ b/xla/service/gpu/matmul_utils.h
 @@ -37,6 +37,23 @@ limitations under the License.
@@ -729,7 +454,7 @@ index e3d78ce0d..9f221bc9a 100644
  namespace xla {
  namespace gpu {
  
-@@ -117,6 +134,7 @@ struct GemmConfig {
+@@ -119,6 +136,7 @@ struct GemmConfig {
    double beta;
    std::optional<int64_t> algorithm;
    int64_t compute_precision;
@@ -738,7 +463,7 @@ index e3d78ce0d..9f221bc9a 100644
  
  StatusOr<se::blas::ComputationType> GetBlasComputationType(
 diff --git a/xla/service/gpu/parallel_loop_emitter.cc b/xla/service/gpu/parallel_loop_emitter.cc
-index 2d61ce387..44ccdeb03 100644
+index 7577f166f..857f3cf4e 100644
 --- a/xla/service/gpu/parallel_loop_emitter.cc
 +++ b/xla/service/gpu/parallel_loop_emitter.cc
 @@ -178,9 +178,7 @@ ParallelLoopEmitter::EmitIndexAndSetExitBasicBlock(absl::string_view loop_name,
@@ -777,19 +502,10 @@ index 2d61ce387..44ccdeb03 100644
    }
  
 diff --git a/xla/service/gpu/stream_executor_util.cc b/xla/service/gpu/stream_executor_util.cc
-index 6f2be2a88..b2a8a1041 100644
+index fb042054f..04121065f 100644
 --- a/xla/service/gpu/stream_executor_util.cc
 +++ b/xla/service/gpu/stream_executor_util.cc
-@@ -121,7 +121,7 @@ StreamExecutorConvLayoutsToXlaLayouts(const ConvolutionDimensionNumbers& dnums,
-                            dnums.kernel_spatial_dimensions().begin(),
-                            dnums.kernel_spatial_dimensions().end());
-       break;
--    case FilterLayout::kOutputInputYX4:   // OIHW_VECT_C
-+    case FilterLayout::kOutputInputYX4:  // OIHW_VECT_C
-       filter_layout.push_back(dnums.kernel_output_feature_dimension());
-       filter_layout.push_back(dnums.kernel_input_feature_dimension());
-       filter_layout.insert(filter_layout.end(),
-@@ -136,6 +136,13 @@ StreamExecutorConvLayoutsToXlaLayouts(const ConvolutionDimensionNumbers& dnums,
+@@ -140,6 +140,13 @@ StreamExecutorConvLayoutsToXlaLayouts(const ConvolutionDimensionNumbers& dnums,
                             dnums.kernel_spatial_dimensions().end());
        filter_layout.push_back(dnums.kernel_input_feature_dimension());
        break;
@@ -803,7 +519,7 @@ index 6f2be2a88..b2a8a1041 100644
      default:
        return InternalError("Invalid filter layout %s for conv with dnums %s,",
                             FilterLayoutString(filter),
-@@ -173,7 +180,7 @@ XlaConvShapesToStreamExecutorLayouts(const ConvolutionDimensionNumbers& dnums,
+@@ -177,7 +184,7 @@ XlaConvShapesToStreamExecutorLayouts(const ConvolutionDimensionNumbers& dnums,
    Layout nhwc_input, nhwc_filter, nhwc_output;
    std::tie(nhwc_input, nhwc_filter, nhwc_output) =
        StreamExecutorConvLayoutsToXlaLayouts(dnums, DataLayout::kBatchYXDepth,
@@ -812,7 +528,7 @@ index 6f2be2a88..b2a8a1041 100644
                                              DataLayout::kBatchYXDepth)
            .value();
  
-@@ -222,7 +229,7 @@ XlaConvShapesToStreamExecutorLayouts(const ConvolutionDimensionNumbers& dnums,
+@@ -226,7 +233,7 @@ XlaConvShapesToStreamExecutorLayouts(const ConvolutionDimensionNumbers& dnums,
            ConvolutionDimensionNumbersToString(dnums), vect_size);
      }
    } else if (LayoutUtil::Equal(filter.layout(), nhwc_filter)) {
@@ -821,7 +537,7 @@ index 6f2be2a88..b2a8a1041 100644
    } else {
      return InternalError(
          "Invalid filter layout %s for conv with dnums %s, expected one of (%s, "
-@@ -325,7 +332,8 @@ StatusOr<std::unique_ptr<se::KernelBase>> CreateKernel(
+@@ -329,7 +336,8 @@ StatusOr<std::unique_ptr<se::KernelBase>> CreateKernel(
  
    if (!cubin_data.empty()) {
      loader_spec.AddCudaCubinInMemory(
@@ -831,38 +547,13 @@ index 6f2be2a88..b2a8a1041 100644
    }
  
    auto kernel_base = std::make_unique<se::KernelBase>(stream_exec);
-@@ -489,6 +497,24 @@ StatusOr<se::dnn::ConvolutionKind> GetDNNConvKindFromCudnnConvKind(
-   return InternalError("Unexpected convolution kind");
- }
- 
-+StatusOr<se::dnn::FusedMHAKind> GetDNNFusedMHAKindFromCudnnfMHAKind(
-+    CudnnfMHAKind kind) {
-+  switch (kind) {
-+    case CudnnfMHAKind::kScaleBiasMaskSoftmaxDropout:
-+    case CudnnfMHAKind::kScaleMaskSoftmaxDropout:
-+    case CudnnfMHAKind::kSoftmaxDropout:
-+    case CudnnfMHAKind::kBmmBmm:
-+    case CudnnfMHAKind::kScaleBiasMaskSoftmax:
-+    case CudnnfMHAKind::kScaleMaskSoftmax:
-+    case CudnnfMHAKind::kScaleBiasSoftmax:
-+    case CudnnfMHAKind::kScaleBiasSoftmaxDropout:
-+      return se::dnn::FusedMHAKind::BMM1_OUTPUT_INPUT_TYPE;
-+    case CudnnfMHAKind::kSoftmax:
-+      return se::dnn::FusedMHAKind::BMM1_OUTPUT_FLOAT;
-+  }
-+  return InternalError("Unexpected fMHA kind");
-+}
-+
- StatusOr<se::dnn::DataType> GetDNNDataTypeFromPrimitiveType(
-     PrimitiveType type) {
-   switch (type) {
 diff --git a/xla/service/gpu/stream_executor_util.h b/xla/service/gpu/stream_executor_util.h
-index a91b2c670..6c16b461f 100644
+index 4ba827110..0c2167edd 100644
 --- a/xla/service/gpu/stream_executor_util.h
 +++ b/xla/service/gpu/stream_executor_util.h
-@@ -102,6 +102,8 @@ void InitializeBuffer(se::Stream* stream, PrimitiveType buffer_type,
- StatusOr<se::dnn::ConvolutionKind> GetDNNConvKindFromCudnnConvKind(
-     CudnnConvKind kind);
+@@ -106,6 +106,8 @@ StatusOr<se::dnn::FusedMHAKind> GetDNNFusedMHAKindFromCudnnfMHAKind(
+     CudnnfMHAKind kind);
+ 
  StatusOr<se::dnn::DataType> GetDNNDataTypeFromPrimitiveType(PrimitiveType type);
 +StatusOr<se::dnn::FusedMHAKind> GetDNNFusedMHAKindFromCudnnfMHAKind(
 +    CudnnfMHAKind kind);
@@ -903,10 +594,10 @@ index 92f31a6c1..ff12c19d9 100644
  }  // namespace xla
  
 diff --git a/xla/service/gpu/target_util.cc b/xla/service/gpu/target_util.cc
-index 97ee67bd3..a958575bf 100644
+index 97ca63888..eace46129 100644
 --- a/xla/service/gpu/target_util.cc
 +++ b/xla/service/gpu/target_util.cc
-@@ -40,6 +40,10 @@ struct TargetIntrinsics {
+@@ -45,6 +45,10 @@ struct TargetIntrinsics {
    std::variant<llvm::Intrinsic::ID,
                 std::function<llvm::CallInst*(llvm::IRBuilder<>*)>>
        amdgpu_intrinsic_or_function;
@@ -917,7 +608,7 @@ index 97ee67bd3..a958575bf 100644
  };
  
  // Gets the llvm intrinsic ids on different platforms (NVPTX, AMDGPU)
-@@ -47,32 +51,80 @@ struct TargetIntrinsics {
+@@ -52,32 +56,82 @@ struct TargetIntrinsics {
  struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
    switch (intrin) {
      case TargetIntrinsicID::kThreadIdx: {
@@ -1004,7 +695,9 @@ index 97ee67bd3..a958575bf 100644
 +      return {llvm::Intrinsic::nvvm_barrier0, llvm::Intrinsic::amdgcn_s_barrier,
 +              [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
 +                return EmitDeviceFunctionCall(
-+                    "__builtin_spirv_OpControlBarrier_i32_i32_i32", {b_->getInt32(2), b_->getInt32(2), b_->getInt32(272)}, {U32, U32, U32}, VOID,
++                    "__builtin_spirv_OpControlBarrier_i32_i32_i32",
++                    {b_->getInt32(2), b_->getInt32(2), b_->getInt32(272)},
++                    {U32, U32, U32}, VOID,
 +                    llvm::AttrBuilder(b_->getContext())
 +                        .addAttribute(llvm::Attribute::Convergent),
 +                    b_);
@@ -1012,7 +705,7 @@ index 97ee67bd3..a958575bf 100644
      }
      case TargetIntrinsicID::kBlockDimx: {
        return {llvm::Intrinsic::nvvm_read_ptx_sreg_ntid_x,
-@@ -80,6 +132,11 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
+@@ -85,6 +139,11 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
                  return EmitDeviceFunctionCall("__ockl_get_local_size",
                                                {b_->getInt32(0)}, {U32}, U64,
                                                {b_->getContext()}, b_);
@@ -1024,7 +717,7 @@ index 97ee67bd3..a958575bf 100644
                }};
      }
      case TargetIntrinsicID::kBlockDimy: {
-@@ -88,6 +145,11 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
+@@ -93,6 +152,11 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
                  return EmitDeviceFunctionCall("__ockl_get_local_size",
                                                {b_->getInt32(1)}, {U32}, U64,
                                                {b_->getContext()}, b_);
@@ -1036,7 +729,7 @@ index 97ee67bd3..a958575bf 100644
                }};
      }
      case TargetIntrinsicID::kBlockDimz: {
-@@ -96,11 +158,24 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
+@@ -101,11 +165,24 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
                  return EmitDeviceFunctionCall("__ockl_get_local_size",
                                                {b_->getInt32(2)}, {U32}, U64,
                                                {b_->getContext()}, b_);
@@ -1062,7 +755,7 @@ index 97ee67bd3..a958575bf 100644
      }
    }
  }
-@@ -109,6 +184,7 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
+@@ -114,6 +191,7 @@ struct TargetIntrinsics GetIntrinsic(TargetIntrinsicID intrin) {
  struct TargetDeviceFunction {
    const std::string nvptx_root;
    const std::string amdgpu_root;
@@ -1070,7 +763,7 @@ index 97ee67bd3..a958575bf 100644
  };
  
  // Gets the device function name on different platforms (NVPTX, AMDGPU)
-@@ -117,52 +193,52 @@ struct TargetDeviceFunction GetDeviceFunctionRoot(
+@@ -122,52 +200,52 @@ struct TargetDeviceFunction GetDeviceFunctionRoot(
      TargetDeviceFunctionID func_id) {
    switch (func_id) {
      case TargetDeviceFunctionID::kAtan2: {
@@ -1137,9 +830,9 @@ index 97ee67bd3..a958575bf 100644
 -      return {"__nv_tanh", "__ocml_tanh"};
 +      return {"__nv_tanh", "__ocml_tanh", "_Z4tanh"};
      }
-   }
- }
-@@ -193,6 +269,24 @@ std::string ObtainDeviceFunctionName(TargetDeviceFunctionID func_id,
+     case TargetDeviceFunctionID::kCbrt: {
+       return {"__nv_cbrt", "__ocml_cbrt"};
+@@ -235,6 +313,24 @@ std::string ObtainDeviceFunctionName(TargetDeviceFunctionID func_id,
      } else {
        LOG(FATAL) << "Unexpected type while getting device function name.";
      }
@@ -1164,7 +857,7 @@ index 97ee67bd3..a958575bf 100644
    } else {
      LOG(FATAL) << "Invalid triple " << target_triple.str();
    }
-@@ -222,6 +316,11 @@ llvm::CallInst* EmitDeviceFunctionCall(
+@@ -264,6 +360,11 @@ llvm::CallInst* EmitDeviceFunctionCall(
            .getCallee());
  
    callee->addFnAttrs(attributes);
@@ -1176,7 +869,7 @@ index 97ee67bd3..a958575bf 100644
  
    return b->CreateCall(callee, llvm_ir::AsArrayRef(operands), name.data());
  }
-@@ -247,6 +346,18 @@ llvm::CallInst* EmitCallToTargetIntrinsic(
+@@ -289,6 +390,18 @@ llvm::CallInst* EmitCallToTargetIntrinsic(
                &gpu_intrinsic_id.amdgpu_intrinsic_or_function);
        return (*builder_func)(b);
      }
@@ -1195,7 +888,7 @@ index 97ee67bd3..a958575bf 100644
    } else {
      LOG(FATAL) << "Invalid triple " << target_triple.str();
    }
-@@ -274,6 +385,8 @@ void AnnotateFunctionAsGpuKernel(llvm::Module* module, llvm::Function* func,
+@@ -316,6 +429,8 @@ void AnnotateFunctionAsGpuKernel(llvm::Module* module, llvm::Function* func,
      // Attach information so AMDGPU can recognize function as a AMDGPU kernel.
      func->setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
      func->addFnAttr("amdgpu-flat-work-group-size", "1, 1024");
@@ -1204,32 +897,8 @@ index 97ee67bd3..a958575bf 100644
    } else {
      LOG(FATAL) << "Invalid triple " << target_triple.str();
    }
-diff --git a/xla/service/gpu/thunk.cc b/xla/service/gpu/thunk.cc
-index 61f2decee..fbee8ed5f 100644
---- a/xla/service/gpu/thunk.cc
-+++ b/xla/service/gpu/thunk.cc
-@@ -72,6 +72,7 @@ Thunk::ExecuteParams::ExecuteParams(
-     CASE(kSequential);
-     CASE(kTriangularSolve);
-     CASE(kWhile);
-+    CASE(kFusedMHA);
-   }
- }
- 
-diff --git a/xla/service/gpu/thunk.h b/xla/service/gpu/thunk.h
-index eabc812c2..cf4963f8f 100644
---- a/xla/service/gpu/thunk.h
-+++ b/xla/service/gpu/thunk.h
-@@ -82,6 +82,7 @@ class Thunk {
-     kSequential,
-     kTriangularSolve,
-     kWhile,
-+    kFusedMHA,
-   };
- 
-   struct ThunkInfo {
 diff --git a/xla/service/llvm_ir/fused_ir_emitter.cc b/xla/service/llvm_ir/fused_ir_emitter.cc
-index d1247b8c6..4d9c249b2 100644
+index 006020e41..0add8fbe3 100644
 --- a/xla/service/llvm_ir/fused_ir_emitter.cc
 +++ b/xla/service/llvm_ir/fused_ir_emitter.cc
 @@ -104,7 +104,7 @@ FusedIrEmitter::IndexedGenerator FusedIrEmitter::HandleConstant(
@@ -1242,10 +911,10 @@ index d1247b8c6..4d9c249b2 100644
    global->setUnnamedAddr(llvm::GlobalVariable::UnnamedAddr::Global);
  
 diff --git a/xla/service/llvm_ir/ir_array.cc b/xla/service/llvm_ir/ir_array.cc
-index 209e05fa9..cb99afb26 100644
+index 7708db56e..0e2d1fe56 100644
 --- a/xla/service/llvm_ir/ir_array.cc
 +++ b/xla/service/llvm_ir/ir_array.cc
-@@ -23,6 +23,7 @@ limitations under the License.
+@@ -24,6 +24,7 @@ limitations under the License.
  #include "llvm/IR/Constants.h"
  #include "llvm/IR/Instructions.h"
  #include "llvm/IR/Value.h"
@@ -1253,7 +922,7 @@ index 209e05fa9..cb99afb26 100644
  #include "xla/layout_util.h"
  #include "xla/permutation_util.h"
  #include "xla/service/llvm_ir/llvm_type_conversion_util.h"
-@@ -31,7 +32,6 @@ limitations under the License.
+@@ -32,7 +33,6 @@ limitations under the License.
  #include "xla/statusor.h"
  #include "xla/util.h"
  #include "xla/xla_data.pb.h"
@@ -1261,14 +930,17 @@ index 209e05fa9..cb99afb26 100644
  
  namespace xla {
  namespace llvm_ir {
-@@ -514,9 +514,18 @@ llvm::Value* IrArray::EmitArrayElementAddress(const IrArray::Index& index,
+@@ -494,9 +494,25 @@ llvm::Value* IrArray::EmitArrayElementAddress(const IrArray::Index& index,
    if (use_linear_index && index.LinearValidOnShape(shape_)) {
      llvm::Module* module = b->GetInsertBlock()->getParent()->getParent();
      llvm::Type* type = PrimitiveTypeToIrType(shape_.element_type(), module);
--    return b->CreateInBoundsGEP(
--        type, b->CreateBitCast(base_ptr_, type->getPointerTo()), index.linear(),
--        llvm_ir::AsStringRef(name));
-+    // base_ptr + offset
++#if 1
+     return b->CreateInBoundsGEP(
+         type, b->CreateBitCast(base_ptr_, type->getPointerTo()), index.linear(),
+         llvm_ir::AsStringRef(name));
++#else
++    // TODO: index is not always a combination of base + offset
++    // base + offset
 +    llvm::Value* index_operand_0 =
 +        llvm::cast<llvm::BinaryOperator>(index.linear())->getOperand(0);
 +    // constant index
@@ -1280,14 +952,15 @@ index 209e05fa9..cb99afb26 100644
 +
 +    return b->CreateInBoundsGEP(type, ptr_address, index_operand_1,
 +                                llvm_ir::AsStringRef(name));
++#endif
    }
  
    std::vector<llvm::Value*> actual_index;
 diff --git a/xla/service/llvm_ir/llvm_util.cc b/xla/service/llvm_ir/llvm_util.cc
-index be59801b9..7dbb5e999 100644
+index 97e6b63e3..88797a802 100644
 --- a/xla/service/llvm_ir/llvm_util.cc
 +++ b/xla/service/llvm_ir/llvm_util.cc
-@@ -234,6 +234,8 @@ llvm::Type* PrimitiveTypeToIrType(PrimitiveType element_type,
+@@ -235,6 +235,8 @@ llvm::Type* PrimitiveTypeToIrType(PrimitiveType element_type,
        // Tokens do not have a physical representation, but the compiler needs
        // some placeholder type, so use int8_t*.
        return llvm::Type::getInt8PtrTy(module->getContext());
@@ -1296,7 +969,7 @@ index be59801b9..7dbb5e999 100644
      default:
        LOG(FATAL) << "unsupported type " << element_type;
    }
-@@ -436,6 +438,7 @@ void SetDereferenceableMetadataForLoad(llvm::LoadInst* load,
+@@ -437,6 +439,7 @@ void SetDereferenceableMetadataForLoad(llvm::LoadInst* load,
  
  llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
                                      llvm::Instruction* inst) {
@@ -1304,7 +977,7 @@ index be59801b9..7dbb5e999 100644
    llvm::LLVMContext& context = inst->getParent()->getContext();
    llvm::IntegerType* i32 = llvm::Type::getInt32Ty(context);
    inst->setMetadata(
-@@ -444,6 +447,7 @@ llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
+@@ -445,6 +448,7 @@ llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
            context,
            {llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i32, lower)),
             llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i32, upper))}));
@@ -1312,1412 +985,6 @@ index be59801b9..7dbb5e999 100644
    return inst;
  }
  
-diff --git a/xla/stream_executor/cuda/cuda_dnn.cc b/xla/stream_executor/cuda/cuda_dnn.cc
-index 24834292c..c62a41e3f 100644
---- a/xla/stream_executor/cuda/cuda_dnn.cc
-+++ b/xla/stream_executor/cuda/cuda_dnn.cc
-@@ -19,6 +19,7 @@ limitations under the License.
- #include <functional>
- #include <memory>
- #include <optional>
-+#include <string>
- #include <utility>
- 
- #include "absl/base/optimization.h"
-@@ -53,6 +54,7 @@ limitations under the License.
- #include "third_party/gpus/cudnn/cudnn.h"
- #if CUDNN_VERSION >= 8100 && TF_ENABLE_CUDNN_FRONTEND
- #include "third_party/cudnn_frontend/include/cudnn_frontend.h"
-+#include "third_party/cudnn_frontend/include/cudnn_frontend_utils.h"
- #endif  // CUDNN_VERSION >= 8100 && TF_ENABLE_CUDNN_FRONTEND
- #include "absl/strings/string_view.h"
- // clang-format on
-@@ -3491,6 +3493,29 @@ std::tuple<int, int> GetTensorVectorSizeAndDim(
-   return std::make_tuple(vector_size, vector_dim);
- }
- 
-+#if (CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND)
-+tsl::StatusOr<cudnn_frontend::Tensor> CreateCudnnTensor(
-+    absl::Span<const int64_t> dims, absl::Span<const int64_t> strides,
-+    int64_t uid, dnn::DataType dtype, int64_t vec_count, int64_t vec_dim,
-+    bool is_virtual = false,
-+    cudnnBackendTensorReordering_t cudnn_tensor_order_type =
-+        CUDNN_TENSOR_REORDERING_NONE,
-+    bool is_value = false) {
-+  auto tensor = cudnn_frontend::TensorBuilder()
-+                    .setDim(dims.size(), dims.data())
-+                    .setStride(strides.size(), strides.data())
-+                    .setId(uid)
-+                    .setAlignment(32)
-+                    .setDataType(ToCudnnDataType(dtype))
-+                    .setVectorCountAndDimension(vec_count, vec_dim)
-+                    .setVirtual(is_virtual)
-+                    .setReorderType(cudnn_tensor_order_type)
-+                    .setByValue(is_value)
-+                    .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(tensor);
-+  return tensor;
-+}
-+#else
- tsl::StatusOr<cudnn_frontend::Tensor> CreateCudnnTensor(
-     absl::Span<const int64_t> dims, absl::Span<const int64_t> strides,
-     int64_t uid, dnn::DataType dtype, int64_t vec_count, int64_t vec_dim,
-@@ -3519,6 +3544,338 @@ tsl::StatusOr<cudnn_frontend::Tensor> CreateCudnnTensor(
-   RETURN_MSG_IF_CUDNN_ERROR(tensor);
-   return tensor;
- }
-+#endif
-+
-+#if (CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND)
-+// Returns a cudnn tensor that's the output of the mask op
-+tsl::StatusOr<cudnn_frontend::Tensor> CreateCudnnMaskTensor(
-+    std::vector<cudnn_frontend::Operation>& ops, absl::Span<const int64_t> dims,
-+    absl::Span<const int64_t> strides, dnn::DataType dtype,
-+    std::shared_ptr<cudnn_frontend::Tensor> input_tensor, double scale) {
-+  std::vector<int64_t> mask_dim(dims.size(), 1);
-+  std::vector<int64_t> mask_stride(strides.size(), 1);
-+
-+  // Create the masked out value tensor.
-+  TF_ASSIGN_OR_RETURN(
-+      auto masked_val_tensor,
-+      CreateCudnnTensor(
-+          mask_dim, mask_stride, 'A', dnn::DataType::kFloat, 1, -1,
-+          /*is_virtual*/ false,
-+          /*cudnn_tensor_order_type*/ CUDNN_TENSOR_REORDERING_NONE,
-+          /*is_value*/ true));
-+
-+  // Create the mask tensor
-+  TF_ASSIGN_OR_RETURN(auto mask_tensor,
-+                      CreateCudnnTensor(dims, strides, 'P', dtype, 1, -1,
-+                                        /*is_virtual=*/false));
-+  // Create the mask output tensor
-+  TF_ASSIGN_OR_RETURN(
-+      auto mask_out_tensor,
-+      CreateCudnnTensor(dims, strides, 'm' + 500, dnn::DataType::kFloat, 1, -1,
-+                        /*is_virtual=*/true));
-+
-+  auto mask_desc = cudnn_frontend::PointWiseDescBuilder()
-+                       .setMode(CUDNN_POINTWISE_MUL)
-+                       .setComputeType(CUDNN_DATA_FLOAT)
-+                       .build();
-+
-+  // Create the mask op.
-+  auto mask_op = cudnn_frontend::OperationBuilder(
-+                     CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
-+                     .setxDesc((*input_tensor))
-+                     .setbDesc(mask_tensor)
-+                     .setAlpha(scale)
-+                     .setyDesc(mask_out_tensor)
-+                     .setpwDesc(mask_desc)
-+                     .build();
-+
-+  RETURN_MSG_IF_CUDNN_ERROR(mask_op);
-+
-+  RETURN_MSG_IF_CUDNN_ERROR(mask_out_tensor);
-+  // Add mask to op list
-+  ops.push_back(std::move(mask_op));
-+
-+  return mask_out_tensor;
-+}
-+
-+// Returns a cudnn tensor that's the output of the bias addition op
-+tsl::StatusOr<cudnn_frontend::Tensor> CreateCudnnBiasTensor(
-+    std::vector<cudnn_frontend::Operation>& ops, absl::Span<const int64_t> dims,
-+    absl::Span<const int64_t> strides, dnn::DataType dtype,
-+    std::shared_ptr<cudnn_frontend::Tensor> input_tensor, double alpha_scale,
-+    bool use_mask) {
-+  // Create the bias tensor.
-+  TF_ASSIGN_OR_RETURN(auto bias_tensor,
-+                      CreateCudnnTensor(dims, strides, 'B', dtype, 1, -1));
-+
-+  // Create the bias output tensor
-+  dnn::DataType bias_out_type = use_mask ? dtype : dnn::DataType::kFloat;
-+  TF_ASSIGN_OR_RETURN(
-+      auto bias_out_tensor,
-+      CreateCudnnTensor(dims, strides, 'B' + 200, bias_out_type, 1, -1,
-+                        /*is_virtual=*/true));
-+
-+  // Define the bias descriptor
-+  auto bias_desc = cudnn_frontend::PointWiseDescBuilder()
-+                       .setMode(CUDNN_POINTWISE_ADD)
-+                       .setComputeType(CUDNN_DATA_FLOAT)
-+                       .build();
-+  // Create the bias op.
-+  auto bias_op = cudnn_frontend::OperationBuilder(
-+                     CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
-+                     .setxDesc((*input_tensor))
-+                     .setbDesc(bias_tensor)
-+                     .setyDesc(bias_out_tensor)
-+                     .setAlpha(alpha_scale)
-+                     .setpwDesc(bias_desc)
-+                     .build();
-+
-+  RETURN_MSG_IF_CUDNN_ERROR(bias_op);
-+
-+  RETURN_MSG_IF_CUDNN_ERROR(bias_out_tensor);
-+  // Add bias to op list
-+  ops.push_back(std::move(bias_op));
-+
-+  return bias_out_tensor;
-+}
-+
-+// Returns a cudnn tensor that's the output of the softmax op
-+tsl::StatusOr<cudnn_frontend::Tensor> CreateCudnnSoftmaxFwdTensor(
-+    std::vector<cudnn_frontend::Operation>& ops, absl::Span<const int64_t> dims,
-+    absl::Span<const int64_t> strides, dnn::DataType dtype,
-+    std::shared_ptr<cudnn_frontend::Tensor> input_tensor, bool use_dropout,
-+    bool is_virtual = false) {
-+  // softmax's typical computation is:
-+  // exp(input - reduce_max(input)) / reduce_sum(exp(input - reduce_max(input)))
-+  // We need to create each op and add it to the op list sequentially.
-+
-+  // Copy all dims except the last dim since it's reduced to 1.
-+  std::vector<int64_t> reduction_output_dim(dims.begin(), dims.end() - 1);
-+  reduction_output_dim.push_back(1);
-+
-+  // Divide every stride by the last dim value.
-+  std::vector<int64_t> reduction_output_stride;
-+  int64_t reduced_dim_len = dims.back();
-+  for (auto stride : strides) {
-+    reduction_output_stride.push_back(stride / reduced_dim_len);
-+  }
-+
-+  // Softmax output should be float
-+  cudnnDataType_t softmax_output_type = CUDNN_DATA_FLOAT;
-+
-+  // Create output tensor of the first max reduction.
-+  TF_ASSIGN_OR_RETURN(
-+      auto max_reduction_output_tensor,
-+      CreateCudnnTensor(reduction_output_dim, reduction_output_stride, 'm',
-+                        dnn::DataType::kFloat, 1, -1, /*is_virtual=*/true));
-+
-+  // Create the reduction descriptor
-+  auto max_reduction_desc = cudnn_frontend::ReductionDescBuilder()
-+                                .setComputeType(softmax_output_type)
-+                                .setReductionOp(CUDNN_REDUCE_TENSOR_MAX)
-+                                .build();
-+
-+  // Create a reduction max node.
-+  auto max_reduction_op = cudnn_frontend::OperationBuilder(
-+                              CUDNN_BACKEND_OPERATION_REDUCTION_DESCRIPTOR)
-+                              .setxDesc((*input_tensor))
-+                              .setyDesc(max_reduction_output_tensor)
-+                              .setreductionDesc(max_reduction_desc)
-+                              .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(max_reduction_op);
-+
-+  // Create output tensor of the subtraction op.
-+  TF_ASSIGN_OR_RETURN(
-+      auto subtract_output_tensor,
-+      CreateCudnnTensor(dims, strides, 'S', dnn::DataType::kFloat, 1, -1,
-+                        /*is_virtual=*/true));
-+  // Create the subtraction descriptor
-+  auto subtract_desc = cudnn_frontend::PointWiseDescBuilder()
-+                           .setMode(CUDNN_POINTWISE_SUB)
-+                           .setComputeType(softmax_output_type)
-+                           .build();
-+
-+  // Create a subtraction node.
-+  auto subtract_op = cudnn_frontend::OperationBuilder(
-+                         CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
-+                         .setxDesc((*input_tensor))
-+                         .setbDesc(max_reduction_output_tensor)
-+                         .setyDesc(subtract_output_tensor)
-+                         .setpwDesc(subtract_desc)
-+                         .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(subtract_op);
-+  // Create output tensor of the exp op.
-+  TF_ASSIGN_OR_RETURN(
-+      auto exp_output_tensor,
-+      CreateCudnnTensor(dims, strides, 'e', dnn::DataType::kFloat, 1, -1,
-+                        /*is_virtual=*/true));
-+  // Create the exponetial descriptor
-+  auto exp_desc = cudnn_frontend::PointWiseDescBuilder()
-+                      .setMode(CUDNN_POINTWISE_EXP)
-+                      .setComputeType(softmax_output_type)
-+                      .build();
-+
-+  // Create a exponetial node.
-+  auto exp_op = cudnn_frontend::OperationBuilder(
-+                    CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
-+                    .setxDesc(subtract_output_tensor)
-+                    .setyDesc(exp_output_tensor)
-+                    .setpwDesc(exp_desc)
-+                    .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(exp_op);
-+
-+  // Create output tensor of the sum reduction.
-+  TF_ASSIGN_OR_RETURN(
-+      auto sum_reduction_output_tensor,
-+      CreateCudnnTensor(reduction_output_dim, reduction_output_stride, 'u',
-+                        dnn::DataType::kFloat, 1, -1, /*is_virtual=*/true));
-+  // Create the reduction descriptor
-+  auto sum_reduction_desc = cudnn_frontend::ReductionDescBuilder()
-+                                .setComputeType(softmax_output_type)
-+                                .setReductionOp(CUDNN_REDUCE_TENSOR_ADD)
-+                                .build();
-+
-+  // Create a reduction sum node.
-+  auto sum_reduction_op = cudnn_frontend::OperationBuilder(
-+                              CUDNN_BACKEND_OPERATION_REDUCTION_DESCRIPTOR)
-+                              .setxDesc(exp_output_tensor)
-+                              .setyDesc(sum_reduction_output_tensor)
-+                              .setreductionDesc(sum_reduction_desc)
-+                              .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(sum_reduction_op);
-+
-+  // Create output tensor of the divide op.
-+  // cudnnBackendTensorReordering_t tensor_ordering =
-+  //     use_dropout ? CUDNN_TENSOR_REORDERING_F16x16
-+  //                 : CUDNN_TENSOR_REORDERING_NONE;
-+  cudnnBackendTensorReordering_t tensor_ordering = CUDNN_TENSOR_REORDERING_NONE;
-+  if (use_dropout) {
-+    tensor_ordering = CUDNN_TENSOR_REORDERING_F16x16;
-+  }
-+  TF_ASSIGN_OR_RETURN(
-+      auto divide_output_tensor,
-+      CreateCudnnTensor(dims, strides, 'd', dtype, 1, -1,
-+                        /*is_virtual*/ is_virtual,
-+                        /*cudnn_tensor_order_type*/ tensor_ordering));
-+  // Create the divide descriptor
-+  auto divide_desc = cudnn_frontend::PointWiseDescBuilder()
-+                         .setMode(CUDNN_POINTWISE_DIV)
-+                         .setComputeType(softmax_output_type)
-+                         .build();
-+
-+  // Create a divide node.
-+  auto divide_op = cudnn_frontend::OperationBuilder(
-+                       CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
-+                       .setxDesc(exp_output_tensor)
-+                       .setbDesc(sum_reduction_output_tensor)
-+                       .setyDesc(divide_output_tensor)
-+                       .setpwDesc(divide_desc)
-+                       .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(divide_op);
-+
-+  RETURN_MSG_IF_CUDNN_ERROR(divide_output_tensor);
-+
-+  // Add max reduction to op list
-+  ops.push_back(std::move(max_reduction_op));
-+  // Add subtract to op list
-+  ops.push_back(std::move(subtract_op));
-+  // Add exponetial to op list
-+  ops.push_back(std::move(exp_op));
-+  // Add sum reduction to op list
-+  ops.push_back(std::move(sum_reduction_op));
-+  // Add divide to op list
-+  ops.push_back(std::move(divide_op));
-+
-+  return divide_output_tensor;
-+}
-+
-+// Returns a cudnn tensor that's the output of the dropout op
-+tsl::StatusOr<cudnn_frontend::Tensor> CreateCudnnDropoutTensor(
-+    std::vector<cudnn_frontend::Operation>& ops, absl::Span<const int64_t> dims,
-+    absl::Span<const int64_t> strides, dnn::DataType dtype,
-+    std::shared_ptr<cudnn_frontend::Tensor> input_tensor, double dropout_rate,
-+    int64_t seed) {
-+  // Create tensor for dropout's mask.
-+  TF_ASSIGN_OR_RETURN(
-+      auto mask_tensor,
-+      CreateCudnnTensor(dims, strides, 'K', dnn::DataType::kFloat, 1, -1,
-+                        /*is_virtual*/ true));
-+  // Create output tensor of dropout node
-+  TF_ASSIGN_OR_RETURN(
-+      auto dropout_out_tensor,
-+      CreateCudnnTensor(
-+          dims, strides, 'D', dtype, 1, -1, /*is_virtual*/ true,
-+          /*cudnn_tensor_order_type*/
-+          cudnnBackendTensorReordering_t::CUDNN_TENSOR_REORDERING_F16x16));
-+
-+  // Create description for rng node
-+  auto rng_desc = cudnn_frontend::RngDescBuilder()
-+                      .setRngDistribution(CUDNN_RNG_DISTRIBUTION_BERNOULLI)
-+                      .setBernoulliDistProbability(1.0 - dropout_rate)
-+                      .build();
-+  // Create the rng Node.
-+  auto rng_op =
-+      cudnn_frontend::OperationBuilder(CUDNN_BACKEND_OPERATION_RNG_DESCRIPTOR)
-+          .setyDesc(mask_tensor)
-+          .setSeed(seed)
-+          .setRngDesc(rng_desc)
-+          .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(rng_op);
-+
-+  // Create the masking node desc after mask tensor
-+  auto masking_desc = cudnn_frontend::PointWiseDescBuilder()
-+                          .setMode(CUDNN_POINTWISE_MUL)
-+                          .setComputeType(CUDNN_DATA_FLOAT)
-+                          .build();
-+
-+  auto masking_op = cudnn_frontend::OperationBuilder(
-+                        CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
-+                        .setxDesc((*input_tensor))
-+                        .setbDesc(mask_tensor)
-+                        .setyDesc(dropout_out_tensor)
-+                        .setpwDesc(masking_desc)
-+                        .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(masking_op);
-+
-+  // Create scale tensor
-+  std::vector<int64_t> scale_dims(dims.size(), 1);
-+  std::vector<int64_t> scale_strides(strides.size(), 1);
-+  TF_ASSIGN_OR_RETURN(
-+      auto dropout_scale_tensor,
-+      CreateCudnnTensor(
-+          scale_dims, scale_strides, 'l', dtype, 1, -1, /*is_virtual*/ false,
-+          /*cudnn_tensor_order_type*/ CUDNN_TENSOR_REORDERING_NONE));
-+
-+  // Create output of scale node
-+  TF_ASSIGN_OR_RETURN(
-+      auto dropout_scale_out_tensor,
-+      CreateCudnnTensor(dims, strides, 'r', dtype, 1, -1, /*is_virtual*/ true));
-+  // Create the scaling desc
-+  auto scale_desc = cudnn_frontend::PointWiseDescBuilder()
-+                        .setMode(CUDNN_POINTWISE_MUL)
-+                        .setComputeType(CUDNN_DATA_FLOAT)
-+                        .build();
-+  // Create the scaling op
-+  auto scale_op = cudnn_frontend::OperationBuilder(
-+                      CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
-+                      .setxDesc(dropout_out_tensor)
-+                      .setbDesc(dropout_scale_tensor)
-+                      .setyDesc(dropout_scale_out_tensor)
-+                      .setpwDesc(scale_desc)
-+                      .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(scale_op);
-+
-+  RETURN_MSG_IF_CUDNN_ERROR(dropout_scale_out_tensor);
-+  // Add rng op to op list
-+  ops.push_back(std::move(rng_op));
-+  // Add masking op to op list
-+  ops.push_back(std::move(masking_op));
-+  // Add scaling op to op list
-+  ops.push_back(std::move(scale_op));
-+
-+  return dropout_scale_out_tensor;
-+}
-+#endif
- 
- tsl::StatusOr<std::unique_ptr<cudnn_frontend::OperationGraph>>
- GetCudnnOperationGraph(dnn::ConvolutionKind kind, dnn::DataType input_type,
-@@ -3565,14 +3922,28 @@ GetCudnnOperationGraph(dnn::ConvolutionKind kind, dnn::DataType input_type,
-   std::vector<int64_t> filter_strides = filter_descriptor.vectorized_strides(
-       dnn::FilterLayout::kOutputInputYX, vector_size, vector_dim);
- 
-+#if (CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND)
-+  cudnnBackendTensorReordering_t tensor_ordering_type =
-+      filter_descriptor.layout() ==
-+              dnn::FilterLayout::kOutputInputYX32_CudnnReordered
-+          ? CUDNN_TENSOR_REORDERING_INT8x32
-+          : CUDNN_TENSOR_REORDERING_NONE;
-+#else
-   bool is_reordered_nchw_vect =
-       filter_descriptor.layout() ==
-       dnn::FilterLayout::kOutputInputYX32_CudnnReordered;
--  TF_ASSIGN_OR_RETURN(
--      auto tensor_w,
--      CreateCudnnTensor(filter_dims, filter_strides, 'w', input_type,
--                        vector_size, vector_dim,
--                        /*is_virtual=*/false, is_reordered_nchw_vect));
-+#endif
-+
-+  TF_ASSIGN_OR_RETURN(auto tensor_w,
-+                      CreateCudnnTensor(filter_dims, filter_strides, 'w',
-+                                        input_type, vector_size, vector_dim,
-+                                        /*is_virtual=*/false,
-+#if (CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND)
-+                                        tensor_ordering_type
-+#else
-+                                        is_reordered_nchw_vect
-+#endif
-+                                        ));
- 
-   // conv_desc.
-   auto mode = convolution_descriptor.convolution_not_crosscorr()
-@@ -3701,14 +4072,28 @@ GetCudnnFusedOperationGraph(
-   std::vector<int64_t> filter_strides = filter_descriptor.vectorized_strides(
-       dnn::FilterLayout::kOutputInputYX, vector_size, vector_dim);
- 
-+#if (CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND)
-+  cudnnBackendTensorReordering_t tensor_ordering_type =
-+      filter_descriptor.layout() ==
-+              dnn::FilterLayout::kOutputInputYX32_CudnnReordered
-+          ? CUDNN_TENSOR_REORDERING_INT8x32
-+          : CUDNN_TENSOR_REORDERING_NONE;
-+#else
-   bool is_reordered_nchw_vect =
-       filter_descriptor.layout() ==
-       dnn::FilterLayout::kOutputInputYX32_CudnnReordered;
--  TF_ASSIGN_OR_RETURN(
--      auto tensor_w,
--      CreateCudnnTensor(filter_dims, filter_strides, 'w', input_type,
--                        vector_size, vector_dim,
--                        /*is_virtual=*/false, is_reordered_nchw_vect));
-+#endif
-+
-+  TF_ASSIGN_OR_RETURN(auto tensor_w,
-+                      CreateCudnnTensor(filter_dims, filter_strides, 'w',
-+                                        input_type, vector_size, vector_dim,
-+                                        /*is_virtual=*/false,
-+#if (CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND)
-+                                        tensor_ordering_type
-+#else
-+                                        is_reordered_nchw_vect
-+#endif
-+                                        ));  // cuDNN 8.3 fails here
- 
-   // For the purposes of the cudnn graph, say that the bias tensor has the same
-   // layout as the output tensor.  It doesn't actually matter, because bias is a
-@@ -3742,9 +4127,15 @@ GetCudnnFusedOperationGraph(
-   // kFloat). If it's not, then cuDNN silently does the reordering under the
-   // hood, which yields incorrect results as we already do the reordering
-   // ourselves.
--  auto maybe_tensor_b = CreateCudnnTensor(
--      bias_dims, bias_strides, 'b', bias_type, vector_size, vector_dim,
--      /*is_virtual=*/false, is_reordered_nchw_vect);  // cuDNN 8.3 fails here
-+  auto maybe_tensor_b = CreateCudnnTensor(bias_dims, bias_strides, 'b',
-+                                          bias_type, vector_size, vector_dim,
-+                                          /*is_virtual=*/false,
-+#if (CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND)
-+                                          tensor_ordering_type
-+#else
-+                                          is_reordered_nchw_vect
-+#endif
-+  );  // cuDNN 8.3 fails here
-   if (!maybe_tensor_b.ok()) {
-     maybe_tensor_b = CreateCudnnTensor(bias_dims, bias_strides, 'b', bias_type,
-                                        vector_size, vector_dim);
-@@ -4077,6 +4468,213 @@ GetCudnnFusedMatmulGraph(dnn::DataType input_type, dnn::DataType bias_type,
-   return std::make_unique<cudnn_frontend::OperationGraph>(std::move(op_graph));
- }
- 
-+#if (CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND)
-+tsl::StatusOr<std::unique_ptr<cudnn_frontend::OperationGraph>>
-+GetCudnnFusedMHAOperationGraph(
-+    const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+    const dnn::TensorDescriptor& mask_descriptor,
-+    const dnn::TensorDescriptor& bias_descriptor,
-+    const dnn::TensorDescriptor& output_descriptor, dnn::FusedMHAKind kind,
-+    std::optional<double> dropout_rate, std::optional<int64_t> seed,
-+    CudnnHandle& cudnn, double scale, bool use_dropout = false,
-+    bool use_mask = false, bool use_bias = false) {
-+  if (VLOG_IS_ON(4)) {
-+    VLOG(4) << "\n bmm1_lhs(q): " << bmm1_lhs_descriptor.ToString()
-+            << "\n bmm1_rhs(k): " << bmm1_rhs_descriptor.ToString()
-+            << "\n bmm2_lhs(s): " << intermediate_bmm2_lhs_descriptor.ToString()
-+            << "\n bmm2_rhs(v): " << bmm2_rhs_descriptor.ToString()
-+            << "\n out(o): " << output_descriptor.ToString();
-+  }
-+  // cnn_infer needs to be preloaded for fMHA as well. Reusing the function
-+  // created for convolution for fMHA.
-+  PreloadCudnnSubLibsHelper(dnn::ConvolutionKind::FORWARD);
-+
-+  std::vector<cudnn_frontend::Operation const*> ops;
-+  std::vector<cudnn_frontend::Operation> intermdiate_ops;
-+
-+  // Batched Matmul: bmm1_lhs: tensor_q, bmm1_rhs:tensor_k; output: tensor_s
-+  // (virtual)
-+  // Batched Matmul: bmm2_lhs: tensor_s, bmm2_rhs:tensor_v; output: tensor_o
-+  std::vector<int64_t> bmm1_lhs_dims =
-+      bmm1_lhs_descriptor.GetCudnnCompatibleDimensions(true);
-+  std::vector<int64_t> bmm1_lhs_strides =
-+      bmm1_lhs_descriptor.GetCudnnCompatibleStrides(true);
-+
-+  VLOG(2) << "\n cuDNN compatible bmm1_lhs_dims: "
-+          << absl::StrJoin(bmm1_lhs_dims, ",")
-+          << "\n cuDNN compatible bmm1_lhs_strides: "
-+          << absl::StrJoin(bmm1_lhs_strides, ",");
-+
-+  TF_ASSIGN_OR_RETURN(auto tensor_q,
-+                      CreateCudnnTensor(bmm1_lhs_dims, bmm1_lhs_strides, 'q',
-+                                        bmm1_lhs_descriptor.type(), 1, -1));
-+
-+  std::vector<int64_t> bmm1_rhs_dims =
-+      bmm1_rhs_descriptor.GetCudnnCompatibleDimensions(false);
-+  std::vector<int64_t> bmm1_rhs_strides =
-+      bmm1_rhs_descriptor.GetCudnnCompatibleStrides(false);
-+
-+  VLOG(2) << "\n cuDNN compatible bmm1_rhs_dims: "
-+          << absl::StrJoin(bmm1_rhs_dims, ",")
-+          << "\n cuDNN compatible bmm1_rhs_strides: "
-+          << absl::StrJoin(bmm1_rhs_strides, ",");
-+
-+  TF_ASSIGN_OR_RETURN(auto tensor_k,
-+                      CreateCudnnTensor(bmm1_rhs_dims, bmm1_rhs_strides, 'k',
-+                                        bmm1_rhs_descriptor.type(), 1, -1));
-+
-+  std::vector<int64_t> intermediate_bmm2_lhs_dims =
-+      intermediate_bmm2_lhs_descriptor.GetCudnnCompatibleDimensions(true);
-+  std::vector<int64_t> intermediate_bmm2_lhs_strides =
-+      intermediate_bmm2_lhs_descriptor.GetCudnnCompatibleStrides(true);
-+
-+  VLOG(2) << "\n cuDNN compatible intermediate_bmm2_lhs_dims: "
-+          << absl::StrJoin(intermediate_bmm2_lhs_dims, ",")
-+          << "\n cuDNN compatible intermediate_bmm2_lhs_strides: "
-+          << absl::StrJoin(intermediate_bmm2_lhs_strides, ",");
-+  dnn::DataType s_tensor_type = kind == dnn::FusedMHAKind::BMM1_OUTPUT_FLOAT
-+                                    ? dnn::DataType::kFloat
-+                                    : intermediate_bmm2_lhs_descriptor.type();
-+  TF_ASSIGN_OR_RETURN(
-+      auto tensor_s,
-+      CreateCudnnTensor(intermediate_bmm2_lhs_dims,
-+                        intermediate_bmm2_lhs_strides, 's', s_tensor_type, 1,
-+                        -1, /*is_virtual=*/true));
-+
-+  auto bmm1_desc = cudnn_frontend::MatMulDescBuilder()
-+                       .setComputeType(CUDNN_DATA_FLOAT)
-+                       .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(bmm1_desc);
-+  auto bmm1_op = cudnn_frontend::OperationBuilder(
-+                     CUDNN_BACKEND_OPERATION_MATMUL_DESCRIPTOR)
-+                     .setaMatDesc(tensor_q)
-+                     .setbMatDesc(tensor_k)
-+                     .setcMatDesc(tensor_s)
-+                     .setmatmulDesc(bmm1_desc)
-+                     .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(bmm1_op);
-+  intermdiate_ops.push_back(std::move(bmm1_op));
-+
-+  std::shared_ptr<cudnn_frontend::Tensor> bmm2_input_tensor =
-+      std::make_shared<cudnn_frontend::Tensor>(std::move(tensor_s));
-+  if (use_dropout || use_mask || kind == dnn::FusedMHAKind::BMM1_OUTPUT_FLOAT ||
-+      use_bias) {
-+    double alpha_scale = scale;
-+    if (use_bias) {
-+      // Create bias op and tensor
-+      TF_ASSIGN_OR_RETURN(
-+          auto bias_out,
-+          CreateCudnnBiasTensor(intermdiate_ops, intermediate_bmm2_lhs_dims,
-+                                intermediate_bmm2_lhs_strides,
-+                                bias_descriptor.type(), bmm2_input_tensor,
-+                                alpha_scale, use_mask));
-+      bmm2_input_tensor =
-+          std::make_shared<cudnn_frontend::Tensor>(std::move(bias_out));
-+      // Scaling is done, reset the scale back to 1.
-+      alpha_scale = 1.0f;
-+    }
-+    if (use_mask) {
-+      // Create mask op and tensor
-+      TF_ASSIGN_OR_RETURN(
-+          auto mask_out,
-+          CreateCudnnMaskTensor(intermdiate_ops, intermediate_bmm2_lhs_dims,
-+                                intermediate_bmm2_lhs_strides,
-+                                intermediate_bmm2_lhs_descriptor.type(),
-+                                bmm2_input_tensor, alpha_scale));
-+      bmm2_input_tensor =
-+          std::make_shared<cudnn_frontend::Tensor>(std::move(mask_out));
-+    }
-+    // Create Softmax tensor
-+    // The output is always a virtual for inference mode.
-+    TF_ASSIGN_OR_RETURN(auto softmax_fwd_out,
-+                        CreateCudnnSoftmaxFwdTensor(
-+                            intermdiate_ops, intermediate_bmm2_lhs_dims,
-+                            intermediate_bmm2_lhs_strides,
-+                            intermediate_bmm2_lhs_descriptor.type(),
-+                            /*input_tensor*/ bmm2_input_tensor, use_dropout,
-+                            /*is_virtual*/ true));
-+
-+    bmm2_input_tensor =
-+        std::make_shared<cudnn_frontend::Tensor>(std::move(softmax_fwd_out));
-+
-+    if (use_dropout) {
-+      // Create dropout tensor
-+      TF_ASSIGN_OR_RETURN(
-+          auto dropout_out,
-+          CreateCudnnDropoutTensor(intermdiate_ops, intermediate_bmm2_lhs_dims,
-+                                   intermediate_bmm2_lhs_strides,
-+                                   intermediate_bmm2_lhs_descriptor.type(),
-+                                   /*input_tensor*/ bmm2_input_tensor,
-+                                   *dropout_rate, *seed));
-+      bmm2_input_tensor =
-+          std::make_shared<cudnn_frontend::Tensor>(std::move(dropout_out));
-+    }
-+  }
-+  std::vector<int64_t> bmm2_rhs_dims =
-+      bmm2_rhs_descriptor.GetCudnnCompatibleDimensions(false);
-+  std::vector<int64_t> bmm2_rhs_strides =
-+      bmm2_rhs_descriptor.GetCudnnCompatibleStrides(false);
-+
-+  VLOG(2) << "\n cuDNN compatible bmm2_rhs_dims: "
-+          << absl::StrJoin(bmm2_rhs_dims, ",")
-+          << "\n cuDNN compatible bmm2_rhs_strides: "
-+          << absl::StrJoin(bmm2_rhs_strides, ",");
-+
-+  TF_ASSIGN_OR_RETURN(auto tensor_v,
-+                      CreateCudnnTensor(bmm2_rhs_dims, bmm2_rhs_strides, 'v',
-+                                        bmm2_rhs_descriptor.type(), 1, -1));
-+
-+  std::vector<int64_t> output_dims = output_descriptor.dimensions();
-+  std::vector<int64_t> output_strides = output_descriptor.GetLogicalStrides();
-+
-+  VLOG(2) << "\n Out Dims: " << absl::StrJoin(output_dims, ",")
-+          << "\n Out Strides: " << absl::StrJoin(output_strides, ",");
-+
-+  TF_ASSIGN_OR_RETURN(auto tensor_o,
-+                      CreateCudnnTensor(output_dims, output_strides, 'o',
-+                                        output_descriptor.type(), 1, -1));
-+  auto bmm2_desc = cudnn_frontend::MatMulDescBuilder()
-+                       .setComputeType(CUDNN_DATA_FLOAT)
-+                       .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(bmm2_desc);
-+  auto bmm2_op = cudnn_frontend::OperationBuilder(
-+                     CUDNN_BACKEND_OPERATION_MATMUL_DESCRIPTOR)
-+                     .setaMatDesc((*bmm2_input_tensor))
-+                     .setbMatDesc(tensor_v)
-+                     .setcMatDesc(tensor_o)
-+                     .setmatmulDesc(bmm2_desc)
-+                     .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(bmm2_op);
-+  // Create an Operation Graph. In this case it is gemm-gemm
-+  intermdiate_ops.push_back(std::move(bmm2_op));
-+  ops.reserve(intermdiate_ops.size());
-+  for (auto& intermediate_op : intermdiate_ops) {
-+    ops.push_back(&intermediate_op);
-+  }
-+
-+  auto op_graph = cudnn_frontend::OperationGraphBuilder()
-+                      .setHandle(cudnn.handle())
-+                      .setOperationGraph(ops.size(), ops.data())
-+                      .build();
-+  RETURN_MSG_IF_CUDNN_ERROR(op_graph);
-+
-+  VLOG(4) << "\nTensor_q: " << tensor_q.describe()
-+          << "\nTensor_k: " << tensor_k.describe()
-+          << "\nTensor_s: " << tensor_s.describe()
-+          << "\nTensor_v: " << tensor_v.describe()
-+          << "\nTensor_o: " << tensor_o.describe()
-+          << "\nBMM1: " << bmm1_desc.describe()
-+          << "\nBMM1_op: " << bmm1_op.describe()
-+          << "\nBMM2: " << bmm2_desc.describe()
-+          << "\nBMM2_op: " << bmm2_op.describe()
-+          << "\nOpGraph: " << op_graph.describe();
-+  return std::make_unique<cudnn_frontend::OperationGraph>(std::move(op_graph));
-+}
-+#endif
-+
- }  // namespace
- 
- static tsl::StatusOr<cudnn_frontend::ExecutionPlan> RebuildExecutionPlan(
-@@ -5515,6 +6113,167 @@ bool CudnnSupport::GetConvolveAlgorithms(
-   return true;
- }
- 
-+tsl::StatusOr<std::unique_ptr<const dnn::FusedMHASoftmaxRunner>>
-+CudnnSupport::FusedMHASoftmaxRunnerFromDesc(
-+    Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+    dnn::FusedMHAKind kind,
-+    const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+    const dnn::TensorDescriptor& output_descriptor,
-+    std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+#if CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND
-+  auto cudnn = cudnn_->GetHandle(parent_, stream);
-+
-+  // Create empty descriptors for bias and mask tensors
-+  dnn::TensorDescriptor empty_mask_desc;
-+  dnn::TensorDescriptor empty_bias_desc;
-+  bool use_dropout = dropout_rate && *dropout_rate > 0.0;
-+  TF_ASSIGN_OR_RETURN(auto op_graph,
-+                      GetCudnnFusedMHAOperationGraph(
-+                          bmm1_lhs_descriptor, bmm1_rhs_descriptor,
-+                          bmm2_rhs_descriptor, intermediate_bmm2_lhs_descriptor,
-+                          empty_mask_desc, empty_bias_desc, output_descriptor,
-+                          kind, dropout_rate, seed, cudnn, 1.0f, use_dropout));
-+
-+  TF_ASSIGN_OR_RETURN(auto execution_plan,
-+                      RebuildExecutionPlan(cudnn, algorithm_desc, *op_graph));
-+
-+  TF_ASSIGN_OR_RETURN(
-+      auto runner,
-+      CudnnExecutionPlanRunner<dnn::FusedMHASoftmaxSignature>::Create(
-+          parent_, cudnn_.get(), std::move(execution_plan),
-+          {'q', 'k', 'v', 'o'}, false));
-+  return {
-+      std::make_unique<CudnnExecutionPlanRunner<dnn::FusedMHASoftmaxSignature>>(
-+          std::move(runner))};
-+#else
-+  return tsl::errors::Unimplemented(
-+      "Cudnn execution plans are only supported with Cudnn >= 8.8.");
-+#endif
-+}
-+
-+tsl::StatusOr<std::unique_ptr<const dnn::FusedMHAMaskRunner>>
-+CudnnSupport::FusedMHAScaleMaskSoftmaxRunnerFromDesc(
-+    Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+    dnn::FusedMHAKind kind,
-+    const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+    const dnn::TensorDescriptor& output_descriptor,
-+    const dnn::TensorDescriptor& mask_descriptor, double scale,
-+    std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+#if CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND
-+  auto cudnn = cudnn_->GetHandle(parent_, stream);
-+
-+  bool use_dropout = dropout_rate && *dropout_rate > 0.0;
-+  // Create empty bias decriptor
-+  dnn::TensorDescriptor empty_bias_desc;
-+  TF_ASSIGN_OR_RETURN(auto op_graph,
-+                      GetCudnnFusedMHAOperationGraph(
-+                          bmm1_lhs_descriptor, bmm1_rhs_descriptor,
-+                          bmm2_rhs_descriptor, intermediate_bmm2_lhs_descriptor,
-+                          mask_descriptor, empty_bias_desc, output_descriptor,
-+                          kind, dropout_rate, seed, cudnn, scale, use_dropout,
-+                          /*use_mask*/ true));
-+
-+  TF_ASSIGN_OR_RETURN(auto execution_plan,
-+                      RebuildExecutionPlan(cudnn, algorithm_desc, *op_graph));
-+  TF_ASSIGN_OR_RETURN(
-+      auto runner, CudnnExecutionPlanRunner<dnn::FusedMHAMaskSignature>::Create(
-+                       parent_, cudnn_.get(), std::move(execution_plan),
-+                       {'q', 'k', 'P', 'v', 'o'}, true));
-+  return {
-+      std::make_unique<CudnnExecutionPlanRunner<dnn::FusedMHAMaskSignature>>(
-+          std::move(runner))};
-+#else
-+  return tsl::errors::Unimplemented(
-+      "Cudnn execution plans are only supported with Cudnn >= 8.8.");
-+#endif
-+}
-+
-+tsl::StatusOr<std::unique_ptr<const dnn::FusedMHABiasMaskRunner>>
-+CudnnSupport::FusedMHAScaleBiasMaskSoftmaxRunnerFromDesc(
-+    Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+    dnn::FusedMHAKind kind,
-+    const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+    const dnn::TensorDescriptor& output_descriptor,
-+    const dnn::TensorDescriptor& mask_descriptor,
-+    const dnn::TensorDescriptor& bias_descriptor, double scale,
-+    std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+#if CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND
-+  auto cudnn = cudnn_->GetHandle(parent_, stream);
-+  bool use_dropout = dropout_rate && *dropout_rate > 0.0;
-+  TF_ASSIGN_OR_RETURN(auto op_graph,
-+                      GetCudnnFusedMHAOperationGraph(
-+                          bmm1_lhs_descriptor, bmm1_rhs_descriptor,
-+                          bmm2_rhs_descriptor, intermediate_bmm2_lhs_descriptor,
-+                          mask_descriptor, bias_descriptor, output_descriptor,
-+                          kind, dropout_rate, seed, cudnn, scale, use_dropout,
-+                          /*use_mask*/ true, /*use_bias*/ true));
-+
-+  TF_ASSIGN_OR_RETURN(auto execution_plan,
-+                      RebuildExecutionPlan(cudnn, algorithm_desc, *op_graph));
-+
-+  TF_ASSIGN_OR_RETURN(
-+      auto runner,
-+      CudnnExecutionPlanRunner<dnn::FusedMHABiasMaskSignature>::Create(
-+          parent_, cudnn_.get(), std::move(execution_plan),
-+          {'q', 'k', 'P', 'B', 'v', 'o'}, true));
-+  return {std::make_unique<
-+      CudnnExecutionPlanRunner<dnn::FusedMHABiasMaskSignature>>(
-+      std::move(runner))};
-+#else
-+  return tsl::errors::Unimplemented(
-+      "Cudnn execution plans are only supported with Cudnn >= 8.8.");
-+#endif
-+}
-+
-+tsl::StatusOr<std::unique_ptr<const dnn::FusedMHABiasRunner>>
-+CudnnSupport::FusedMHAScaleBiasSoftmaxRunnerFromDesc(
-+    Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+    dnn::FusedMHAKind kind,
-+    const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+    const dnn::TensorDescriptor& output_descriptor,
-+    const dnn::TensorDescriptor& bias_descriptor, double scale,
-+    std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+#if CUDNN_VERSION >= 8800 && TF_ENABLE_CUDNN_FRONTEND
-+  auto cudnn = cudnn_->GetHandle(parent_, stream);
-+  // Create empty descriptors for mask tensors
-+  dnn::TensorDescriptor empty_mask_desc;
-+  bool use_dropout = dropout_rate && *dropout_rate > 0.0;
-+  TF_ASSIGN_OR_RETURN(auto op_graph,
-+                      GetCudnnFusedMHAOperationGraph(
-+                          bmm1_lhs_descriptor, bmm1_rhs_descriptor,
-+                          bmm2_rhs_descriptor, intermediate_bmm2_lhs_descriptor,
-+                          empty_mask_desc, bias_descriptor, output_descriptor,
-+                          kind, dropout_rate, seed, cudnn, scale, use_dropout,
-+                          /*use_mask*/ false, /*use_bias*/ true));
-+
-+  TF_ASSIGN_OR_RETURN(auto execution_plan,
-+                      RebuildExecutionPlan(cudnn, algorithm_desc, *op_graph));
-+
-+  TF_ASSIGN_OR_RETURN(
-+      auto runner, CudnnExecutionPlanRunner<dnn::FusedMHABiasSignature>::Create(
-+                       parent_, cudnn_.get(), std::move(execution_plan),
-+                       {'q', 'k', 'B', 'v', 'o'}, true));
-+  return {
-+      std::make_unique<CudnnExecutionPlanRunner<dnn::FusedMHABiasSignature>>(
-+          std::move(runner))};
-+#else
-+  return tsl::errors::Unimplemented(
-+      "Cudnn execution plans are only supported with Cudnn >= 8.8.");
-+#endif
-+}
-+
- bool CudnnSupport::GetRnnAlgorithms(
-     std::vector<dnn::AlgorithmDesc>* out_algorithms) {
-   PreloadCudnnSubLibs(PreloadCudnnType::Rnn);
-diff --git a/xla/stream_executor/cuda/cuda_dnn.h b/xla/stream_executor/cuda/cuda_dnn.h
-index aec1ecac6..e18b0469b 100644
---- a/xla/stream_executor/cuda/cuda_dnn.h
-+++ b/xla/stream_executor/cuda/cuda_dnn.h
-@@ -276,6 +276,54 @@ class CudnnSupport : public dnn::DnnSupport {
-       const dnn::ConvolutionDescriptor& convolution_descriptor,
-       dnn::ActivationMode activation_mode) override;
- 
-+  tsl::StatusOr<std::unique_ptr<const dnn::FusedMHASoftmaxRunner>>
-+  FusedMHASoftmaxRunnerFromDesc(
-+      Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+      dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor& output_descriptor,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed) override;
-+
-+  tsl::StatusOr<std::unique_ptr<const dnn::FusedMHAMaskRunner>>
-+  FusedMHAScaleMaskSoftmaxRunnerFromDesc(
-+      Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+      dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor& output_descriptor,
-+      const dnn::TensorDescriptor& mask_descriptor, double scale,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed) override;
-+
-+  tsl::StatusOr<std::unique_ptr<const dnn::FusedMHABiasMaskRunner>>
-+  FusedMHAScaleBiasMaskSoftmaxRunnerFromDesc(
-+      Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+      dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor& output_descriptor,
-+      const dnn::TensorDescriptor& mask_descriptor,
-+      const dnn::TensorDescriptor& bias_descriptor, double scale,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed) override;
-+
-+  tsl::StatusOr<std::unique_ptr<const dnn::FusedMHABiasRunner>>
-+  FusedMHAScaleBiasSoftmaxRunnerFromDesc(
-+      Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+      dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor& output_descriptor,
-+      const dnn::TensorDescriptor& bias_descriptor, double scale,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed) override;
-+
-   bool GetRnnAlgorithms(
-       std::vector<dnn::AlgorithmDesc>* out_algorithms) override;
- 
-diff --git a/xla/stream_executor/dnn.cc b/xla/stream_executor/dnn.cc
-index 9dfb9c9a6..2e79fbcce 100644
---- a/xla/stream_executor/dnn.cc
-+++ b/xla/stream_executor/dnn.cc
-@@ -15,6 +15,7 @@ limitations under the License.
- 
- #include "xla/stream_executor/dnn.h"
- 
-+#include <algorithm>
- #include <cstdint>
- #include <iterator>
- 
-@@ -191,6 +192,66 @@ DnnSupport::FusedConvolveRunnerFromDesc(
-       "FusedConvolveRunnerFromDesc not implemented.");
- }
- 
-+tsl::StatusOr<std::unique_ptr<const dnn::FusedMHASoftmaxRunner>>
-+DnnSupport::FusedMHASoftmaxRunnerFromDesc(
-+    Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+    dnn::FusedMHAKind kind,
-+    const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+    const dnn::TensorDescriptor& output_descriptor,
-+    std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+  return tsl::errors::Unimplemented(
-+      "FusedMHASoftmaxRunnerFromDesc not implemented.");
-+}
-+
-+tsl::StatusOr<std::unique_ptr<const dnn::FusedMHAMaskRunner>>
-+DnnSupport::FusedMHAScaleMaskSoftmaxRunnerFromDesc(
-+    Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+    dnn::FusedMHAKind kind,
-+    const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+    const dnn::TensorDescriptor& output_descriptor,
-+    const dnn::TensorDescriptor& mask_descriptor, double scale,
-+    std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+  return tsl::errors::Unimplemented(
-+      "FusedMHAScaleMaskSoftmaxRunnerFromDesc not implemented.");
-+}
-+
-+tsl::StatusOr<std::unique_ptr<const dnn::FusedMHABiasMaskRunner>>
-+DnnSupport::FusedMHAScaleBiasMaskSoftmaxRunnerFromDesc(
-+    Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+    dnn::FusedMHAKind kind,
-+    const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+    const dnn::TensorDescriptor& output_descriptor,
-+    const dnn::TensorDescriptor& mask_descriptor,
-+    const dnn::TensorDescriptor& bias_descriptor, double scale,
-+    std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+  return tsl::errors::Unimplemented(
-+      "FusedMHAScaleBiasMaskSoftmaxRunnerFromDesc not implemented.");
-+}
-+
-+tsl::StatusOr<std::unique_ptr<const dnn::FusedMHABiasRunner>>
-+DnnSupport::FusedMHAScaleBiasSoftmaxRunnerFromDesc(
-+    Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+    dnn::FusedMHAKind kind,
-+    const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+    const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+    const dnn::TensorDescriptor& output_descriptor,
-+    const dnn::TensorDescriptor& bias_descriptor, double scale,
-+    std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+  return tsl::errors::Unimplemented(
-+      "FusedMHAScaleBiasSoftmaxRunnerFromDesc not implemented.");
-+}
-+
- bool DnnSupport::GetMIOpenConvolveAlgorithms(
-     dnn::ConvolutionKind /*kind*/, dnn::DataType /*element_type*/,
-     Stream* /*stream*/, const dnn::BatchDescriptor& /*input_descriptor*/,
-@@ -482,6 +543,169 @@ std::string AlgorithmConfig::ToString() const {
-   return absl::StrCat(algo, ", ", algo_no_scratch);
- }
- 
-+// -- TensorDescriptor
-+
-+int TensorDescriptor::ndims() const {
-+  CHECK_EQ(dimensions_.size(), minor_to_major_.size());
-+  return dimensions_.size();
-+}
-+
-+tsl::StatusOr<std::vector<int64_t>>
-+TensorDescriptor::GetPhysicalDimensionsMajorToMinor() const {
-+  std::vector<int64_t> logical_to_physical(minor_to_major_.size());
-+  for (int64_t physical = 0; physical < logical_to_physical.size();
-+       ++physical) {
-+    int64_t logical = minor_to_major_.at(minor_to_major_.size() - 1 - physical);
-+    logical_to_physical[logical] = physical;
-+  }
-+  if (dimensions_.size() != minor_to_major_.size())
-+    return tsl::errors::Internal(
-+        "Dimensions size should match the layout size.");
-+
-+  std::vector<int64_t> physical_dims(dimensions_.size());
-+  for (int64_t i = 0; i < physical_dims.size(); ++i) {
-+    physical_dims[logical_to_physical[i]] = dimensions_[i];
-+  }
-+  return physical_dims;
-+}
-+
-+std::vector<int64_t> TensorDescriptor::GetPhysicalStridesMajorToMinor() const {
-+  std::vector<int64_t> phys_dims = GetPhysicalDimensionsMajorToMinor().value();
-+  std::vector<int64_t> phys_strides(ndims());
-+  phys_strides[ndims() - 1] = 1;
-+  for (int i = ndims() - 2; i >= 0; i--) {
-+    phys_strides[i] = phys_strides[i + 1] * phys_dims[i + 1];
-+  }
-+  return phys_strides;
-+}
-+
-+std::vector<int64_t> TensorDescriptor::GetLogicalStrides() const {
-+  std::vector<int64_t> physical_strides = GetPhysicalStridesMajorToMinor();
-+  std::reverse(physical_strides.begin(), physical_strides.end());
-+  std::vector<int64_t> logical_strides(physical_strides.size());
-+  for (int i = 0; i < ndims(); i++) {
-+    logical_strides[minor_to_major_[i]] = physical_strides[i];
-+  }
-+  return logical_strides;
-+}
-+
-+/*static*/ TensorDescriptor TensorDescriptor::For(
-+    DataType type, absl::Span<const int64_t> dimensions,
-+    absl::Span<const int64_t> minor_to_major) {
-+  std::vector<int64_t> dims(dimensions.size());
-+  std::vector<int64_t> minor_to_major_vec(minor_to_major.size());
-+  CHECK_EQ(dimensions.size(), minor_to_major.size());
-+  for (int i = 0; i < dimensions.size(); i++) {
-+    dims[i] = dimensions[i];
-+    minor_to_major_vec[i] = minor_to_major[i];
-+  }
-+  return TensorDescriptor(type, dims, minor_to_major_vec);
-+}
-+
-+std::string TensorDescriptor::ToString() const {
-+  return absl::StrFormat("{dimensions: %s minor_to_major: %s}",
-+                         absl::StrJoin(dimensions(), ","),
-+                         absl::StrJoin(minor_to_major(), ","));
-+}
-+
-+// -- MatmulTensorDescriptor
-+
-+tsl::StatusOr<std::vector<int64_t>>
-+MatmulTensorDescriptor::GetNonContractingDims() const {
-+  std::vector<int64_t> non_contracting_dims;
-+  for (int64_t dim = 0; dim < tensor_.dimensions().size(); ++dim) {
-+    bool is_batch = absl::c_count(batch_dimension_numbers_, dim) != 0;
-+    bool is_contracting = absl::c_count(contracting_dim_, dim) != 0;
-+    if (is_batch && is_contracting)
-+      return tsl::errors::Internal(
-+          "A dimension cannot be both a batch dimension and a contracting "
-+          "dimension.");
-+    if (!(is_batch || is_contracting)) non_contracting_dims.push_back(dim);
-+  }
-+
-+  if (batch_dimension_numbers_.size() + contracting_dim_.size() +
-+          non_contracting_dims.size() !=
-+      tensor_.dimensions().size())
-+    return tsl::errors::Internal(
-+        "Batch_dimension_numbers, contracting_dim and non_contracting_dims "
-+        "should sum up to the total number of dimensions.");
-+  return non_contracting_dims;
-+}
-+
-+tsl::StatusOr<std::vector<int64_t>> MatmulTensorDescriptor::MakeCudnnCompatible(
-+    const std::vector<int64_t>& vec, bool is_lhs) const {
-+  std::vector<int64_t> cudnn_compatible(vec.size());
-+  int batch_dim_size = batch_dimension_numbers_.size();
-+  CHECK_LT(batch_dim_size, vec.size());
-+  for (int i = 0; i < batch_dim_size; i++) {
-+    cudnn_compatible[i] = vec.at(batch_dimension_numbers_.at(i));
-+  }
-+  std::vector<int64_t> non_contracting_dims = GetNonContractingDims().value();
-+  if (batch_dimension_numbers_.size() + contracting_dim_.size() +
-+          non_contracting_dims.size() !=
-+      vec.size())
-+    return tsl::errors::Internal(
-+        "Batch_dimension_numbers, contracting_dim and non_contracting_dims "
-+        "should sum up to the total number of dimensions.");
-+  if (is_lhs) /* lhs -> {b0, b1,....bk, m, k} */ {
-+    for (int i = 0; i < non_contracting_dims.size(); i++) {
-+      cudnn_compatible[batch_dim_size + i] = vec.at(non_contracting_dims.at(i));
-+    }
-+    for (int i = 0; i < contracting_dim_.size(); i++) {
-+      cudnn_compatible[batch_dim_size + non_contracting_dims.size() + i] =
-+          vec.at(contracting_dim_.at(i));
-+    }
-+  } else /* rhs -> {b0, b1, ... bk, k, n} */ {
-+    for (int i = 0; i < contracting_dim_.size(); i++) {
-+      cudnn_compatible[batch_dim_size + i] = vec.at(contracting_dim_.at(i));
-+    }
-+    for (int i = 0; i < non_contracting_dims.size(); i++) {
-+      cudnn_compatible[batch_dim_size + contracting_dim_.size() + i] =
-+          vec.at(non_contracting_dims.at(i));
-+    }
-+  }
-+  return cudnn_compatible;
-+}
-+
-+std::vector<int64_t> MatmulTensorDescriptor::GetCudnnCompatibleDimensions(
-+    bool is_lhs) const {
-+  std::vector<int64_t> cudnn_compatible_dims =
-+      MakeCudnnCompatible(tensor_.dimensions(), is_lhs).value();
-+  return cudnn_compatible_dims;
-+}
-+
-+std::vector<int64_t> MatmulTensorDescriptor::GetCudnnCompatibleStrides(
-+    bool is_lhs) const {
-+  std::vector<int64_t> cudnn_compatible_strides =
-+      MakeCudnnCompatible(tensor_.GetLogicalStrides(), is_lhs).value();
-+  return cudnn_compatible_strides;
-+}
-+
-+/*static*/ MatmulTensorDescriptor MatmulTensorDescriptor::For(
-+    DataType type, absl::Span<const int64_t> dimensions,
-+    absl::Span<const int64_t> minor_to_major,
-+    absl::Span<const int64_t> batch_dims,
-+    absl::Span<const int64_t> contracting_dims) {
-+  std::vector<int64_t> batch_dims_vec(batch_dims.size());
-+  std::vector<int64_t> contracting_dims_vec(contracting_dims.size());
-+  for (int i = 0; i < batch_dims.size(); i++) {
-+    batch_dims_vec[i] = batch_dims[i];
-+  }
-+  for (int i = 0; i < contracting_dims.size(); i++) {
-+    contracting_dims_vec[i] = contracting_dims[i];
-+  }
-+  return MatmulTensorDescriptor(
-+      TensorDescriptor::For(type, dimensions, minor_to_major), batch_dims_vec,
-+      contracting_dims_vec);
-+}
-+
-+std::string MatmulTensorDescriptor::ToString() const {
-+  return absl::StrFormat(
-+      "{%s, batch_dimension_numbers: %s contracting_dim: %s}",
-+      tensor_.ToString(), absl::StrJoin(batch_dimension_numbers_, ","),
-+      absl::StrJoin(contracting_dim_, ","));
-+}
-+
- // -- BatchDescriptor
- 
- BatchDescriptor::BatchDescriptor(int ndims)
-diff --git a/xla/stream_executor/dnn.h b/xla/stream_executor/dnn.h
-index 833fba436..ef7492a19 100644
---- a/xla/stream_executor/dnn.h
-+++ b/xla/stream_executor/dnn.h
-@@ -26,10 +26,13 @@ limitations under the License.
- #include <functional>
- #include <limits>
- #include <memory>
-+#include <optional>
-+#include <ostream>
- #include <string>
- #include <tuple>
- #include <type_traits>
- #include <utility>
-+#include <vector>
- 
- #include "google/protobuf/wrappers.pb.h"
- #include "absl/types/optional.h"
-@@ -152,6 +155,75 @@ enum class RnnDirectionMode {
- // DepthToSpace comment for more information.
- enum class DepthToSpaceLayout { DepthHeightWidth };
- 
-+class TensorDescriptor {
-+ public:
-+  TensorDescriptor() = default;
-+  tsl::StatusOr<std::vector<int64_t>> GetPhysicalDimensionsMajorToMinor() const;
-+  std::vector<int64_t> GetPhysicalStridesMajorToMinor() const;
-+  std::vector<int64_t> GetLogicalStrides() const;
-+
-+  static TensorDescriptor For(DataType type,
-+                              absl::Span<const int64_t> dimensions,
-+                              absl::Span<const int64_t> minor_to_major);
-+  int ndims() const;
-+  std::vector<int64_t> dimensions() const { return dimensions_; }
-+  std::vector<int64_t> minor_to_major() const { return minor_to_major_; }
-+  DataType type() const { return d_type_; }
-+  std::string ToString() const;
-+
-+ protected:
-+  TensorDescriptor(DataType type, std::vector<int64_t> dimensions,
-+                   std::vector<int64_t> minor_to_major)
-+      : d_type_(type),
-+        dimensions_(dimensions),
-+        minor_to_major_(minor_to_major) {}
-+
-+ private:
-+  DataType d_type_;
-+  std::vector<int64_t> dimensions_;
-+  std::vector<int64_t> minor_to_major_;
-+};
-+
-+class MatmulTensorDescriptor {
-+ public:
-+  MatmulTensorDescriptor() = default;
-+  tsl::StatusOr<std::vector<int64_t>> GetNonContractingDims() const;
-+  std::vector<int64_t> GetCudnnCompatibleDimensions(
-+      bool is_lhs
-+      /*if not lhs, then rhs*/) const;
-+  std::vector<int64_t> GetCudnnCompatibleStrides(
-+      bool is_lhs
-+      /*if not lhs, then rhs*/) const;
-+  tsl::StatusOr<std::vector<int64_t>> MakeCudnnCompatible(
-+      const std::vector<int64_t>&, bool is_lhs) const;
-+
-+  static MatmulTensorDescriptor For(DataType type,
-+                                    absl::Span<const int64_t> dimensions,
-+                                    absl::Span<const int64_t> minor_to_major,
-+                                    absl::Span<const int64_t> batch_dims,
-+                                    absl::Span<const int64_t> contracting_dims);
-+  std::vector<int64_t> dimensions() const { return tensor_.dimensions(); }
-+  std::vector<int64_t> minor_to_major() const {
-+    return tensor_.minor_to_major();
-+  }
-+  DataType type() const { return tensor_.type(); }
-+
-+  std::string ToString() const;
-+
-+ protected:
-+  MatmulTensorDescriptor(TensorDescriptor tensor,
-+                         std::vector<int64_t> batch_dims,
-+                         std::vector<int64_t> contracting_dims)
-+      : tensor_(tensor),
-+        batch_dimension_numbers_(batch_dims),
-+        contracting_dim_(contracting_dims) {}
-+
-+ private:
-+  TensorDescriptor tensor_;
-+  std::vector<int64_t> batch_dimension_numbers_;
-+  std::vector<int64_t> contracting_dim_;
-+};
-+
- // Specifies the descriptor for a RNN model.
- //
- // An example use case:
-@@ -170,7 +242,7 @@ class RnnDescriptor {
-     int64_t size;
-   };
-   typedef std::vector<ParamsRegion> ParamsRegions;
--  virtual ~RnnDescriptor() {}
-+  virtual ~RnnDescriptor() = default;
-   virtual int64_t ParamsSizeInBytes() const { return -1; }
-   virtual ParamsRegions ParamsWeightRegions() const { return ParamsRegions(); }
-   virtual ParamsRegions ParamsBiasRegions() const { return ParamsRegions(); }
-@@ -182,7 +254,7 @@ class RnnDescriptor {
- // in use. The destructor releases the underlying descriptors.
- class RnnSequenceTensorDescriptor {
-  public:
--  virtual ~RnnSequenceTensorDescriptor() {}
-+  virtual ~RnnSequenceTensorDescriptor() = default;
- };
- 
- // Specifies either the input and hidden state in a RNN model.
-@@ -191,7 +263,7 @@ class RnnSequenceTensorDescriptor {
- // in use. The destructor releases the underlying descriptors.
- class RnnStateTensorDescriptor {
-  public:
--  virtual ~RnnStateTensorDescriptor() {}
-+  virtual ~RnnStateTensorDescriptor() = default;
- };
- 
- // Returns a string representation of the given quantization mode.
-@@ -870,7 +942,7 @@ class OpRunner;
- template <typename... Args>
- class OpRunner<void(Args...)> {
-  public:
--  virtual ~OpRunner() {}
-+  virtual ~OpRunner() = default;
- 
-   // Get a description of the runner, for uniqueness of autotune entries.
-   //
-@@ -912,6 +984,34 @@ using FusedMatmulSignature = void(DeviceMemoryBase /* a_data */,
-                                   DeviceMemoryBase /* c_data */);
- using FusedMatmulRunner = OpRunner<FusedMatmulSignature>;
- 
-+using FusedMHASoftmaxSignature = void(DeviceMemoryBase /*BMM1_inputA_data*/,
-+                                      DeviceMemoryBase /* BMM1_inputB_data */,
-+                                      DeviceMemoryBase /* BMM2_inputA_data */,
-+                                      DeviceMemoryBase /* output_data */);
-+using FusedMHASoftmaxRunner = OpRunner<FusedMHASoftmaxSignature>;
-+
-+using FusedMHAMaskSignature = void(DeviceMemoryBase /*BMM1_inputA_data*/,
-+                                   DeviceMemoryBase /* BMM1_inputB_data */,
-+                                   DeviceMemoryBase /* mask_data */,
-+                                   DeviceMemoryBase /* BMM2_inputA_data */,
-+                                   DeviceMemoryBase /* output_data */);
-+using FusedMHAMaskRunner = OpRunner<FusedMHAMaskSignature>;
-+
-+using FusedMHABiasMaskSignature = void(DeviceMemoryBase /*BMM1_inputA_data*/,
-+                                       DeviceMemoryBase /* BMM1_inputB_data */,
-+                                       DeviceMemoryBase /* mask_data */,
-+                                       DeviceMemoryBase /* bias_data */,
-+                                       DeviceMemoryBase /* BMM2_inputA_data */,
-+                                       DeviceMemoryBase /* output_data */);
-+using FusedMHABiasMaskRunner = OpRunner<FusedMHABiasMaskSignature>;
-+
-+using FusedMHABiasSignature = void(DeviceMemoryBase /*BMM1_inputA_data*/,
-+                                   DeviceMemoryBase /* BMM1_inputB_data */,
-+                                   DeviceMemoryBase /* bias_data */,
-+                                   DeviceMemoryBase /* BMM2_inputA_data */,
-+                                   DeviceMemoryBase /* output_data */);
-+using FusedMHABiasRunner = OpRunner<FusedMHABiasSignature>;
-+
- // Describes the configuration for the algorithms that will used.
- //
- // Arguments:
-@@ -930,7 +1030,7 @@ using FusedMatmulRunner = OpRunner<FusedMatmulSignature>;
- // one without scratch memory, and scratch_size field is used to track it.
- class AlgorithmConfig {
-  public:
--  AlgorithmConfig() {}
-+  AlgorithmConfig() = default;
-   explicit AlgorithmConfig(AlgorithmDesc algorithm) : algorithm_(algorithm) {}
-   AlgorithmConfig(AlgorithmDesc algorithm, size_t scratch_size)
-       : algorithm_(algorithm), scratch_size_(scratch_size) {}
-@@ -1159,8 +1259,8 @@ class VersionInfo {
- // PrepareForConvolution is an example for how new APIs should be written.
- class DnnSupport {
-  public:
--  DnnSupport() {}
--  virtual ~DnnSupport() {}
-+  DnnSupport() = default;
-+  virtual ~DnnSupport() = default;
- 
-   virtual tsl::Status Init() = 0;
- 
-@@ -1536,6 +1636,54 @@ class DnnSupport {
-       const dnn::ConvolutionDescriptor& convolution_descriptor,
-       dnn::ActivationMode activation_mode);
- 
-+  virtual tsl::StatusOr<std::unique_ptr<const dnn::FusedMHASoftmaxRunner>>
-+  FusedMHASoftmaxRunnerFromDesc(
-+      Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+      dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor& output_descriptor,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed);
-+
-+  virtual tsl::StatusOr<std::unique_ptr<const dnn::FusedMHAMaskRunner>>
-+  FusedMHAScaleMaskSoftmaxRunnerFromDesc(
-+      Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+      dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor& output_descriptor,
-+      const dnn::TensorDescriptor& mask_descriptor, double scale,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed);
-+
-+  virtual tsl::StatusOr<std::unique_ptr<const dnn::FusedMHABiasMaskRunner>>
-+  FusedMHAScaleBiasMaskSoftmaxRunnerFromDesc(
-+      Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+      dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor& output_descriptor,
-+      const dnn::TensorDescriptor& mask_descriptor,
-+      const dnn::TensorDescriptor& bias_descriptor, double scale,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed);
-+
-+  virtual tsl::StatusOr<std::unique_ptr<const dnn::FusedMHABiasRunner>>
-+  FusedMHAScaleBiasSoftmaxRunnerFromDesc(
-+      Stream* stream, const dnn::AlgorithmDesc& algorithm_desc,
-+      dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor& bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor& output_descriptor,
-+      const dnn::TensorDescriptor& bias_descriptor, double scale,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed);
-+
-   virtual bool GetMIOpenConvolveAlgorithms(
-       dnn::ConvolutionKind kind, dnn::DataType element_type, Stream* stream,
-       const dnn::BatchDescriptor& input_descriptor, DeviceMemoryBase input_data,
 diff --git a/xla/stream_executor/kernel_spec.cc b/xla/stream_executor/kernel_spec.cc
 index a8efbb398..878316ae5 100644
 --- a/xla/stream_executor/kernel_spec.cc
@@ -2777,230 +1044,11 @@ index 8b33a5fe8..9c3ae880b 100644
                                                absl::string_view kernelname);
    MultiKernelLoaderSpec *AddCudaPtxInMemory(absl::string_view ptx,
                                              absl::string_view kernelname);
-diff --git a/xla/stream_executor/lazy_op_runner.h b/xla/stream_executor/lazy_op_runner.h
-index e0b103d53..15622ecef 100644
---- a/xla/stream_executor/lazy_op_runner.h
-+++ b/xla/stream_executor/lazy_op_runner.h
-@@ -18,6 +18,7 @@ limitations under the License.
- 
- #include <atomic>
- #include <memory>
-+#include <optional>
- #include <string>
- #include <utility>
- 
-@@ -202,6 +203,114 @@ struct FusedMatmulOp {
-   }
- };
- 
-+struct FusedMHASoftmaxOp {
-+  using Signature = FusedMHASoftmaxSignature;
-+
-+  struct Config {
-+    FusedMHAKind kind;
-+    const MatmulTensorDescriptor& bmm1_lhs_descriptor;
-+    const MatmulTensorDescriptor& bmm1_rhs_descriptor;
-+    const MatmulTensorDescriptor& bmm2_rhs_descriptor;
-+    const MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor;
-+    const TensorDescriptor& output_descriptor;
-+    std::optional<double> dropout_rate;
-+    std::optional<int64_t> seed;
-+  };
-+
-+  static tsl::StatusOr<
-+      std::unique_ptr<const OpRunner<FusedMHASoftmaxSignature>>>
-+  RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
-+                          Stream* stream) {
-+    return stream->FusedMHASoftmaxRunnerFromDesc(
-+        desc, config.kind, config.bmm1_lhs_descriptor,
-+        config.bmm1_rhs_descriptor, config.bmm2_rhs_descriptor,
-+        config.intermediate_bmm2_lhs_descriptor, config.output_descriptor,
-+        config.dropout_rate, config.seed);
-+  }
-+};
-+
-+struct FusedMHAScaleMaskSoftmaxOp {
-+  using Signature = FusedMHAMaskSignature;
-+
-+  struct Config {
-+    FusedMHAKind kind;
-+    double scale;
-+    const MatmulTensorDescriptor& bmm1_lhs_descriptor;
-+    const MatmulTensorDescriptor& bmm1_rhs_descriptor;
-+    const MatmulTensorDescriptor& bmm2_rhs_descriptor;
-+    const MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor;
-+    const TensorDescriptor& output_descriptor;
-+    const TensorDescriptor& mask_descriptor;
-+    std::optional<double> dropout_rate;
-+    std::optional<int64_t> seed;
-+  };
-+
-+  static tsl::StatusOr<std::unique_ptr<const OpRunner<FusedMHAMaskSignature>>>
-+  RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
-+                          Stream* stream) {
-+    return stream->FusedMHAScaleMaskSoftmaxRunnerFromDesc(
-+        desc, config.kind, config.bmm1_lhs_descriptor,
-+        config.bmm1_rhs_descriptor, config.bmm2_rhs_descriptor,
-+        config.intermediate_bmm2_lhs_descriptor, config.output_descriptor,
-+        config.mask_descriptor, config.scale, config.dropout_rate, config.seed);
-+  }
-+};
-+
-+struct FusedMHAScaleBiasMaskSoftmaxOp {
-+  using Signature = FusedMHABiasMaskSignature;
-+  struct Config {
-+    FusedMHAKind kind;
-+    double scale;
-+    const MatmulTensorDescriptor& bmm1_lhs_descriptor;
-+    const MatmulTensorDescriptor& bmm1_rhs_descriptor;
-+    const MatmulTensorDescriptor& bmm2_rhs_descriptor;
-+    const MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor;
-+    const TensorDescriptor& output_descriptor;
-+    const TensorDescriptor& bias_descriptor;
-+    const TensorDescriptor& mask_descriptor;
-+    std::optional<double> dropout_rate;
-+    std::optional<int64_t> seed;
-+  };
-+
-+  static tsl::StatusOr<
-+      std::unique_ptr<const OpRunner<FusedMHABiasMaskSignature>>>
-+  RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
-+                          Stream* stream) {
-+    return stream->FusedMHAScaleBiasMaskSoftmaxRunnerFromDesc(
-+        desc, config.kind, config.bmm1_lhs_descriptor,
-+        config.bmm1_rhs_descriptor, config.bmm2_rhs_descriptor,
-+        config.intermediate_bmm2_lhs_descriptor, config.output_descriptor,
-+        config.mask_descriptor, config.bias_descriptor, config.scale,
-+        config.dropout_rate, config.seed);
-+  }
-+};
-+
-+struct FusedMHAScaleBiasSoftmaxOp {
-+  using Signature = FusedMHABiasSignature;
-+  struct Config {
-+    FusedMHAKind kind;
-+    double scale;
-+    const MatmulTensorDescriptor& bmm1_lhs_descriptor;
-+    const MatmulTensorDescriptor& bmm1_rhs_descriptor;
-+    const MatmulTensorDescriptor& bmm2_rhs_descriptor;
-+    const MatmulTensorDescriptor& intermediate_bmm2_lhs_descriptor;
-+    const TensorDescriptor& output_descriptor;
-+    const TensorDescriptor& bias_descriptor;
-+    std::optional<double> dropout_rate;
-+    std::optional<int64_t> seed;
-+  };
-+
-+  static tsl::StatusOr<std::unique_ptr<const OpRunner<FusedMHABiasSignature>>>
-+  RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
-+                          Stream* stream) {
-+    return stream->FusedMHAScaleBiasSoftmaxRunnerFromDesc(
-+        desc, config.kind, config.bmm1_lhs_descriptor,
-+        config.bmm1_rhs_descriptor, config.bmm2_rhs_descriptor,
-+        config.intermediate_bmm2_lhs_descriptor, config.output_descriptor,
-+        config.bias_descriptor, config.scale, config.dropout_rate, config.seed);
-+  }
-+};
-+
- }  // namespace dnn
- }  // namespace stream_executor
- 
-diff --git a/xla/stream_executor/stream.h b/xla/stream_executor/stream.h
-index 6b660932c..150a04942 100644
---- a/xla/stream_executor/stream.h
-+++ b/xla/stream_executor/stream.h
-@@ -476,6 +476,87 @@ class Stream {
-         convolution_descriptor, activation_mode);
-   }
- 
-+  tsl::StatusOr<std::unique_ptr<const dnn::FusedMHASoftmaxRunner>>
-+  FusedMHASoftmaxRunnerFromDesc(
-+      const dnn::AlgorithmDesc &algorithm_desc, dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor &bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor &output_descriptor,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+    dnn::DnnSupport *dnn_support = parent_->AsDnn();
-+    if (!dnn_support) {
-+      return tsl::errors::Unimplemented("DNN library is not found.");
-+    }
-+    return dnn_support->FusedMHASoftmaxRunnerFromDesc(
-+        this, algorithm_desc, kind, bmm1_lhs_descriptor, bmm1_rhs_descriptor,
-+        bmm2_rhs_descriptor, intermediate_bmm2_lhs_descriptor,
-+        output_descriptor, dropout_rate, seed);
-+  }
-+
-+  tsl::StatusOr<std::unique_ptr<const dnn::FusedMHAMaskRunner>>
-+  FusedMHAScaleMaskSoftmaxRunnerFromDesc(
-+      const dnn::AlgorithmDesc &algorithm_desc, dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor &bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor &output_descriptor,
-+      const dnn::TensorDescriptor &mask_descriptor, double scale,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+    dnn::DnnSupport *dnn_support = parent_->AsDnn();
-+    if (!dnn_support) {
-+      return tsl::errors::Unimplemented("DNN library is not found.");
-+    }
-+    return dnn_support->FusedMHAScaleMaskSoftmaxRunnerFromDesc(
-+        this, algorithm_desc, kind, bmm1_lhs_descriptor, bmm1_rhs_descriptor,
-+        bmm2_rhs_descriptor, intermediate_bmm2_lhs_descriptor,
-+        output_descriptor, mask_descriptor, scale, dropout_rate, seed);
-+  }
-+
-+  tsl::StatusOr<std::unique_ptr<const dnn::FusedMHABiasMaskRunner>>
-+  FusedMHAScaleBiasMaskSoftmaxRunnerFromDesc(
-+      const dnn::AlgorithmDesc &algorithm_desc, dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor &bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor &output_descriptor,
-+      const dnn::TensorDescriptor &mask_descriptor,
-+      const dnn::TensorDescriptor &bias_descriptor, double scale,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+    dnn::DnnSupport *dnn_support = parent_->AsDnn();
-+    if (!dnn_support) {
-+      return tsl::errors::Unimplemented("DNN library is not found.");
-+    }
-+    return dnn_support->FusedMHAScaleBiasMaskSoftmaxRunnerFromDesc(
-+        this, algorithm_desc, kind, bmm1_lhs_descriptor, bmm1_rhs_descriptor,
-+        bmm2_rhs_descriptor, intermediate_bmm2_lhs_descriptor,
-+        output_descriptor, mask_descriptor, bias_descriptor, scale,
-+        dropout_rate, seed);
-+  }
-+
-+  tsl::StatusOr<std::unique_ptr<const dnn::FusedMHABiasRunner>>
-+  FusedMHAScaleBiasSoftmaxRunnerFromDesc(
-+      const dnn::AlgorithmDesc &algorithm_desc, dnn::FusedMHAKind kind,
-+      const dnn::MatmulTensorDescriptor &bmm1_lhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &bmm1_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &bmm2_rhs_descriptor,
-+      const dnn::MatmulTensorDescriptor &intermediate_bmm2_lhs_descriptor,
-+      const dnn::TensorDescriptor &output_descriptor,
-+      const dnn::TensorDescriptor &bias_descriptor, double scale,
-+      std::optional<double> dropout_rate, std::optional<int64_t> seed) {
-+    dnn::DnnSupport *dnn_support = parent_->AsDnn();
-+    if (!dnn_support) {
-+      return tsl::errors::Unimplemented("DNN library is not found.");
-+    }
-+    return dnn_support->FusedMHAScaleBiasSoftmaxRunnerFromDesc(
-+        this, algorithm_desc, kind, bmm1_lhs_descriptor, bmm1_rhs_descriptor,
-+        bmm2_rhs_descriptor, intermediate_bmm2_lhs_descriptor,
-+        output_descriptor, bias_descriptor, scale, dropout_rate, seed);
-+  }
-+
-   Stream &ThenSeparableConvolve(
-       const dnn::BatchDescriptor &input_descriptor,
-       const DeviceMemory<float> &input_data,
 diff --git a/xla/stream_executor/stream_executor_pimpl.h b/xla/stream_executor/stream_executor_pimpl.h
-index 755dd564e..701ecc3c7 100644
+index c2bb16bce..41a1e3f89 100644
 --- a/xla/stream_executor/stream_executor_pimpl.h
 +++ b/xla/stream_executor/stream_executor_pimpl.h
-@@ -828,7 +828,8 @@ StreamExecutor::CreateTypedKernel(absl::string_view kernel_name,
+@@ -812,7 +812,8 @@ StreamExecutor::CreateTypedKernel(absl::string_view kernel_name,
  
    if (!cubin_data.empty()) {
      loader_spec.AddCudaCubinInMemory(
@@ -3010,306 +1058,40 @@ index 755dd564e..701ecc3c7 100644
    }
  
    TF_RETURN_IF_ERROR(GetKernel(loader_spec, kernel_base.get()));
-diff --git a/xla/translate/mhlo_to_hlo/attribute_exporter.cc b/xla/translate/mhlo_to_hlo/attribute_exporter.cc
-index c92753d6e..c8e8570fa 100644
---- a/xla/translate/mhlo_to_hlo/attribute_exporter.cc
-+++ b/xla/translate/mhlo_to_hlo/attribute_exporter.cc
-@@ -217,4 +217,42 @@ ConvertOutputOperandAliasing(mlir::ArrayAttr aliasArrayAttr) {
-   return aliasInfo;
- }
- 
-+
-+DotDimensionNumbers ConvertDotDimensionNumbers(
-+    mlir::mhlo::DotDimensionNumbersAttr input) {
-+  DotDimensionNumbers output;
-+
-+  for (auto v : input.getLhsBatchingDimensions()) {
-+    output.add_lhs_batch_dimensions(v);
-+  }
-+
-+  for (auto v : input.getRhsBatchingDimensions()) {
-+    output.add_rhs_batch_dimensions(v);
-+  }
-+
-+  for (auto v : input.getLhsContractingDimensions()) {
-+    output.add_lhs_contracting_dimensions(v);
-+  }
-+
-+  for (auto v : input.getRhsContractingDimensions()) {
-+    output.add_rhs_contracting_dimensions(v);
-+  }
-+
-+  return output;
-+}
-+
-+StatusOr<std::vector<int64_t>> ConvertMlirArrayAttrToInt64Array(
-+    const mlir::ArrayAttr& array) {
-+  int rank = array.size();
-+  std::vector<int64_t> converted_array(rank);
-+  for (int i = 0; i < rank; i++) {
-+    mlir::IntegerAttr attr = array[i].dyn_cast<mlir::IntegerAttr>();
-+    if (!attr) {
-+      return InternalError("Type Error: Expected layout integer attribute");
-+    }
-+    converted_array[i] = attr.getInt();
-+  }
-+  return converted_array;
-+}
-+
- }  // namespace xla
-diff --git a/xla/translate/mhlo_to_hlo/attribute_exporter.h b/xla/translate/mhlo_to_hlo/attribute_exporter.h
-index 29bc841da..970251447 100644
---- a/xla/translate/mhlo_to_hlo/attribute_exporter.h
-+++ b/xla/translate/mhlo_to_hlo/attribute_exporter.h
-@@ -57,5 +57,11 @@ StatusOr<xla::CustomCallApiVersion> ConvertCustomCallApiVersion(
- 
- StatusOr<std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>>
- ConvertOutputOperandAliasing(mlir::ArrayAttr aliasArrayAttr);
-+
-+DotDimensionNumbers ConvertDotDimensionNumbers(
-+    mlir::mhlo::DotDimensionNumbersAttr input);
-+
-+StatusOr<std::vector<int64_t>> ConvertMlirArrayAttrToInt64Array(
-+    const mlir::ArrayAttr& array);
- }  // namespace xla
- #endif  // XLA_TRANSLATE_MHLO_TO_HLO_ATTRIBUTE_EXPORTER_H_
 diff --git a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
-index 5629dc4cd..d28dc26ac 100644
+index 397e7707d..bc7e19096 100644
 --- a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
 +++ b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
-@@ -753,6 +753,10 @@ tsl::StatusOr<mlir::Operation*> LhloDialectEmitter::EmitCustomCallOp(
-     return EmitDnnConvolutionReorderVectorized(custom_call_instr);
-   }
- 
-+  if (xla::gpu::IsCustomCallTofMHA(*instr)) {
-+    return EmitDnnfMHA(custom_call_instr);
-+  }
-+
-   // For custom call, if there are any token operands or results, they will not
-   // be represented in LHLO so we need to remember the mapping. First create
-   // operands where each token is replaced with a null Value.
-@@ -854,20 +858,23 @@ tsl::StatusOr<lmhlo_gpu::CholeskyOp> LhloDialectEmitter::EmitCholesky(
- 
- namespace {
- 
--template <typename OpT>
--void SetMatmulAttributes(OpT op, const xla::gpu::GemmBackendConfig& config,
--                         OpBuilder& builder) {
-+mhlo::DotDimensionNumbersAttr GetDotDimensionNumbersAttr(
-+    const OpBuilder& builder, const xla::DotDimensionNumbers& hlo_dims) {
-   auto arrayref = [](absl::Span<const int64_t> array) {
-     return llvm::ArrayRef<int64_t>{array.data(), array.size()};
-   };
--
--  auto hlo_dims = config.dot_dimension_numbers();
--  auto mlir_dims = mhlo::DotDimensionNumbersAttr::get(
-+  return mhlo::DotDimensionNumbersAttr::get(
-       builder.getContext(), arrayref(hlo_dims.lhs_batch_dimensions()),
-       arrayref(hlo_dims.rhs_batch_dimensions()),
-       arrayref(hlo_dims.lhs_contracting_dimensions()),
-       arrayref(hlo_dims.rhs_contracting_dimensions()));
--  op.setDotDimensionNumbersAttr(mlir_dims);
-+}
-+
-+template <typename OpT>
-+void SetMatmulAttributes(OpT op, const xla::gpu::GemmBackendConfig& config,
-+                         OpBuilder& builder) {
-+  op.setDotDimensionNumbersAttr(
-+      GetDotDimensionNumbersAttr(builder, config.dot_dimension_numbers()));
-   op.setAlphaRealAttr(builder.getF64FloatAttr(config.alpha_real()));
-   op.setAlphaImagAttr(builder.getF64FloatAttr(config.alpha_imag()));
-   op.setBetaAttr(builder.getF64FloatAttr(config.beta()));
-@@ -903,6 +910,34 @@ tsl::StatusOr<lmhlo_gpu::CublasLtMatmulEpilogue> AsLhloEpilogue(
-   }
- }
- 
-+tsl::StatusOr<lmhlo_gpu::FusedMhaDagSignature> AsLhloFusedMhaDagSignature(
-+    xla::gpu::CudnnfMHAKind kind) {
-+  switch (kind) {
-+    case xla::gpu::CudnnfMHAKind::kBmmBmm:
-+      return lmhlo_gpu::FusedMhaDagSignature::Default;
-+    case xla::gpu::CudnnfMHAKind::kScaleBiasMaskSoftmax:
-+      return lmhlo_gpu::FusedMhaDagSignature::ScaleBiasMaskSoftmax;
-+    case xla::gpu::CudnnfMHAKind::kScaleBiasMaskSoftmaxDropout:
-+      return lmhlo_gpu::FusedMhaDagSignature::ScaleBiasMaskSoftmaxDropout;
-+    case xla::gpu::CudnnfMHAKind::kScaleMaskSoftmax:
-+      return lmhlo_gpu::FusedMhaDagSignature::ScaleMaskSoftmax;
-+    case xla::gpu::CudnnfMHAKind::kScaleMaskSoftmaxDropout:
-+      return lmhlo_gpu::FusedMhaDagSignature::ScaleMaskSoftmaxDropout;
-+    case xla::gpu::CudnnfMHAKind::kSoftmaxDropout:
-+      return lmhlo_gpu::FusedMhaDagSignature::SoftmaxDropout;
-+    case xla::gpu::CudnnfMHAKind::kSoftmax:
-+      return lmhlo_gpu::FusedMhaDagSignature::Softmax;
+@@ -930,6 +930,8 @@ tsl::StatusOr<lmhlo_gpu::FusedMhaDagSignature> AsLhloFusedMhaDagSignature(
+       return lmhlo_gpu::FusedMhaDagSignature::SoftmaxDropout;
+     case xla::gpu::CudnnfMHAKind::kSoftmax:
+       return lmhlo_gpu::FusedMhaDagSignature::Softmax;
 +    case xla::gpu::CudnnfMHAKind::kScaleSoftmax:
 +      return lmhlo_gpu::FusedMhaDagSignature::ScaleSoftmax;
-+    case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmax:
-+      return lmhlo_gpu::FusedMhaDagSignature::ScaleBiasSoftmax;
-+    case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmaxDropout:
-+      return lmhlo_gpu::FusedMhaDagSignature::ScaleBiasSoftmaxDropout;
-+    default:
-+      return xla::InternalError("unknown cudnn fmha kind");
-+  }
-+}
-+
- }  // namespace
- 
- tsl::StatusOr<Operation*> LhloDialectEmitter::EmitGemm(
-@@ -1229,6 +1264,169 @@ LhloDialectEmitter::EmitDnnConvolutionReorderVectorized(
-   }
- }
- 
-+tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHA(
-+    const HloCustomCallInstruction* custom_call) {
-+  TF_ASSIGN_OR_RETURN(
-+      auto const config,
-+      custom_call->backend_config<xla::gpu::CudnnfMHABackendConfig>());
-+
-+  TF_ASSIGN_OR_RETURN(const xla::gpu::CudnnfMHAKind kind,
-+                      xla::gpu::GetCudnnfMHAKind(custom_call));
-+
-+  auto set_common_fmha_attributes =
-+      [&, this](auto op) -> tsl::StatusOr<Operation*> {
-+    TF_ASSIGN_OR_RETURN(lmhlo_gpu::FusedMhaDagSignature fused_mha_dag_signature,
-+                        AsLhloFusedMhaDagSignature(kind));
-+    op.setFusedMhaDagAttr(lmhlo_gpu::FusedMhaDagSignatureAttr::get(
-+        builder_.getContext(), fused_mha_dag_signature));
-+    op.setBmm1DotDimensionNumbersAttr(GetDotDimensionNumbersAttr(
-+        builder_, config.bmm1_dot_dimension_numbers()));
-+    op.setBmm2DotDimensionNumbersAttr(GetDotDimensionNumbersAttr(
-+        builder_, config.bmm2_dot_dimension_numbers()));
-+
-+    const auto& algorithm = config.algorithm();
-+    std::vector<int64_t> knob_ids;
-+    std::vector<int64_t> knob_values;
-+    for (const auto& entry : algorithm.tuning_knobs()) {
-+      knob_ids.push_back(entry.first);
-+      knob_values.push_back(entry.second);
-+    }
-+    auto fmha_algo_config = mlir::lmhlo_gpu::FusedMHAAlgorithmConfigAttr::get(
-+        builder_.getContext(), algorithm.algo_id(), knob_ids, knob_values,
-+        algorithm.has_workspace_size() ? algorithm.workspace_size().value()
-+                                       : -1);
-+    op.setAlgorithmConfigAttr(fmha_algo_config);
-+
-+    auto intermediate_tensor_shape = Shape(config.intermediate_tensor_shape());
-+    auto arrayref = [](absl::Span<const int64_t> array) {
-+      return llvm::ArrayRef<int64_t>{array.data(), array.size()};
-+    };
-+    auto intermediate_tensor_dims = builder_.getI64ArrayAttr(
-+        arrayref(intermediate_tensor_shape.dimensions()));
-+    op.setIntermediateTensorDimensionsAttr(intermediate_tensor_dims);
-+
-+    auto intermediate_tensor_layout = builder_.getI64ArrayAttr(
-+        arrayref(intermediate_tensor_shape.layout().minor_to_major()));
-+    op.setIntermediateTensorLayoutAttr(intermediate_tensor_layout);
-+
-+    return op.getOperation();
-+  };
-+
-+  llvm::SmallVector<Value, 7> operands;
-+  TF_RETURN_IF_ERROR(GetOrCreateView(custom_call->operand(0), &operands));
-+  TF_RETURN_IF_ERROR(GetOrCreateView(custom_call->operand(1), &operands));
-+  TF_RETURN_IF_ERROR(GetOrCreateView(custom_call->operand(2), &operands));
-+
-+  switch (kind) {
-+    case xla::gpu::CudnnfMHAKind::kBmmBmm:
-+    case xla::gpu::CudnnfMHAKind::kSoftmax: {
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-+      auto fmha_default =
-+          CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAOp>(custom_call, operands);
+     case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmax:
+       return lmhlo_gpu::FusedMhaDagSignature::ScaleBiasSoftmax;
+     case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmaxDropout:
+@@ -1354,12 +1356,16 @@ tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHA(
+       TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
+       auto fmha_default =
+           CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAOp>(custom_call, operands);
 +      fmha_default.setFmhaScaleAttr(
 +          builder_.getF64FloatAttr(config.fmha_scale()));
-+      return set_common_fmha_attributes(fmha_default);
-+    }
-+    case xla::gpu::CudnnfMHAKind::kSoftmaxDropout: {
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-+      auto fmha_softmax_dropout =
-+          CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAOp>(custom_call, operands);
+       return set_common_fmha_attributes(fmha_default);
+     }
+     case xla::gpu::CudnnfMHAKind::kSoftmaxDropout: {
+       TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
+       auto fmha_softmax_dropout =
+           CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAOp>(custom_call, operands);
 +      fmha_softmax_dropout.setFmhaScaleAttr(
 +          builder_.getF64FloatAttr(config.fmha_scale()));
-+      fmha_softmax_dropout.setDropoutRateAttr(
-+          builder_.getF64FloatAttr(config.dropout_rate()));
-+      fmha_softmax_dropout.setSeedAttr(
-+          builder_.getI64IntegerAttr(config.seed()));
-+      return set_common_fmha_attributes(fmha_softmax_dropout);
-+    }
-+    case xla::gpu::CudnnfMHAKind::kScaleMaskSoftmax: {
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call->operand(3), &operands));
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-+
-+      auto fmha_scale_mask_softmax =
-+          CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAWithScaledMaskOp>(custom_call,
-+                                                                    operands);
-+      fmha_scale_mask_softmax.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-+      return set_common_fmha_attributes(fmha_scale_mask_softmax);
-+    }
-+    case xla::gpu::CudnnfMHAKind::kScaleMaskSoftmaxDropout: {
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call->operand(3), &operands));
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-+
-+      auto fmha_scale_mask_softmax_dropout =
-+          CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAWithScaledMaskOp>(custom_call,
-+                                                                    operands);
-+      fmha_scale_mask_softmax_dropout.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-+      fmha_scale_mask_softmax_dropout.setDropoutRateAttr(
-+          builder_.getF64FloatAttr(config.dropout_rate()));
-+      fmha_scale_mask_softmax_dropout.setSeedAttr(
-+          builder_.getI64IntegerAttr(config.seed()));
-+      return set_common_fmha_attributes(fmha_scale_mask_softmax_dropout);
-+    }
-+    case xla::gpu::CudnnfMHAKind::kScaleBiasMaskSoftmax: {
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call->operand(3), &operands));
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call->operand(4), &operands));
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-+
-+      auto fmha_scale_bias_mask_softmax =
-+          CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAWithScaledMaskOp>(custom_call,
-+                                                                    operands);
-+      fmha_scale_bias_mask_softmax.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-+      return set_common_fmha_attributes(fmha_scale_bias_mask_softmax);
-+    }
-+    case xla::gpu::CudnnfMHAKind::kScaleBiasMaskSoftmaxDropout: {
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call->operand(3), &operands));
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call->operand(4), &operands));
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-+      auto fmha_scale_bias_mask_softmax_dropout =
-+          CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAWithScaledMaskOp>(custom_call,
-+                                                                    operands);
-+      fmha_scale_bias_mask_softmax_dropout.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-+      fmha_scale_bias_mask_softmax_dropout.setDropoutRateAttr(
-+          builder_.getF64FloatAttr(config.dropout_rate()));
-+      fmha_scale_bias_mask_softmax_dropout.setSeedAttr(
-+          builder_.getI64IntegerAttr(config.seed()));
-+      return set_common_fmha_attributes(fmha_scale_bias_mask_softmax_dropout);
-+    }
-+    case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmaxDropout: {
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call->operand(3), &operands));
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-+      auto fmha_bias_softmax_dropout =
-+          CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAWithScaledBiasOp>(custom_call,
-+                                                                    operands);
-+      fmha_bias_softmax_dropout.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-+      fmha_bias_softmax_dropout.setDropoutRateAttr(
-+          builder_.getF64FloatAttr(config.dropout_rate()));
-+      fmha_bias_softmax_dropout.setSeedAttr(
-+          builder_.getI64IntegerAttr(config.seed()));
-+      return set_common_fmha_attributes(fmha_bias_softmax_dropout);
-+    }
-+    case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmax: {
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call->operand(3), &operands));
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-+      auto fmha_bias_softmax =
-+          CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAWithScaledBiasOp>(custom_call,
-+                                                                    operands);
-+      fmha_bias_softmax.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-+      return set_common_fmha_attributes(fmha_bias_softmax);
-+    }
+       fmha_softmax_dropout.setDropoutRateAttr(
+           builder_.getF64FloatAttr(config.dropout_rate()));
+       fmha_softmax_dropout.setSeedAttr(
+@@ -1443,6 +1449,14 @@ tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHA(
+           builder_.getF64FloatAttr(config.fmha_scale()));
+       return set_common_fmha_attributes(fmha_bias_softmax);
+     }
 +    case xla::gpu::CudnnfMHAKind::kScaleSoftmax: {
 +      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
 +      auto fmha_softmax =
@@ -3318,47 +1100,18 @@ index 5629dc4cd..d28dc26ac 100644
 +          builder_.getF64FloatAttr(config.fmha_scale()));
 +      return set_common_fmha_attributes(fmha_softmax);
 +    }
-+  }
-+}
-+
- // Convert an XLA HLO constant to a global_memref + get_global_memref pair.
- tsl::StatusOr<mlir::memref::GetGlobalOp> LhloDialectEmitter::EmitConstant(
-     const HloInstruction* instr) {
-diff --git a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
-index 04334af38..413b403ee 100644
---- a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
-+++ b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
-@@ -82,6 +82,8 @@ class LhloDialectEmitter : public xla::ConstDfsHloVisitorWithDefault {
-       const xla::HloCustomCallInstruction* custom_call);
-   tsl::StatusOr<Operation*> EmitDnnBatchNorm(
-       const xla::HloCustomCallInstruction* custom_call);
-+  xla::StatusOr<Operation*> EmitDnnfMHA(
-+      const xla::HloCustomCallInstruction* custom_call);
+   }
+ }
  
-   tsl::StatusOr<memref::GetGlobalOp> EmitConstant(
-       const xla::HloInstruction* instr);
-diff --git a/xla/xla.proto b/xla/xla.proto
-index 1215df8b6..80476299c 100644
---- a/xla/xla.proto
-+++ b/xla/xla.proto
-@@ -383,6 +383,8 @@ message DebugOptions {
- 
-   // Whether to use the cuDNN frontend API for convolutions when possible.
-   bool xla_gpu_enable_cudnn_frontend = 160;
-+  
-+  bool xla_gpu_enable_cudnn_fmha = 211;
- 
-   // Disable dumping metadata in HLO dumps.
-   bool xla_dump_disable_metadata = 153;
 diff --git a/xla/xla_data.proto b/xla/xla_data.proto
-index a9db4c982..1b30bea66 100644
+index c4c0f97d2..33b7e98ed 100644
 --- a/xla/xla_data.proto
 +++ b/xla/xla_data.proto
-@@ -101,6 +101,7 @@ enum PrimitiveType {
-   TOKEN = 17;
+@@ -28,6 +28,7 @@ enum PrimitiveType {
+   // Invalid primitive type to serve as default.
+   PRIMITIVE_TYPE_INVALID = 0;
  
-   // Next = 23
 +  VOID = 100;
- }
- // LINT.ThenChange(
- //   https://www.tensorflow.org/code/tensorflow/compiler/xla/shape_util.cc,
+   // Predicates are two-state booleans.
+   PRED = 1;
+ 

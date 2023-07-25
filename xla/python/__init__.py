@@ -14,20 +14,22 @@
 # ==============================================================================
 '''Init file for register XPU backend'''
 
-from jax._src import xla_bridge as xla_bridge
-from jax._src.lib import xla_client
+import logging
+from pathlib import Path
+import platform
+import sys
 
-import os
+import jax._src.xla_bridge as xb
 
-def make_factory(name, path):
-  def factory():
-    xla_client.load_pjrt_plugin_dynamically(name, path)
-    return xla_client.make_c_api_client(name)
-  return factory
+logger = logging.getLogger(__name__)
 
-# PATH=path-of-so ## search .so based on py path
-dir_path = os.path.dirname(__file__)
-lib_path = os.path.join(dir_path, "libitex_xla_extension.so")
-xla_bridge.register_backend_factory(
-  "xpu", make_factory("xpu", lib_path), priority=400
-)
+def initialize():
+  path = Path(__file__).resolve().parent / "pjrt_plugin_xpu.so"
+  if not path.exists():
+    logger.warning(
+        f"WARNING: Native library {path} does not exist. "
+        f"This most likely indicates an issue with how {__package__} "
+        f"was built or installed.")
+  xb.register_plugin("xpu",
+                     priority=500,
+                     library_path=str(path))

@@ -35,6 +35,7 @@ limitations under the License.
 
 namespace xla {
 namespace gpu {
+using mlir::lmhlo_gpu::AllToAllStartOp;
 
 namespace impl {
 template <typename OpT>
@@ -47,75 +48,37 @@ CclAllToAllConfig GetCclAllToAllConfig(OpT op) {
   return config;
 }
 
-template <typename OpT>
-bool CanImplement(OpT op) {
-  return absl::c_all_of(op.getInputs(), [&op](mlir::Value operand) {
+Status CheckImplementable(AllToAllStartOp op) {
+  TF_RETURN_IF_ERROR(CclCollectiveThunk::CheckImplementable());
+  std::optional<uint64_t> split_dim = op.getSplitDimension();
+  for (mlir::Value operand : op.getInputs()) {
+    TF_RETURN_IF_ERROR(IsValidOperand(operand, Thunk::kNcclAllToAll));
     Shape shape = GetShape(operand);
-    return LayoutUtil::IsDenseArray(shape) &&
-           IsTypeSupportedByCcl(shape.element_type(), Thunk::kNcclAllToAll) &&
-           (!op.getSplitDimension() ||
-            LayoutUtil::MinorToMajor(shape).back() == *op.getSplitDimension());
-  });
+    if (split_dim &&
+        !ShapeUtil::IsEffectivelyMostMajorDimension(shape, *split_dim)) {
+      return tsl::errors::Unimplemented(
+          "all-to-all split dim %u is not the most major in input shape %s",
+          *split_dim, shape.ToString(/*print_layout=*/true));
+    }
+  }
+  return OkStatus();
 }
+
 }  // namespace impl
 
-CclAllToAllThunkBase::CclAllToAllThunkBase(Kind kind, ThunkInfo thunk_info,
-                                           CclAllToAllConfig config,
-                                           std::vector<Buffer> buffers)
-    : CclCollectiveThunk(kind, thunk_info),
-      config_(std::move(config)),
+CclAllToAllStartThunk::CclAllToAllStartThunk(
+    ThunkInfo thunk_info, AllToAllStartOp op,
+    std::vector<CclCollectiveThunk::Buffer> buffers)
+    : CclCollectiveThunk(Thunk::kNcclAllToAllStart, thunk_info, op.getIsSync()),
+      config_(impl::GetCclAllToAllConfig(op)),
       buffers_(std::move(buffers)) {
   CHECK_EQ(config_.config.operand_count, buffers_.size());
 }
 
-Status CclAllToAllThunkBase::RunAllToAll(const ExecuteParams& params,
-                                         se::Stream& stream, ncclComm_t comm) {
-  TF_ASSIGN_OR_RETURN(
-      std::vector<DeviceBufferPair> device_buffers,
-      ConvertToDeviceBuffers(params, buffers_,
-                             config_.config.operand_element_type));
-  return xla::gpu::RunAllToAll(config_.has_split_dimension, device_buffers,
-                               stream, comm);
-}
-
-CclAllToAllThunk::CclAllToAllThunk(
-    ThunkInfo thunk_info, mlir::lmhlo::AllToAllOp op,
-    std::vector<CclAllToAllThunk::Buffer> buffers)
-    : CclAllToAllThunkBase(Thunk::kNcclAllToAll, thunk_info,
-                           impl::GetCclAllToAllConfig(op), std::move(buffers)) {
-}
-
-/*static*/ bool CclAllToAllThunk::CanImplement(mlir::lmhlo::AllToAllOp op) {
-  return impl::CanImplement(op);
-}
-
-/*static*/ bool CclAllToAllThunk::IsDegenerate(mlir::lmhlo::AllToAllOp op,
-                                               int64_t replica_count,
-                                               int64_t partition_count) {
-  return impl::GetCclAllToAllConfig(op).config.IsDegenerate(replica_count,
-                                                            partition_count);
-}
-
-/*static*/ CollectiveOpGroupMode CclAllToAllThunk::GetGroupMode(
-    mlir::lmhlo::AllToAllOp op) {
-  return impl::GetCclAllToAllConfig(op).config.group_mode;
-}
-
-Status CclAllToAllThunk::RunCclCollective(const ExecuteParams& params,
-                                          ncclComm_t comm) {
-  return RunAllToAll(params, *params.stream, comm);
-}
-
-CclAllToAllStartThunk::CclAllToAllStartThunk(
-    ThunkInfo thunk_info, mlir::lmhlo_gpu::AllToAllStartOp op,
-    std::vector<CclAllToAllThunk::Buffer> buffers)
-    : CclAllToAllThunkBase(Thunk::kNcclAllToAllStart, thunk_info,
-                           impl::GetCclAllToAllConfig(op), std::move(buffers)) {
-}
-
-/*static*/ bool CclAllToAllStartThunk::CanImplement(
-    mlir::lmhlo_gpu::AllToAllStartOp op) {
-  return impl::CanImplement(op);
+/*static*/ Status CclAllToAllStartThunk::CheckImplementable(
+    AllToAllStartOp op, int64_t replica_count, int64_t partition_count) {
+  return AddOpDescription<CclAllToAllStartThunk>(
+      impl::CheckImplementable(op), op, replica_count, partition_count);
 }
 
 /*static*/ bool CclAllToAllStartThunk::IsDegenerate(
@@ -131,12 +94,14 @@ CclAllToAllStartThunk::CclAllToAllStartThunk(
 }
 
 Status CclAllToAllStartThunk::RunCclCollective(const ExecuteParams& params,
+                                               se::Stream& stream,
                                                ncclComm_t comm) {
-  return async_.Execute(
-      [this](const ExecuteParams& params, se::Stream& stream, ncclComm_t comm) {
-        return RunAllToAll(params, stream, comm);
-      },
-      params, comm);
+  TF_ASSIGN_OR_RETURN(
+      std::vector<DeviceBufferPair> device_buffers,
+      ConvertToDeviceBuffers(params, buffers_,
+                             config_.config.operand_element_type));
+  return xla::gpu::RunAllToAll(config_.has_split_dimension, device_buffers,
+                               stream, comm);
 }
 
 CclAllToAllDoneThunk::CclAllToAllDoneThunk(

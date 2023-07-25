@@ -49,8 +49,15 @@ class GpuStream : public internal::StreamInterface {
   // Explicitly initialize the CUDA resources associated with this stream, used
   // by StreamExecutor::AllocateStream().
   bool Init();
-  void SetPriority(int priority) { priority_ = priority; }
-  int priority() const { return priority_; }
+  void SetPriority(StreamPriority priority) override {
+    stream_priority_ = priority;
+  }
+
+  void SetPriority(int priority) override { stream_priority_ = priority; }
+
+  std::variant<StreamPriority, int> priority() const override {
+    return stream_priority_;
+  }
 
   // Explicitly destroy the CUDA resources associated with this stream, used by
   // StreamExecutor::DeallocateStream().
@@ -81,7 +88,7 @@ class GpuStream : public internal::StreamInterface {
  private:
   GpuExecutor* parent_;         // Executor that spawned this stream.
   GpuStreamHandle gpu_stream_;  // Wrapped CUDA stream handle.
-  int priority_ = 0;
+  std::variant<StreamPriority, int> stream_priority_;
 
   // Event that indicates this stream has completed.
   GpuEventHandle completed_event_ = nullptr;
