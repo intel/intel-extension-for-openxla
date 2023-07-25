@@ -3180,7 +3180,7 @@ Status IrEmitterUnnested::EmitCollectivePermute(mlir::Operation* op) {
 
   CclCollectiveThunk::AsyncExecutor* async_executor;
   if (CclThunkType::IsDegenerate(collective_permute_op, replica_count,
-                                  partition_count)) {
+                                 partition_count)) {
     // For a degenerate collective permute, just generate a copy thunk.
     AddThunkToThunkSequence(std::make_unique<DeviceToDeviceCopyThunk>(
         GetThunkInfo(op),
@@ -3198,7 +3198,7 @@ Status IrEmitterUnnested::EmitCollectivePermute(mlir::Operation* op) {
         /*destination_buffer=*/result_slice};
     auto thunk =
         std::make_unique<CclThunkType>(GetThunkInfo(op), collective_permute_op,
-                                        replica_count, partition_count, buffer);
+                                       replica_count, partition_count, buffer);
     async_executor = thunk->async_executor();
     AddThunkToThunkSequence(std::move(thunk));
   }
@@ -3245,9 +3245,8 @@ Status IrEmitterUnnested::EmitCclThunk(mlir::Operation* untyped_op) {
   }
 
   if (should_use_ccl_thunk) {
-    auto thunk =
-        std::make_unique<CclThunkType>(GetThunkInfo(op), op,
-                                        /*buffers=*/std::move(buffers));
+    auto thunk = std::make_unique<CclThunkType>(GetThunkInfo(op), op,
+                                                /*buffers=*/std::move(buffers));
     async_executors_.insert({untyped_op, thunk->async_executor()});
     AddThunkToThunkSequence(std::move(thunk));
     return OkStatus();
@@ -3286,7 +3285,7 @@ Status IrEmitterUnnested::EmitCclThunk(mlir::Operation* untyped_op) {
 
 template <typename OpT>
 Status IrEmitterUnnested::EmitCclAsyncDone(Thunk::Kind kind,
-                                            mlir::Operation* op) {
+                                           mlir::Operation* op) {
   auto start_op = mlir::cast<OpT>(op).getToken().getDefiningOp();
   auto async_executor = async_executors_.extract(start_op);
   TF_RET_CHECK(async_executor) << "couldn't find async executor for start op";
