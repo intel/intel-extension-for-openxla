@@ -200,10 +200,27 @@ index 980ca390d..2374e6d10 100644
  )
  
 diff --git a/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td b/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td
-index 72fd56b2a..c49b8abec 100644
+index 72fd56b2a..87451f0c5 100644
 --- a/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td
 +++ b/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td
-@@ -317,6 +317,7 @@ def LHLOGPU_fusedMHAOp : LHLOGPU_Op<"fMHA"> {
+@@ -306,6 +306,16 @@ def LHLOGPU_AllToAllDoneOp: LHLOGPU_Op<"all_to_all_done"> {
+   let arguments = (ins MHLO_Token:$token);
+ }
+ 
++def LHLOGPU_fusedQKVOp : LHLOGPU_Op<"fQKV"> {
++  let arguments = (ins
++    Arg<LHLO_Buffer, "", [MemRead]>:$input,
++    Arg<LHLO_Buffer, "", [MemRead]>:$weight,
++    Arg<LHLO_Buffer, "", [MemWrite]>:$bmm_output1,
++    Arg<LHLO_Buffer, "", [MemWrite]>:$bmm_output2,
++    Arg<LHLO_Buffer, "", [MemWrite]>:$bmm_output3,
++    MHLO_DotDimensionNumbers:$dot_dimension_numbers);
++}
++
+ def LHLOGPU_fusedMHAOp : LHLOGPU_Op<"fMHA"> {
+   let arguments = (ins
+     Arg<LHLO_Buffer, "", [MemRead]>:$lhs_bmm1,
+@@ -317,6 +327,7 @@ def LHLOGPU_fusedMHAOp : LHLOGPU_Op<"fMHA"> {
      MHLO_DotDimensionNumbers:$bmm2_dot_dimension_numbers,
      I64ArrayAttr:$intermediate_tensor_dimensions,
      I64ArrayAttr:$intermediate_tensor_layout,
@@ -247,10 +264,18 @@ index ad67a9e0f..dd6687d38 100644
    if (file_prefix == "lmhlo") {
      print_flags.enableDebugInfo(/*enable=*/true,
 diff --git a/xla/service/gpu/cublas_cudnn.cc b/xla/service/gpu/cublas_cudnn.cc
-index 240e69ac4..d7132822d 100644
+index 240e69ac4..65ed0bd9b 100644
 --- a/xla/service/gpu/cublas_cudnn.cc
 +++ b/xla/service/gpu/cublas_cudnn.cc
-@@ -65,6 +65,8 @@ const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget =
+@@ -39,6 +39,7 @@ bool IsCublasLtMatmulF8(const HloInstruction& hlo) {
+          hlo.custom_call_target() == kCublasLtMatmulF8CallTarget;
+ }
+ 
++const absl::string_view kCudnnfQKVCallTarget = "__cudnn$fQKV";
+ const absl::string_view kGemmCallTarget = "__cublas$gemm";
+ const absl::string_view kCublasLtMatmulCallTarget = "__cublas$lt$matmul";
+ const absl::string_view kCublasLtMatmulF8CallTarget = "__cublas$lt$matmul$f8";
+@@ -65,6 +66,8 @@ const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget =
      "__cudnn$fhmaScaleBiasMaskSoftmaxDropout";
  const absl::string_view kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget =
      "__cudnn$fhmaScaleBiasSoftmaxDropout";
@@ -259,7 +284,19 @@ index 240e69ac4..d7132822d 100644
  const absl::string_view kCudnnfMHAScaleBiasSoftmaxCallTarget =
      "__cudnn$fhmaScaleBiasSoftmax";
  const absl::string_view kCudnnfMHAScaleMaskSoftmaxCallTarget =
-@@ -102,6 +104,7 @@ bool IsCustomCallTofMHA(const HloInstruction& hlo) {
+@@ -94,6 +97,11 @@ bool IsCudnnConvolutionReorder(const HloInstruction& hlo) {
+          target == kCudnnConvReorderFilterAndBiasCallTarget;
+ }
+ 
++bool IsCustomCallTofQKV(const HloInstruction& hlo) {
++  const auto& target = hlo.custom_call_target();
++  return target == kCudnnfQKVCallTarget;
++}
++
+ bool IsCustomCallTofMHA(const HloInstruction& hlo) {
+   const auto& target = hlo.custom_call_target();
+   return target == kCudnnfMHABmmBmmCallTarget ||
+@@ -102,6 +110,7 @@ bool IsCustomCallTofMHA(const HloInstruction& hlo) {
           target == kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget ||
           target == kCudnnfMHAScaleMaskSoftmaxCallTarget ||
           target == kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget ||
@@ -267,7 +304,7 @@ index 240e69ac4..d7132822d 100644
           target == kCudnnfMHASoftmaxDropoutCallTarget ||
           target == kCudnnfMHAScaleBiasSoftmaxCallTarget ||
           target == kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget;
-@@ -150,6 +153,8 @@ StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(
+@@ -150,6 +159,8 @@ StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(
      return CudnnfMHAKind::kScaleMaskSoftmax;
    if (target == kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget)
      return CudnnfMHAKind::kScaleMaskSoftmaxDropout;
@@ -276,7 +313,7 @@ index 240e69ac4..d7132822d 100644
    if (target == kCudnnfMHASoftmaxDropoutCallTarget)
      return CudnnfMHAKind::kSoftmaxDropout;
    if (target == kCudnnfMHASoftmaxCallTarget) return CudnnfMHAKind::kSoftmax;
-@@ -181,6 +186,8 @@ std::string CudnnfMHAKindToString(CudnnfMHAKind kind) {
+@@ -181,6 +192,8 @@ std::string CudnnfMHAKindToString(CudnnfMHAKind kind) {
        return "fmha_bias_softmax_with_dropout";
      case CudnnfMHAKind::kScaleBiasSoftmax:
        return "fmha_bias_softmax";
@@ -286,7 +323,7 @@ index 240e69ac4..d7132822d 100644
  }
  
 diff --git a/xla/service/gpu/cublas_cudnn.h b/xla/service/gpu/cublas_cudnn.h
-index 50eddecea..45dc4fdb3 100644
+index 50eddecea..fff26fb91 100644
 --- a/xla/service/gpu/cublas_cudnn.h
 +++ b/xla/service/gpu/cublas_cudnn.h
 @@ -53,6 +53,7 @@ enum class CudnnfMHAKind {
@@ -297,7 +334,15 @@ index 50eddecea..45dc4fdb3 100644
    kScaleBiasSoftmax,
    kScaleBiasSoftmaxDropout,
  };
-@@ -161,6 +162,7 @@ extern const absl::string_view kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget;
+@@ -152,6 +153,7 @@ bool IsCudnnConvolutionReorder(const HloInstruction& hlo);
+ // 6. BMM1 - Softmax - Dropout - BMM2
+ // 7. BMM1 - Softmax - BMM2
+ // 8. BMM1 - scale - Bias - Softmax - BMM2
++extern const absl::string_view kCudnnfQKVCallTarget;
+ extern const absl::string_view kCudnnfMHABmmBmmCallTarget;
+ extern const absl::string_view kCudnnfMHASoftmaxCallTarget;
+ extern const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxCallTarget;
+@@ -161,9 +163,12 @@ extern const absl::string_view kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget;
  extern const absl::string_view kCudnnfMHASoftmaxDropoutCallTarget;
  extern const absl::string_view kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget;
  extern const absl::string_view kCudnnfMHAScaleBiasSoftmaxCallTarget;
@@ -305,6 +350,11 @@ index 50eddecea..45dc4fdb3 100644
  
  bool IsCustomCallTofMHA(const HloInstruction& hlo);
  
++bool IsCustomCallTofQKV(const HloInstruction& hlo);
++
+ StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(const HloCustomCallInstruction* instr);
+ 
+ std::string CudnnfMHAKindToString(CudnnfMHAKind kind);
 diff --git a/xla/service/gpu/elemental_ir_emitter.cc b/xla/service/gpu/elemental_ir_emitter.cc
 index f0709a7f1..ce93976fb 100644
 --- a/xla/service/gpu/elemental_ir_emitter.cc
@@ -897,6 +947,32 @@ index 97ca63888..eace46129 100644
    } else {
      LOG(FATAL) << "Invalid triple " << target_triple.str();
    }
+diff --git a/xla/service/gpu/thunk.cc b/xla/service/gpu/thunk.cc
+index e94af57c6..6ba4429b2 100644
+--- a/xla/service/gpu/thunk.cc
++++ b/xla/service/gpu/thunk.cc
+@@ -75,6 +75,7 @@ Thunk::ExecuteParams::ExecuteParams(
+     CASE(kTriangularSolve);
+     CASE(kWhile);
+     CASE(kFusedMHA);
++    CASE(kFusedQKV);
+   }
+ }
+ 
+diff --git a/xla/service/gpu/thunk.h b/xla/service/gpu/thunk.h
+index 25803cf7d..c24f8158d 100644
+--- a/xla/service/gpu/thunk.h
++++ b/xla/service/gpu/thunk.h
+@@ -84,7 +84,8 @@ class Thunk {
+     kSequential,
+     kTriangularSolve,
+     kWhile,
+-    kFusedMHA
++    kFusedMHA,
++    kFusedQKV
+   };
+ 
+   struct ThunkInfo {
 diff --git a/xla/service/llvm_ir/fused_ir_emitter.cc b/xla/service/llvm_ir/fused_ir_emitter.cc
 index 006020e41..0add8fbe3 100644
 --- a/xla/service/llvm_ir/fused_ir_emitter.cc
@@ -1059,10 +1135,21 @@ index c2bb16bce..41a1e3f89 100644
  
    TF_RETURN_IF_ERROR(GetKernel(loader_spec, kernel_base.get()));
 diff --git a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
-index 397e7707d..bc7e19096 100644
+index 397e7707d..18cdbbb6c 100644
 --- a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
 +++ b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
-@@ -930,6 +930,8 @@ tsl::StatusOr<lmhlo_gpu::FusedMhaDagSignature> AsLhloFusedMhaDagSignature(
+@@ -760,6 +760,10 @@ tsl::StatusOr<mlir::Operation*> LhloDialectEmitter::EmitCustomCallOp(
+     return EmitDnnfMHA(custom_call_instr);
+   }
+ 
++  if (xla::gpu::IsCustomCallTofQKV(*instr)) {
++    return EmitDnnfQKV(custom_call_instr);
++  }
++
+   // For custom call, if there are any token operands or results, they will not
+   // be represented in LHLO so we need to remember the mapping. First create
+   // operands where each token is replaced with a null Value.
+@@ -930,6 +934,8 @@ tsl::StatusOr<lmhlo_gpu::FusedMhaDagSignature> AsLhloFusedMhaDagSignature(
        return lmhlo_gpu::FusedMhaDagSignature::SoftmaxDropout;
      case xla::gpu::CudnnfMHAKind::kSoftmax:
        return lmhlo_gpu::FusedMhaDagSignature::Softmax;
@@ -1071,7 +1158,7 @@ index 397e7707d..bc7e19096 100644
      case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmax:
        return lmhlo_gpu::FusedMhaDagSignature::ScaleBiasSoftmax;
      case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmaxDropout:
-@@ -1354,12 +1356,16 @@ tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHA(
+@@ -1354,12 +1360,16 @@ tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHA(
        TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
        auto fmha_default =
            CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAOp>(custom_call, operands);
@@ -1088,7 +1175,7 @@ index 397e7707d..bc7e19096 100644
        fmha_softmax_dropout.setDropoutRateAttr(
            builder_.getF64FloatAttr(config.dropout_rate()));
        fmha_softmax_dropout.setSeedAttr(
-@@ -1443,6 +1449,14 @@ tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHA(
+@@ -1443,9 +1453,39 @@ tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHA(
            builder_.getF64FloatAttr(config.fmha_scale()));
        return set_common_fmha_attributes(fmha_bias_softmax);
      }
@@ -1103,6 +1190,44 @@ index 397e7707d..bc7e19096 100644
    }
  }
  
++tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfQKV(
++    const HloCustomCallInstruction* custom_call) {
++  
++  TF_ASSIGN_OR_RETURN(
++      auto const config,
++      custom_call->backend_config<xla::gpu::GemmBackendConfig>());
++
++  if (custom_call->operand_count() != 2) {
++    return xla::InvalidArgument("GEMM custom call should have 2 operands");
++  }
++
++  // QKV GEMM have two operands.
++  TF_ASSIGN_OR_RETURN(
++      lmhlo_gpu::fusedQKVOp op,
++      CreateOpWithoutAttrs<lmhlo_gpu::fusedQKVOp>(custom_call,
++                                              /*num_operands=*/2));
++  op.setDotDimensionNumbersAttr(
++      GetDotDimensionNumbersAttr(builder_, config.dot_dimension_numbers()));
++  
++  return op.getOperation();
++}
++
+ // Convert an XLA HLO constant to a global_memref + get_global_memref pair.
+ tsl::StatusOr<mlir::memref::GetGlobalOp> LhloDialectEmitter::EmitConstant(
+     const HloInstruction* instr) {
+diff --git a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
+index 7022b416d..8e0fa63eb 100644
+--- a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
++++ b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
+@@ -84,6 +84,8 @@ class LhloDialectEmitter : public xla::ConstDfsHloVisitorWithDefault {
+       const xla::HloCustomCallInstruction* custom_call);
+   xla::StatusOr<Operation*> EmitDnnfMHA(
+       const xla::HloCustomCallInstruction* custom_call);
++  xla::StatusOr<Operation*> EmitDnnfQKV(
++      const xla::HloCustomCallInstruction* custom_call);    
+ 
+   tsl::StatusOr<memref::GetGlobalOp> EmitConstant(
+       const xla::HloInstruction* instr);
 diff --git a/xla/xla_data.proto b/xla/xla_data.proto
 index c4c0f97d2..33b7e98ed 100644
 --- a/xla/xla_data.proto
