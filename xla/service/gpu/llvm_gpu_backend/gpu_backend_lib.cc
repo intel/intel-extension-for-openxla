@@ -283,7 +283,7 @@ void SPIRBackendInit(const HloModuleConfig& hlo_module_config) {
 
   // Most of the slowness appears to be in trying to form horizontal reductions,
   // which don't exist in PTX *anyway*.  Disable these.
-  FeedLLVMWithFlags({"-slp-vectorize-hor=false"}};
+  FeedLLVMWithFlags({"-slp-vectorize-hor=false"});
 
   bool vec = false;
   tsl::ReadBoolFromEnvVar("VECTORIZE", false, &vec);

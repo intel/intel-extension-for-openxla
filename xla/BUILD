@@ -5,6 +5,7 @@ cc_binary(
     deps = select({
         "@local_config_dpcpp//dpcpp:using_dpcpp": [
             "//xla/pjrt:xpu_pjrt_client",
+            "//xla/python:py_client_gpu",
         ],
         "//conditions:default": [],
     }),

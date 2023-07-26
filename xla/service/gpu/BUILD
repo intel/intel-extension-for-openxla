@@ -1,4 +1,4 @@
-load("//xla:xla.bzl", "xetla_library", "xpu_library")
+load("//xla:xla.bzl", "xpu_library")
 
 package(
     default_visibility = [
@@ -552,6 +552,8 @@ cc_library(
     srcs = ["custom_call_thunk.cc"],
     hdrs = ["custom_call_thunk.h"],
     deps = [
+        "//xla/stream_executor/sycl:sycl_gpu_header",
+        "//xla/stream_executor/sycl:sycl_stream",
         "@com_google_absl//absl/strings:str_format",
         "@tsl//tsl/platform:errors",
         "@xla//xla:util",
@@ -559,8 +561,6 @@ cc_library(
         "@xla//xla/service:custom_call_status_internal",
         "@xla//xla/service/gpu:buffer_allocations",
         "@xla//xla/service/gpu:thunk",
-        "@xla//xla/stream_executor/gpu:gpu_stream_header",
-        "@xla//xla/stream_executor/gpu:gpu_types_header",
     ],
 )
 
@@ -955,7 +955,7 @@ cc_library(
     ],
 )
 
-xetla_library(
+cc_library(
     name = "gpu_fused_mha_runner",
     srcs = ["gpu_fused_mha_runner.cc"],
     hdrs = ["gpu_fused_mha_runner.h"],

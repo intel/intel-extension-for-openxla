@@ -104,7 +104,7 @@ StatusOr<LocalClient*> GetXpuXlaClient(
     const std::optional<std::set<int>>& allowed_devices) {
   TF_ASSIGN_OR_RETURN(
       se::Platform * platform,
-      PlatformUtil::GetPlatform(platform_name ? *platform_name : "sycl"));
+      PlatformUtil::GetPlatform(platform_name ? *platform_name : "SYCL"));
   if (platform->VisibleDeviceCount() <= 0) {
     return FailedPrecondition("No visible XPU devices.");
   }

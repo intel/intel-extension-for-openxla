@@ -20,11 +20,8 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "tsl/platform/errors.h"
 #include "xla/service/buffer_assignment.h"
+#include "xla/stream_executor/sycl/sycl_stream.h"
 #include "xla/util.h"
-
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-#include "xla/stream_executor/gpu/gpu_stream.h"
-#endif
 
 namespace xla {
 namespace gpu {
@@ -57,7 +54,6 @@ Status CustomCallThunk::ExecuteOnStream(const ExecuteParams& params) {
     }
   }
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
   auto gpu_stream = se::gpu::AsGpuStreamValue(params.stream);
   XlaCustomCallStatus custom_call_status;
   call_target_(gpu_stream, buffers.data(), opaque_.data(), opaque_.size(),
@@ -68,11 +64,6 @@ Status CustomCallThunk::ExecuteOnStream(const ExecuteParams& params) {
   } else {
     return OkStatus();
   }
-#else   //  GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-  return Unavailable(
-      "Custom calls on GPU are not supported in this configuration. Please "
-      "build with --config=cuda or --config=rocm");
-#endif  //   GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 }
 
 }  // namespace gpu

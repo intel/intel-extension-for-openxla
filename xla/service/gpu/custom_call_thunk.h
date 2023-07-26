@@ -21,10 +21,7 @@ limitations under the License.
 #include "xla/service/custom_call_status_internal.h"
 #include "xla/service/gpu/buffer_allocations.h"
 #include "xla/service/gpu/thunk.h"
-
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-#include "xla/stream_executor/gpu/gpu_types.h"
-#endif
+#include "xla/stream_executor/sycl/sycl_types.h"
 
 namespace xla {
 namespace gpu {
@@ -44,11 +41,7 @@ class CustomCallThunk : public Thunk {
  public:
   using OptionalSlice = ::std::optional<BufferAllocation::Slice>;
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
   using Stream = stream_executor::gpu::GpuStreamHandle;
-#else   //  GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-  using Stream = void*;
-#endif  //  GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 
   using CustomCallTarget = std::function<void(Stream, void**, const char*,
                                               size_t, XlaCustomCallStatus*)>;

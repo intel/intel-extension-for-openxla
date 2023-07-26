@@ -72,7 +72,7 @@ const DeviceOptions GetDeviceOptionsFromEnv() {
 }  // namespace
 
 SyclPlatform::SyclPlatform()
-    : name_("sycl"), min_numa_node_(0), limit_numa_node_(0) {}
+    : name_("SYCL"), min_numa_node_(0), limit_numa_node_(0) {}
 
 SyclPlatform::~SyclPlatform() {}
 

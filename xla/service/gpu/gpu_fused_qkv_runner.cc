@@ -125,7 +125,7 @@ Status RunGpuFQKVImpl(se::Stream* stream, se::DeviceMemoryBase in_buffer,
   auto out1_ptr = reinterpret_cast<OutputType*>(out1_buffer.opaque());
   auto out2_ptr = reinterpret_cast<OutputType*>(out2_buffer.opaque());
   auto out3_ptr = reinterpret_cast<OutputType*>(out3_buffer.opaque());
-
+#if __LIBSYCL_MINOR_VERSION == 1
   if (m <= 32) {
     if (n <= 4096) {
       ::gpu::xetla::hgemm_qkv_16x256_8x16x16_1(*dpcpp_stream, out1_ptr,
@@ -141,7 +141,7 @@ Status RunGpuFQKVImpl(se::Stream* stream, se::DeviceMemoryBase in_buffer,
                                                out2_ptr, out3_ptr, input_ptr,
                                                weight_ptr, m, n, k);
   }
-
+#endif
   return OkStatus();
 }
 

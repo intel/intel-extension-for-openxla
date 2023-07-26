@@ -116,7 +116,7 @@ function prepare_src() {
   if [ -d ${XLA_TMPDIR}/xla ] ; then
     ls -al ${XLA_TMPDIR}
     mv -f ${XLA_TMPDIR}/xla/* ${XLA_TMPDIR}/jax_plugins/openxla_xpu/
-    cp -rf xla/python/* ${XLA_TMPDIR}/jax_plugins/openxla_xpu/
+    cp -rf xla/python/*.py ${XLA_TMPDIR}/jax_plugins/openxla_xpu/
     # emit_version_info ${XLA_TMPDIR}/jax_plugins/python/version.py
     chmod +x ${XLA_TMPDIR}/jax_plugins/openxla_xpu/__init__.py
     rm -rf ${XLA_TMPDIR}/xla
