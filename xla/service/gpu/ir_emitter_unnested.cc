@@ -108,11 +108,13 @@ limitations under the License.
 #include "xla/service/gpu/fft_thunk.h"
 #include "xla/service/gpu/for_thunk.h"
 #include "xla/service/gpu/fused_mha_thunk.h"
+#include "xla/service/gpu/fused_qkv_thunk.h"
 #include "xla/service/gpu/gemm_thunk.h"
 #include "xla/service/gpu/gpu_asm_opts_util.h"
 #include "xla/service/gpu/gpu_constants.h"
 #include "xla/service/gpu/gpu_conv_runner.h"
 #include "xla/service/gpu/gpu_executable.h"
+#include "xla/service/gpu/gpu_fused_qkv_runner.h"
 #include "xla/service/gpu/gpu_fusible.h"
 #include "xla/service/gpu/hlo_to_ir_bindings.h"
 #include "xla/service/gpu/infeed_thunk.h"
@@ -1216,6 +1218,58 @@ Status IrEmitterUnnested::EmitCublasLtMatmulThunk(mlir::Operation* op) {
   auto thunk = std::make_unique<CublasLtMatmulThunk>(
       GetThunkInfo(op), std::move(config), matmul.getAlgorithm(), a, b, c, d,
       bias, aux, a_scale, b_scale, c_scale, d_scale, d_amax);
+
+  AddThunkToThunkSequence(std::move(thunk));
+  return OkStatus();
+}
+
+Status IrEmitterUnnested::EmitFusedQKVThunk(mlir::Operation* op) {
+  using mlir::lmhlo_gpu::fusedQKVOp;
+
+  auto qkv_gemm = mlir::dyn_cast<mlir::lmhlo_gpu::fusedQKVOp>(op);
+  TF_RET_CHECK(qkv_gemm != nullptr);
+
+  GpufQKVDescriptor descriptor;
+  TF_ASSIGN_OR_RETURN(auto input, GetAllocationSlice(qkv_gemm.getInput()));
+  TF_ASSIGN_OR_RETURN(auto weight, GetAllocationSlice(qkv_gemm.getWeight()));
+
+  TF_ASSIGN_OR_RETURN(auto out1, GetAllocationSlice(qkv_gemm.getBmmOutput1()));
+  TF_ASSIGN_OR_RETURN(auto out2, GetAllocationSlice(qkv_gemm.getBmmOutput2()));
+  TF_ASSIGN_OR_RETURN(auto out3, GetAllocationSlice(qkv_gemm.getBmmOutput3()));
+
+  auto populate_common = [&](auto fqkv) -> Status {
+    descriptor.in_shape = ShapeUtil::MakeShapeWithDenseLayout(
+        GetShape(fqkv.getInput()).element_type(),
+        GetShape(fqkv.getInput()).dimensions(),
+        GetShape(fqkv.getInput()).layout().minor_to_major());
+
+    descriptor.wei_shape = ShapeUtil::MakeShapeWithDenseLayout(
+        GetShape(fqkv.getWeight()).element_type(),
+        GetShape(fqkv.getWeight()).dimensions(),
+        GetShape(fqkv.getWeight()).layout().minor_to_major());
+
+    descriptor.out1_shape = ShapeUtil::MakeShapeWithDenseLayout(
+        GetShape(fqkv.getBmmOutput1()).element_type(),
+        GetShape(fqkv.getBmmOutput1()).dimensions(),
+        GetShape(fqkv.getBmmOutput1()).layout().minor_to_major());
+
+    descriptor.out2_shape = ShapeUtil::MakeShapeWithDenseLayout(
+        GetShape(fqkv.getBmmOutput2()).element_type(),
+        GetShape(fqkv.getBmmOutput2()).dimensions(),
+        GetShape(fqkv.getBmmOutput2()).layout().minor_to_major());
+
+    descriptor.out3_shape = ShapeUtil::MakeShapeWithDenseLayout(
+        GetShape(fqkv.getBmmOutput3()).element_type(),
+        GetShape(fqkv.getBmmOutput3()).dimensions(),
+        GetShape(fqkv.getBmmOutput3()).layout().minor_to_major());
+
+    return OkStatus();
+  };
+  TF_RETURN_IF_ERROR(populate_common(qkv_gemm));
+
+  TF_ASSIGN_OR_RETURN(GpufQKVConfig config, GpufQKVConfig::For(descriptor));
+  auto thunk = std::make_unique<FusedQKVThunk>(
+      GetThunkInfo(op), std::move(config), input, weight, out1, out2, out3);
 
   AddThunkToThunkSequence(std::move(thunk));
   return OkStatus();
@@ -5923,6 +5977,10 @@ Status IrEmitterUnnested::EmitOp(mlir::Operation* op) {
 
   if (mlir::isa<mlir::lmhlo_gpu::CublasLtMatmulOp>(op)) {
     return EmitCublasLtMatmulThunk(op);
+  }
+
+  if (mlir::isa<mlir::lmhlo_gpu::fusedQKVOp>(op)) {
+    return EmitFusedQKVThunk(op);
   }
 
   if (mlir::isa<mlir::lmhlo_gpu::fusedMHAOp,

@@ -36,6 +36,7 @@ limitations under the License.
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/cublas_cudnn.h"
 #include "xla/service/gpu/fused_mha_rewriter.h"
+#include "xla/service/gpu/fused_qkv_rewriter.h"
 #include "xla/service/gpu/gpu_conv_padding_legalization.h"
 #include "xla/service/gpu/gpu_conv_rewriter.h"
 #include "xla/service/gpu/gpu_layout_assignment.h"
@@ -161,6 +162,23 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
     mha_fusion_pipeline.AddPass<HloDCE>();
 
     TF_RETURN_IF_ERROR(mha_fusion_pipeline.Run(hlo_module).status());
+  }
+
+  bool use_qkv = false;
+  TF_CHECK_OK(tsl::ReadBoolFromEnvVar("OPENXLA_ENABLE_QKV", false, &use_qkv));
+  if (use_qkv) {
+    const GpuDeviceInfo& gpu_device_info = gpu_target_config.gpu_device_info;
+
+    auto cuda_compute_capability =
+        std::get<se::CudaComputeCapability>(gpu_target_config.gpu_version);
+    HloPassPipeline qkv_fusion_pipeline("QKV BatchedGemm fusion");
+    // Rewrite 3 gemm modules to Fused QKV custom-calls.
+    qkv_fusion_pipeline.AddPass<FusedQKVRewriter>(gpu_device_info,
+                                                  cuda_compute_capability);
+    AlgebraicSimplifierOptions algebraic_simplifier_options({}, {});
+    qkv_fusion_pipeline.AddPass<HloDCE>();
+
+    TF_RETURN_IF_ERROR(qkv_fusion_pipeline.Run(hlo_module).status());
   }
 
   HloPassPipeline post_pipeline("spir post-layout_assignment part 2");

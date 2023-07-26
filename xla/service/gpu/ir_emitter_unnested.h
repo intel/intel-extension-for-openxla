@@ -204,6 +204,7 @@ class IrEmitterUnnested : public IrEmitter {
   Status EmitTritonFusion(mlir::Operation* op,
                           tensorflow::AutotuneResult::TritonGemmKey& config);
 #endif  // GOOGLE_CUDA
+  Status EmitFusedQKVThunk(mlir::Operation* op);
   Status EmitFusedMHAThunk(mlir::Operation* op);
 #if ITEX_USE_MKL
   Status EmitCholeskyThunk(mlir::Operation* op);
