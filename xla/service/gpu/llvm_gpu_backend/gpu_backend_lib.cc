@@ -162,7 +162,9 @@ void RunOptimizationPipeline(llvm::Module* module,
   llvm::PipelineTuningOptions PTO;
   PTO.LoopUnrolling = 1;
   PTO.LoopInterleaving = 1;
-  PTO.LoopVectorization = 1;
+  // (Tengfei09): disable loop vectorization pass to prevent 
+  // emiting unsupported llvm.vector.reduce intrinsics
+  PTO.LoopVectorization = 0;
   PTO.SLPVectorization = 1;
   PTO.MergeFunctions = 0;
   PTO.CallGraphProfile = 1;
@@ -279,11 +281,14 @@ void SPIRBackendInit(const HloModuleConfig& hlo_module_config) {
   // between those loads.
   FeedLLVMWithFlags({"-memdep-block-scan-limit=500"});
 
+  // Most of the slowness appears to be in trying to form horizontal reductions,
+  // which don't exist in PTX *anyway*.  Disable these.
+  FeedLLVMWithFlags({"-slp-vectorize-hor=false"}};
+
   bool vec = false;
   tsl::ReadBoolFromEnvVar("VECTORIZE", false, &vec);
   if (vec) {
     FeedLLVMWithFlags({
-        "-slp-vectorize-hor=false",
         "-slp-min-reg-size=64",
         "-slp-max-reg-size=64",
     });
