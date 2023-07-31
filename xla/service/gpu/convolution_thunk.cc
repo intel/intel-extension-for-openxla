@@ -629,6 +629,8 @@ Status CreateOneDnnPrimitive(
 
     } else if (conv_descriptor.kind == CudnnConvKind::kBackwardFilter) {
       // TODO(ITEX): handle post_ops_attr.
+      if (input_type == F16)
+        return InternalError("FP16 Conv BackwardFilter is not supported");
       ConvFwdPd fwd_pd = ConvFwdPd(
           onednn_primitive->engine, dnnl::prop_kind::forward,
           dnnl::algorithm::convolution_direct, src_md, filter_md_prefer, dst_md,
@@ -690,11 +692,7 @@ Status CreateOneDnnPrimitive(
       return InternalError("Unkown convolutuion kind");
     }
   } catch (dnnl::error& e) {
-    std::string error_msg = "Status: " + std::to_string(e.status) +
-                            ", message: " + std::string(e.message) +
-                            ", in file " + std::string(__FILE__) + ":" +
-                            std::to_string(__LINE__);
-    LOG(FATAL) << error_msg;
+    return InternalError("OneDNN Conv error: %s", e.message);
   }
   return tsl::OkStatus();
 }  // NOLINT
