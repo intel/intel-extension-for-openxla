@@ -73,9 +73,8 @@ Status IrEmitterNested::CodegenNestedComputation() {
   for (const HloInstruction* param : params) {
     io_hlos.push_back(param);
     const Shape& param_shape = param->shape();
-    // SYCL: Hardcode to global addrspace
     argument_types.push_back(
-        llvm_ir::ShapeToIrType(param_shape, module_)->getPointerTo(1));
+        llvm_ir::ShapeToIrType(param_shape, module_)->getPointerTo());
     int64_t param_size =
         llvm_ir::ByteSizeOf(param_shape, module_->getDataLayout());
     argument_dereferenceable_bytes.push_back(param_size);
@@ -84,9 +83,8 @@ Status IrEmitterNested::CodegenNestedComputation() {
   const HloInstruction* root = nested_computation_.root_instruction();
   {
     const Shape& root_shape = root->shape();
-    // SYCL: Hardcode to global addrspace
     argument_types.push_back(
-        llvm_ir::ShapeToIrType(root_shape, module_)->getPointerTo(1));
+        llvm_ir::ShapeToIrType(root_shape, module_)->getPointerTo());
     int64_t root_size = llvm_ir::ByteSizeOf(
         root_shape, ir_emitter_context_->llvm_module()->getDataLayout());
     argument_dereferenceable_bytes.push_back(root_size);
@@ -148,17 +146,13 @@ Status IrEmitterNested::CodegenNestedComputation() {
       llvm::Value* ret_value =
           Load(llvm_ir::ShapeToIrType(return_shape, module_), root_value,
                "load_ret_value");
-      // SYCL: Use AddrSpaceCast since param uses global addrspace
       Store(ret_value,
-            b_.CreatePointerBitCastOrAddrSpaceCast(
-                out_parameter, root_value->getType(), "bitcast_ret_value"));
+            BitCast(out_parameter, root_value->getType(), "bitcast_ret_value"));
     } else {
       CHECK(return_shape.IsTuple());
       llvm::Type* tuple_type = llvm_ir::ShapeToIrType(return_shape, module_);
       llvm::Type* tuple_type_ptr = tuple_type->getPointerTo();
-      // SYCL: Use AddrSpaceCast since param uses global addrspace
-      llvm::Value* tuple_ptr =
-          b_.CreatePointerBitCastOrAddrSpaceCast(out_parameter, tuple_type_ptr);
+      llvm::Value* tuple_ptr = BitCast(out_parameter, tuple_type_ptr);
 
       for (int i = 0; i < return_shape.tuple_shapes_size(); i++) {
         const Shape& element_shape = return_shape.tuple_shapes(i);

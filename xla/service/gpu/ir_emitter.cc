@@ -51,13 +51,12 @@ limitations under the License.
 // to default address space. This is useful in particular for generating
 // IR for AMDGPU target, as its kernel variables are in address space 5
 // instead of the default address space.
-// SYCL: Hardcode to global address space
 static llvm::Value* AddrCastToDefault(llvm::Value* arg, llvm::IRBuilder<>& b) {
   llvm::Type* arg_type = arg->getType();
   CHECK(arg_type->isPointerTy());
-  if (arg_type->getPointerAddressSpace() != 1) {
+  if (arg_type->getPointerAddressSpace() != 0) {
     llvm::Type* generic_arg_type = llvm::PointerType::getWithSamePointeeType(
-        llvm::cast<llvm::PointerType>(arg_type), 1);
+        llvm::cast<llvm::PointerType>(arg_type), 0);
     llvm::Value* addrspacecast_arg =
         b.CreateAddrSpaceCast(arg, generic_arg_type);
     return addrspacecast_arg;
