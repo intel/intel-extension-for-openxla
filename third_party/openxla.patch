@@ -987,7 +987,7 @@ index 006020e41..0add8fbe3 100644
    global->setUnnamedAddr(llvm::GlobalVariable::UnnamedAddr::Global);
  
 diff --git a/xla/service/llvm_ir/ir_array.cc b/xla/service/llvm_ir/ir_array.cc
-index 7708db56e..0e2d1fe56 100644
+index 7708db56e..6be405a23 100644
 --- a/xla/service/llvm_ir/ir_array.cc
 +++ b/xla/service/llvm_ir/ir_array.cc
 @@ -24,6 +24,7 @@ limitations under the License.
@@ -1006,29 +1006,31 @@ index 7708db56e..0e2d1fe56 100644
  
  namespace xla {
  namespace llvm_ir {
-@@ -494,9 +494,25 @@ llvm::Value* IrArray::EmitArrayElementAddress(const IrArray::Index& index,
+@@ -494,9 +494,24 @@ llvm::Value* IrArray::EmitArrayElementAddress(const IrArray::Index& index,
    if (use_linear_index && index.LinearValidOnShape(shape_)) {
      llvm::Module* module = b->GetInsertBlock()->getParent()->getParent();
      llvm::Type* type = PrimitiveTypeToIrType(shape_.element_type(), module);
-+#if 1
-     return b->CreateInBoundsGEP(
-         type, b->CreateBitCast(base_ptr_, type->getPointerTo()), index.linear(),
-         llvm_ir::AsStringRef(name));
-+#else
-+    // TODO: index is not always a combination of base + offset
-+    // base + offset
-+    llvm::Value* index_operand_0 =
-+        llvm::cast<llvm::BinaryOperator>(index.linear())->getOperand(0);
-+    // constant index
-+    llvm::Value* index_operand_1 =
-+        llvm::cast<llvm::BinaryOperator>(index.linear())->getOperand(1);
-+    llvm::Value* ptr_address =
-+        b->CreateGEP(type, b->CreateBitCast(base_ptr_, type->getPointerTo()),
-+                     index_operand_0, "");
+-    return b->CreateInBoundsGEP(
+-        type, b->CreateBitCast(base_ptr_, type->getPointerTo()), index.linear(),
+-        llvm_ir::AsStringRef(name));
++    
++    auto linear_index = dyn_cast<llvm::BinaryOperator>(index.linear());
++    // only separate const offset when having add
++    if (linear_index && (linear_index->getOpcode() == llvm::Instruction::Add)) {
++      llvm::Value* index_operand_0 = linear_index->getOperand(0);
++      // constant index
++      llvm::Value* index_operand_1 = linear_index->getOperand(1);
++      llvm::Value* ptr_address =
++          b->CreateGEP(type, b->CreateBitCast(base_ptr_, type->getPointerTo()),
++                       index_operand_0, "");
 +
-+    return b->CreateInBoundsGEP(type, ptr_address, index_operand_1,
-+                                llvm_ir::AsStringRef(name));
-+#endif
++      return b->CreateInBoundsGEP(type, ptr_address, index_operand_1,
++                                  llvm_ir::AsStringRef(name));
++    } else {
++      return b->CreateInBoundsGEP(
++          type, b->CreateBitCast(base_ptr_, type->getPointerTo()),
++          index.linear(), llvm_ir::AsStringRef(name));
++    }
    }
  
    std::vector<llvm::Value*> actual_index;
