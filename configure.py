@@ -231,11 +231,7 @@ def get_python_path(environ_cp, python_bin_path):
   paths = []
   for path in all_paths:
     if os.path.isdir(path):
-      tf_path = path + os.path.sep + "jaxlib"
-      if os.path.exists(tf_path):
-        paths.append(path)
-  if len(paths) == 0:
-    raise Exception("Jaxlib package not found! Please install it first!")
+      paths.append(path)
   return paths
 
 
@@ -298,23 +294,6 @@ def setup_python(environ_cp):
     python_paths = environ_cp.get('PYTHONPATH').split(':')
     if python_lib_path in python_paths:
       write_action_env_to_bazelrc('PYTHONPATH', environ_cp.get('PYTHONPATH'))
-  # check jaxlib version
-  package_list= subprocess.Popen(os.path.sep.join(checked_python_bin_path.split(os.path.sep)[:-1]) + os.path.sep + "pip" + " list | grep \"^jaxlib \"", shell=True, stdout=subprocess.PIPE).stdout.read().decode()
-  jaxlib_list = package_list.splitlines()
-  for line in jaxlib_list:
-    if line.startswith("jaxlib  "):
-        name, version = line.split()
-        version = version.split("rc")[0]
-        current_jaxlib_version = convert_version_to_int(version)
-        min_jaxlib_version = convert_version_to_int("0.4.7")
-        if current_jaxlib_version < min_jaxlib_version:
-          print('Make sure you installed jaxlib version >= 0.4.7')
-          sys.exit(1)
-    else:
-         print('Make sure you installed jaxlib version >= 0.4.7')
-         sys.exit(1)
-  jax_shared_lib_dir = environ_cp['PYTHON_LIB_PATH'] + "/jaxlib/"
-  write_action_env_to_bazelrc("JAX_SHARED_LIBRARY_DIR", jax_shared_lib_dir)
 
 def create_build_configuration(environ_cp):
   write_action_env_to_bazelrc("TF_CXX11_ABI_FLAG", 1)
@@ -799,28 +778,6 @@ def check_safe_workspace_path(workspace):
     return result
 
   raise Exception("Invalid workspace path!")
-
-def set_jax_path(environ_cp):
-  if get_var_from_name(environ_cp, 'BUILD_JAX'):
-    cmd = os.path.sep.join(environ_cp['PYTHON_BIN_PATH'].split(os.path.sep)[:-1]) + os.path.sep + "pip" + " list | grep \"^jaxlib \""
-    package_list= subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).stdout.read().decode()
-    jaxlib_list = package_list.splitlines()
-    if len(jaxlib_list) == 0:
-      print("Jaxlib package not found! Please install it by 'pip install jaxlib==0.4.4'")
-      sys.exit(1)
-    for line in jaxlib_list:
-      if line.startswith("jaxlib"):
-        name, version = line.split()
-        current_jaxlib_version = convert_version_to_int(version)
-        min_jaxlib_version = convert_version_to_int("0.4.4")
-        if current_jaxlib_version < min_jaxlib_version:
-          print('Make sure you installed jaxlib version >= 0.4.4')
-          sys.exit(1)
-      else:
-        print('Make sure you installed jaxlib version >= 0.4.4')
-        sys.exit(1)
-  jax_shared_lib_dir = environ_cp['PYTHON_LIB_PATH'] + "/jaxlib/"
-  write_action_env_to_bazelrc("JAX_SHARED_LIBRARY_DIR", jax_shared_lib_dir)
 
 def main():
   global _ITEX_WORKSPACE_ROOT
