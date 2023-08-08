@@ -250,6 +250,19 @@ index 2a527ac55..94e0d78be 100644
    let genSpecializedAttr = 0;
    let cppNamespace = "::mlir::lmhlo_gpu";
  }
+diff --git a/xla/service/algebraic_simplifier.h b/xla/service/algebraic_simplifier.h
+index 32be0a59d..a8dbddd3a 100644
+--- a/xla/service/algebraic_simplifier.h
++++ b/xla/service/algebraic_simplifier.h
+@@ -400,7 +400,7 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
+   virtual bool IsValidLayout(const Shape& shape) { return true; }
+   // Allow backend targets to determine whether a layout is inefficient.
+   virtual bool ShouldStrengthReduceDotToReduce(const HloInstruction* hlo) {
+-    return true;
++    return false;
+   }
+ 
+  protected:
 diff --git a/xla/service/dump.cc b/xla/service/dump.cc
 index ad67a9e0f..dd6687d38 100644
 --- a/xla/service/dump.cc
