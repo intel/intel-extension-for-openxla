@@ -68,35 +68,44 @@ StatusOr<bool> ExpandDotDims(HloInstruction* original_dot) {
       lhs_non_contracting_size *= lhs_shape.dimensions(i);
     }
   }
-  // The canonical form of the lhs is
-  // [BatchDims, NonContractingDimsProduct, ContractingsDimsProduct]
-  // If NonContractingDimsProduct is 1, it is omitted.
-  std::vector<int64_t> lhs_transpose;
-  lhs_transpose.reserve(lhs_rank);
-  lhs_transpose.insert(lhs_transpose.end(),
-                       original_dnums.lhs_batch_dimensions().begin(),
-                       original_dnums.lhs_batch_dimensions().end());
-  lhs_transpose.insert(lhs_transpose.end(), lhs_non_contracting_dims.begin(),
-                       lhs_non_contracting_dims.end());
-  lhs_transpose.insert(lhs_transpose.end(),
-                       original_dnums.lhs_contracting_dimensions().begin(),
-                       original_dnums.lhs_contracting_dimensions().end());
-  HloInstruction* lhs_operand = original_dot->mutable_operand(0);
-  HloInstruction* transposed_lhs = computation->AddInstruction(
-      HloInstruction::CreateTranspose(
-          ShapeUtil::PermuteDimensions(lhs_transpose, lhs_shape), lhs_operand,
-          lhs_transpose),
-      &lhs_operand->metadata());
 
-  std::vector<int64_t> lhs_reshape_dims = batch_dim_sizes;
-  lhs_reshape_dims.push_back(lhs_non_contracting_size);
-  lhs_reshape_dims.push_back(lhs_contracting_size);
-  // Reshape the contracting and non-contracting dimensions together.
-  HloInstruction* reshaped_lhs = computation->AddInstruction(
-      HloInstruction::CreateReshape(
-          ShapeUtil::MakeShape(lhs_shape.element_type(), lhs_reshape_dims),
-          transposed_lhs),
-      &transposed_lhs->metadata());
+  DotDimensionNumbers dot_dnums;
+  HloInstruction* lhs_operand = original_dot->mutable_operand(0);
+  HloInstruction* reshaped_lhs = lhs_operand;
+  if (lhs_non_contracting_size == 1) {
+    CHECK_EQ(original_dnums.lhs_contracting_dimensions().size(), 1);
+    auto batch_dimensions = original_dnums.lhs_batch_dimensions();
+    int c_dim = original_dnums.lhs_contracting_dimensions()[0];
+    std::vector<int64_t> lhs_reshape_dims = batch_dim_sizes;
+    if (c_dim == batch_dimensions.size()) {
+      // (b1, b2, c) -> (b1, b2, n, c)
+      lhs_reshape_dims.push_back(lhs_non_contracting_size);
+      lhs_reshape_dims.push_back(lhs_contracting_size);
+      *dot_dnums.mutable_lhs_batch_dimensions() =
+          original_dnums.lhs_batch_dimensions();
+      dot_dnums.add_lhs_contracting_dimensions(c_dim + 1);
+    } else if (c_dim == 0) {
+      // (c, b1, b2) -> (n, c, b1, b2)
+      lhs_reshape_dims.insert(lhs_reshape_dims.begin(),
+                              lhs_non_contracting_size);
+      lhs_reshape_dims.insert(lhs_reshape_dims.begin() + 1,
+                              lhs_contracting_size);
+      for (int64_t i = 0; i < num_batch_dims; ++i)
+        dot_dnums.mutable_lhs_batch_dimensions()->at(i)++;
+      dot_dnums.add_lhs_contracting_dimensions(1);
+    } else
+      return Internal("Unsupported Dot dims in DotExpandDims");
+    reshaped_lhs = computation->AddInstruction(
+        HloInstruction::CreateReshape(
+            ShapeUtil::MakeShape(lhs_shape.element_type(), lhs_reshape_dims),
+            lhs_operand),
+        &lhs_operand->metadata());
+  } else {
+    *dot_dnums.mutable_lhs_batch_dimensions() =
+        original_dnums.lhs_batch_dimensions();
+    *dot_dnums.mutable_lhs_contracting_dimensions() =
+        original_dnums.lhs_contracting_dimensions();
+  }
 
   const auto& rhs_shape = original_dot->operand(1)->shape();
   const int64_t rhs_rank = rhs_shape.rank();
@@ -116,48 +125,45 @@ StatusOr<bool> ExpandDotDims(HloInstruction* original_dot) {
     }
   }
 
-  // The canonical form of the rhs is
-  // [BatchDims, ContractingsDimsProduct, NonContractingDimsProduct]
-  // If NonContractingDimsProduct is 1, it is omitted.
-  std::vector<int64_t> rhs_transpose;
-  rhs_transpose.reserve(rhs_rank);
-  rhs_transpose.insert(rhs_transpose.end(),
-                       original_dnums.rhs_batch_dimensions().begin(),
-                       original_dnums.rhs_batch_dimensions().end());
-  rhs_transpose.insert(rhs_transpose.end(),
-                       original_dnums.rhs_contracting_dimensions().begin(),
-                       original_dnums.rhs_contracting_dimensions().end());
-  rhs_transpose.insert(rhs_transpose.end(), rhs_non_contracting_dims.begin(),
-                       rhs_non_contracting_dims.end());
   HloInstruction* rhs_operand = original_dot->mutable_operand(1);
-  HloInstruction* transposed_rhs = computation->AddInstruction(
-      HloInstruction::CreateTranspose(
-          ShapeUtil::PermuteDimensions(rhs_transpose, rhs_shape), rhs_operand,
-          rhs_transpose),
-      &rhs_operand->metadata());
-
-  std::vector<int64_t> rhs_reshape_dims = batch_dim_sizes;
-  rhs_reshape_dims.push_back(rhs_contracting_size);
-  rhs_reshape_dims.push_back(rhs_non_contracting_size);
-  // Reshape the contracting and non-contracting dimensions together.
-  HloInstruction* reshaped_rhs = computation->AddInstruction(
-      HloInstruction::CreateReshape(
-          ShapeUtil::MakeShape(rhs_shape.element_type(), rhs_reshape_dims),
-          transposed_rhs),
-      &transposed_rhs->metadata());
+  HloInstruction* reshaped_rhs = rhs_operand;
+  if (rhs_non_contracting_size == 1) {
+    CHECK_EQ(original_dnums.rhs_contracting_dimensions().size(), 1);
+    auto batch_dimensions = original_dnums.rhs_batch_dimensions();
+    int c_dim = original_dnums.rhs_contracting_dimensions()[0];
+    std::vector<int64_t> rhs_reshape_dims = batch_dim_sizes;
+    if (c_dim == batch_dimensions.size()) {
+      // (b1, b2, c) -> (b1, b2, c, n)
+      rhs_reshape_dims.push_back(rhs_contracting_size);
+      rhs_reshape_dims.push_back(rhs_non_contracting_size);
+      *dot_dnums.mutable_rhs_batch_dimensions() =
+          original_dnums.rhs_batch_dimensions();
+      dot_dnums.add_rhs_contracting_dimensions(c_dim);
+    } else if (c_dim == 0) {
+      // (c, b1, b2) -> (c, n, b1, b2)
+      rhs_reshape_dims.insert(rhs_reshape_dims.begin(), rhs_contracting_size);
+      rhs_reshape_dims.insert(rhs_reshape_dims.begin() + 1,
+                              rhs_non_contracting_size);
+      for (int64_t i = 0; i < num_batch_dims; ++i)
+        dot_dnums.mutable_rhs_batch_dimensions()->at(i)++;
+      dot_dnums.add_rhs_contracting_dimensions(0);
+    } else
+      return Internal("Unsupported Dot dims in DotExpandDims");
+    reshaped_rhs = computation->AddInstruction(
+        HloInstruction::CreateReshape(
+            ShapeUtil::MakeShape(rhs_shape.element_type(), rhs_reshape_dims),
+            rhs_operand),
+        &rhs_operand->metadata());
+  } else {
+    *dot_dnums.mutable_rhs_batch_dimensions() =
+        original_dnums.rhs_batch_dimensions();
+    *dot_dnums.mutable_rhs_contracting_dimensions() =
+        original_dnums.rhs_contracting_dimensions();
+  }
 
   std::vector<int64_t> dot_dims = batch_dim_sizes;
   dot_dims.push_back(lhs_non_contracting_size);
   dot_dims.push_back(rhs_non_contracting_size);
-
-  DotDimensionNumbers dot_dnums;
-  for (int64_t i = 0; i < num_batch_dims; ++i) {
-    dot_dnums.add_lhs_batch_dimensions(i);
-    dot_dnums.add_rhs_batch_dimensions(i);
-  }
-  dot_dnums.add_lhs_contracting_dimensions(
-      num_batch_dims + 1);
-  dot_dnums.add_rhs_contracting_dimensions(num_batch_dims);
 
   HloInstruction* dot = computation->AddInstruction(HloInstruction::CreateDot(
       ShapeUtil::MakeShape(original_dot->shape().element_type(), dot_dims),
