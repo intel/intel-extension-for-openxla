@@ -33,6 +33,7 @@ limitations under the License.
 #include "tsl/platform/errors.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/protobuf/dnn.pb.h"
+#include "tsl/util/env_var.h"
 #include "xla/hlo/evaluator/hlo_evaluator.h"
 #include "xla/hlo/ir/dfs_hlo_visitor_with_default.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
@@ -1040,7 +1041,7 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
       return in_out_alias_config.ParameterHasAlias(bias->parameter_number(),
                                                    /*param_index=*/{});
     }();
-    bool want_to_fuse_bias = IsCublasLtMatmul(*gemm) || can_overwrite_bias;
+    bool want_to_fuse_bias = can_overwrite_bias;
 
     auto config = gemm->backend_config<GemmBackendConfig>().value();
 

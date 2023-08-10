@@ -7,11 +7,18 @@ xetla_library(
         "gemm.cc",
     ],
     hdrs = [
+        "XEGEMM.h",
         "gemm.h",
         "hgemm_splitk.h",
     ],
+    copts = [
+        "-Wall",
+        "-Wno-c++11-narrowing",
+    ],
     visibility = ["//visibility:public"],
     deps = [
+        "//xla/service/gpu:matrix_descriptor",
+        "//xla/stream_executor/sycl:sycl_executor",
         "@xetla//:xetla_header",
     ],
 )

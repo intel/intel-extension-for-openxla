@@ -606,6 +606,15 @@ cc_library(
 )
 
 cc_library(
+    name = "matrix_descriptor",
+    hdrs = ["matrix_descriptor.h"],
+    deps = [
+        "//xla/stream_executor/sycl:sycl_executor",
+        "@xla//xla/stream_executor:stream_executor_headers",
+    ],
+)
+
+cc_library(
     name = "onednn_matmul_utils",
     srcs = ["onednn_matmul_utils.cc"],
     hdrs = ["onednn_matmul_utils.h"],
@@ -943,14 +952,14 @@ cc_library(
         "@xla//xla/hlo/ir:hlo",
         "@xla//xla/service:hlo_creation_utils",
         "@xla//xla/service:hlo_pass",
-        "@xla//xla/service/gpu:gpu_device_info",
-        "@xla//xla/service/gpu:gpu_fusible",
         "@xla//xla/service:pattern_matcher",
         "@xla//xla/service/gpu:backend_configs_cc",
         "@xla//xla/service/gpu:cublas_cudnn",
+        "@xla//xla/service/gpu:gpu_device_info",
+        "@xla//xla/service/gpu:gpu_fusible",
+        "@xla//xla/service/gpu:instruction_fusion",
         "@xla//xla/service/gpu:ir_emission_utils",
         "@xla//xla/service/gpu:matmul_utils",
-        "@xla//xla/service/gpu:instruction_fusion",
         "@xla//xla/stream_executor:blas",
     ],
 )
@@ -997,11 +1006,11 @@ cc_library(
         "@xla//xla:xla_data_proto_cc",
         "@xla//xla/hlo/ir:hlo",
         "@xla//xla/service/gpu:cublas_cudnn",
+        "@xla//xla/service/gpu:matmul_utils",
         "@xla//xla/service/gpu:stream_executor_util",
         "@xla//xla/stream_executor",
         "@xla//xla/stream_executor:dnn",
         "@xla//xla/stream_executor:lazy_op_runner",
-        "@xla//xla/service/gpu:matmul_utils",
     ],
 )
 

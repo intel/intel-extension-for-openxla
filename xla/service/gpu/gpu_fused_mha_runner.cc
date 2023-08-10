@@ -123,7 +123,7 @@ Status RunFusedMHAScaleBiasSoftmax(GpufMHAParams params, se::Stream* stream,
 
   // Recalculate scale since scale attr has accuracy issue.
   if ((scale - 1.0f) > 1e-6) scale = 1.0f / sqrt(H);
-  if (std::is_same_v<ElementType, bfloat16>)
+  if (std::is_same_v<ElementType, bfloat16>) {
     if (bias_ptr)
       ::gpu::xetla::fmha_forward_bf16_bias(
           *dpcpp_stream, lhs_bmm1_ptr, rhs_bmm1_ptr, rhs_bmm2_ptr, bias_ptr,
@@ -132,14 +132,18 @@ Status RunFusedMHAScaleBiasSoftmax(GpufMHAParams params, se::Stream* stream,
       ::gpu::xetla::fmha_forward_bf16(*dpcpp_stream, lhs_bmm1_ptr, rhs_bmm1_ptr,
                                       rhs_bmm2_ptr, bias_ptr, nullptr, 1.0f,
                                       output_ptr, B, N, H, F, T, scale);
-  else if (bias_ptr)
-    ::gpu::xetla::fmha_forward_fp16_bias(
-        *dpcpp_stream, lhs_bmm1_ptr, rhs_bmm1_ptr, rhs_bmm2_ptr, bias_ptr,
-        nullptr, 1.0f, output_ptr, B, N, H, F, T, scale);
-  else
-    ::gpu::xetla::fmha_forward_fp16(*dpcpp_stream, lhs_bmm1_ptr, rhs_bmm1_ptr,
-                                    rhs_bmm2_ptr, bias_ptr, nullptr, 1.0f,
-                                    output_ptr, B, N, H, F, T, scale);
+  } else if (std::is_same_v<ElementType, half>) {
+    if (bias_ptr)
+      ::gpu::xetla::fmha_forward_fp16_bias(
+          *dpcpp_stream, lhs_bmm1_ptr, rhs_bmm1_ptr, rhs_bmm2_ptr, bias_ptr,
+          nullptr, 1.0f, output_ptr, B, N, H, F, T, scale);
+    else
+      ::gpu::xetla::fmha_forward_fp16(*dpcpp_stream, lhs_bmm1_ptr, rhs_bmm1_ptr,
+                                      rhs_bmm2_ptr, bias_ptr, nullptr, 1.0f,
+                                      output_ptr, B, N, H, F, T, scale);
+  } else {
+    return InternalError("Invalid MHA datatype");
+  }
   return OkStatus();
 }
 

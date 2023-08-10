@@ -32,6 +32,8 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.h"
+#include "xla/service/gpu/matrix_descriptor.h"
+#include "xla/service/gpu/xetla/gemm/XEGEMM.h"
 #include "xla/service/gpu/xetla/gemm/gemm.h"
 #include "xla/service/onednn_util.h"
 #include "xla/shape.h"
@@ -51,26 +53,6 @@ namespace xla {
 namespace gpu {
 
 namespace {
-
-// This struct contains the metadata of a matrix, e.g., its base address and
-// dimensions.
-struct MatrixDescriptor {
-  se::DeviceMemoryBase data;
-  se::blas::Transpose transpose;
-  int64_t num_rows;
-  int64_t num_cols;
-  int64_t batch_stride;
-  int64_t leading_dim_stride;
-
-  int64_t reduced_dim() const {
-    return transpose == se::blas::Transpose::kTranspose ? num_rows : num_cols;
-  }
-
-  template <typename T>
-  se::DeviceMemory<T> cast() const {
-    return se::DeviceMemory<T>(data);
-  }
-};
 
 MatrixDescriptor GetMatrixDesc(const MatrixLayout& layout,
                                se::DeviceMemoryBase data) {
@@ -111,113 +93,85 @@ struct OneDnnMatMulParams {
         bias_strides(std::move(bias_strides)) {}
 };
 
-bool IsXetlaSupport(int64_t batch_size, const MatrixDescriptor& lhs,
-                    const MatrixDescriptor& rhs, const MatrixDescriptor& out) {
-  if (!IsXetlaHardwareSupport()) return false;
-  if (batch_size != 1) return false;
-  if (lhs.transpose == se::blas::Transpose::kTranspose) return false;
-  if ((lhs.num_cols < 4096) || (rhs.num_cols < 4096)) return false;
-  return true;
+StatusOr<bool> RunXetlaGemm(se::gpu::GpuStreamHandle handle,
+                            const MatrixDescriptor& lhs,
+                            const MatrixDescriptor& rhs,
+                            const MatrixDescriptor& c,
+                            const MatrixDescriptor& out,
+                            se::DeviceMemoryBase bias,
+                            se::cuda::BlasLt::Epilogue epilogue, float beta) {
+  void* bias_data = const_cast<void*>(bias.opaque());
+  void* c_data = const_cast<void*>(c.data.opaque());
+  switch (epilogue) {
+    case se::cuda::BlasLt::Epilogue::kDefault: {
+      auto policy = HGEMMXetla()
+                        .add_matrix_c(out)
+                        .add_matrix_a(lhs)
+                        .add_matrix_b(rhs)
+                        .build();
+      if (fabs(beta) - 0.0f > 1e-6) {
+        if (fabs(beta) - 1.0f < 1e-6) {
+          policy.add_epilogue(c_data, HGEMMXetla::EpilogueType::RES_ADD)
+              .build();
+        } else {
+          return true;
+        }
+      }
+      if (policy.fallback() == false) {
+        policy.run(handle);
+      }
+      return policy.fallback();
+    }
+    case se::cuda::BlasLt::Epilogue::kBias: {
+      auto policy = HGEMMXetla()
+                        .add_matrix_c(out)
+                        .add_matrix_a(lhs)
+                        .add_matrix_b(rhs)
+                        .add_epilogue(bias_data, HGEMMXetla::EpilogueType::BIAS)
+                        .build();
+      if (fabs(beta) - 0.0f > 1e-6) {
+        policy
+            .add_epilogue(c_data, HGEMMXetla::EpilogueType::SCALED_RES_ADD,
+                          beta)
+            .build();
+      }
+      if (policy.fallback() == false) {
+        policy.run(handle);
+      }
+      return policy.fallback();
+    }
+    case se::cuda::BlasLt::Epilogue::kGELU: {
+      auto policy = HGEMMXetla()
+                        .add_matrix_c(out)
+                        .add_matrix_a(lhs)
+                        .add_matrix_b(rhs)
+                        .add_epilogue(nullptr, HGEMMXetla::EpilogueType::GELU)
+                        .build();
+      if (policy.fallback() == false) {
+        policy.run(handle);
+      }
+      return policy.fallback();
+    }
+    case se::cuda::BlasLt::Epilogue::kBiasThenGELU: {
+      auto policy = HGEMMXetla()
+                        .add_matrix_c(out)
+                        .add_matrix_a(lhs)
+                        .add_matrix_b(rhs)
+                        .add_epilogue(bias_data, HGEMMXetla::EpilogueType::BIAS)
+                        .add_epilogue(nullptr, HGEMMXetla::EpilogueType::GELU)
+                        .build();
+      if (policy.fallback() == false) {
+        policy.run(handle);
+      }
+      return policy.fallback();
+    }
+    case se::cuda::BlasLt::Epilogue::kReLU:
+    case se::cuda::BlasLt::Epilogue::kBiasThenReLU:
+      return true;
+    default:
+      return InternalError("Unsupported Activation mode");
+  }
 }
-
-#define HGEMM_DISPATCH(F)                                                      \
-  {                                                                            \
-    F(q, reinterpret_cast<sycl::half*>(c_), reinterpret_cast<sycl::half*>(a_), \
-      reinterpret_cast<sycl::half*>(b_), m_, n_, k_);                          \
-  }
-#define HGEMM_BIAS_DISPATCH(F)                                                 \
-  {                                                                            \
-    F(q, reinterpret_cast<sycl::half*>(c_), reinterpret_cast<sycl::half*>(a_), \
-      reinterpret_cast<sycl::half*>(b_),                                       \
-      reinterpret_cast<sycl::half*>(epilogues_[0]), m_, n_, k_);               \
-  }
-
-#define HGEMM_BIAS_RES_RES_DISPATCH(F)                                         \
-  {                                                                            \
-    F(q, reinterpret_cast<sycl::half*>(c_), reinterpret_cast<sycl::half*>(a_), \
-      reinterpret_cast<sycl::half*>(b_),                                       \
-      reinterpret_cast<sycl::half*>(epilogues_[0]),                            \
-      reinterpret_cast<sycl::half*>(epilogues_[1]),                            \
-      reinterpret_cast<sycl::half*>(epilogues_[2]), m_, n_, k_);               \
-  }
-
-#define HGEMM_BIAS_GELU_DISPATCH(F)                                            \
-  {                                                                            \
-    F(q, reinterpret_cast<sycl::half*>(c_), reinterpret_cast<sycl::half*>(a_), \
-      reinterpret_cast<sycl::half*>(b_),                                       \
-      reinterpret_cast<sycl::half*>(epilogues_[0]), m_, n_, k_);               \
-  }
-
-#define HGEMM_RESMUL_DISPATCH(F)                                               \
-  {                                                                            \
-    F(q, reinterpret_cast<sycl::half*>(c_), reinterpret_cast<sycl::half*>(a_), \
-      reinterpret_cast<sycl::half*>(b_),                                       \
-      reinterpret_cast<sycl::half*>(epilogues_[0]), m_, n_, k_);               \
-  }
-
-#define HGEMM_SILU_DISPATCH(F)                                                 \
-  {                                                                            \
-    F(q, reinterpret_cast<sycl::half*>(c_), reinterpret_cast<sycl::half*>(a_), \
-      reinterpret_cast<sycl::half*>(b_), m_, n_, k_);                          \
-  }
-
-#define HGEMM_RES_DISPATCH(F)                                                  \
-  {                                                                            \
-    F(q, reinterpret_cast<sycl::half*>(c_), reinterpret_cast<sycl::half*>(a_), \
-      reinterpret_cast<sycl::half*>(b_),                                       \
-      reinterpret_cast<sycl::half*>(epilogues_[0]), m_, n_, k_);               \
-  }
-#define HGEMM_COMMON_DISPATCH_IMPL(DISPATCHER, F) \
-  if (is_b_row_major)                             \
-    DISPATCHER(F##true_)                          \
-  else                                            \
-    DISPATCHER(F##false_)
-
-#define HGEMM_COMMON_DISPATCH(F) \
-  { HGEMM_COMMON_DISPATCH_IMPL(HGEMM_DISPATCH, ::gpu::xetla::hgemm##F) }
-
-Status RunXetlaGemm(se::gpu::GpuStreamHandle handle,
-                    const MatrixDescriptor& lhs, const MatrixDescriptor& rhs,
-                    const MatrixDescriptor& out) {
-  sycl::queue q = *handle;
-  bool is_b_row_major = (rhs.transpose != se::blas::Transpose::kTranspose);
-  int m_ = lhs.num_rows;
-  int k_ = lhs.num_cols;
-  int n_ = rhs.num_cols;
-  using scalar_t = sycl::half;
-  void* a_ = const_cast<void*>(lhs.data.opaque());
-  void* b_ = const_cast<void*>(rhs.data.opaque());
-  void* c_ = const_cast<void*>(out.data.opaque());
-  if (m_ >= 1024) {
-    HGEMM_COMMON_DISPATCH(_256x256_32x64x32_1_);
-  } else if (m_ >= 32) {
-    HGEMM_COMMON_DISPATCH(_32x256_8x32x16_1_);
-  } else if (n_ == 13824 && (k_ == 4096 || k_ == 5120)) {
-    HGEMM_COMMON_DISPATCH(
-        _8x512_8x32x16_2_);  // HGEMM_IMPL_FUNC(8, 256, 8, 32, 16, 2, false)
-  } else if ((n_ == 4096 || n_ == 5120) && k_ == 13824) {
-    HGEMM_COMMON_DISPATCH(_8x128_8x16x16_4_);
-  } else if (n_ >= 4096 && n_ < 5120) {
-    HGEMM_COMMON_DISPATCH(_32x64_8x16x16_2_);
-  } else if (n_ >= 5120 && n_ < 11008) {
-    HGEMM_COMMON_DISPATCH(_8x128_8x16x16_4_);  // 8, 128, 8, 16, 16, 4
-  } else if (n_ >= 11008 && n_ < 13824) {
-    HGEMM_COMMON_DISPATCH(_16x256_8x16x16_1_);  // 16, 256, 8, 16, 16, 1
-  } else {
-    HGEMM_COMMON_DISPATCH(_8x512_8x16x16_1_);  // 8, 512, 8, 16, 16, 1
-  }
-  return OkStatus();
-}
-
-#undef HGEMM_COMMON_DISPATCH
-#undef HGEMM_COMMON_DISPATCH_IMPL
-#undef HGEMM_DISPATCH
-#undef HGEMM_BIAS_DISPATCH
-#undef HGEMM_BIAS_RES_RES_DISPATCH
-#undef HGEMM_BIAS_GELU_DISPATCH
-#undef HGEMM_RESMUL_DISPATCH
-#undef HGEMM_SILU_DISPATCH
-#undef HGEMM_RES_DISPATCH
 
 std::unique_ptr<OneDnnMatMulParams> CreateMatMulParams(
     int64_t batch_size, const MatrixDescriptor& lhs,
@@ -294,8 +248,14 @@ Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
   bool flag = false;
   tsl::ReadBoolFromEnvVar("XETLA_GEMM", false, &flag);
   bool xetla_support = flag && std::is_same_v<Input, Eigen::half> &&
-                       IsXetlaSupport(batch_size, lhs, rhs, output);
-  if (xetla_support) return RunXetlaGemm(stream_handle, lhs, rhs, output);
+                       IsXetlaHardwareSupport() && (batch_size == 1) &&
+                       (fabs(alpha - 1.0f) < 1e-6);
+  if (xetla_support) {
+    TF_ASSIGN_OR_RETURN(
+        bool fallback,
+        RunXetlaGemm(stream_handle, lhs, rhs, c, output, bias, epilogue, beta));
+    if (!fallback) return OkStatus();
+  }
 
   auto params = CreateMatMulParams(batch_size, lhs, rhs, output);
 

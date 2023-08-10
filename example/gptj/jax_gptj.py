@@ -46,7 +46,7 @@ print("---- Prompt size:", input_ids.shape, flush=True)
 
 # generate args
 prng_key = jax.random.PRNGKey(0)
-generate_kwargs = dict(do_sample=False, temperature=0.9, num_beams=4, prng_key=prng_key)
+generate_kwargs = dict(do_sample=False, temperature=0.9, num_beams=1, prng_key=prng_key)
 
 @jax.jit
 def run_model(input_ids):
@@ -56,7 +56,6 @@ def run_model(input_ids):
 total_time = 0.0
 num_iter = 10
 num_warmup = 3
-total_list = []
 for i in range(num_iter):
     tic = time.time()
     gen_tokens = run_model(input_ids)
@@ -67,18 +66,8 @@ for i in range(num_iter):
     dur = toc - tic
     if i >= num_warmup:
         total_time += dur
-        total_list.append(gen_tokens[1])
 
 print("\n", "-" * 10, "Summary:", "-" * 10, flush=True)
 latency = total_time / (num_iter - num_warmup)
 print("Inference latency: %.3f sec." % (latency), flush=True)
-print(total_list, flush=True)
 
-# first_latency = np.mean([x[0] for x in total_list])
-# average_2n = list(chain(*[x[1:] for x in total_list]))
-# average_2n.sort()
-# average_2n_latency = np.mean(average_2n)
-# p90_latency = average_2n[int(len(average_2n) * 0.9)]
-# print("First token average latency: %.3f sec." % first_latency, flush=True)
-# print("Average 2... latency: %.3f sec." % average_2n_latency, flush=True)
-# print("P90 2... latency: %.3f sec." % p90_latency, flush=True)

@@ -30,10 +30,11 @@ limitations under the License.
 // #include <sycl/ext/oneapi/bfloat16.hpp>
 #include <sycl/half_type.hpp>
 
+using namespace gpu::xetla;
+using half = sycl::half;
+
 namespace xla {
 namespace gpu {
-
-using half = sycl::half;
 
 using se::DeviceMemory;
 using se::DeviceMemoryBase;
@@ -111,6 +112,13 @@ using se::DeviceMemoryBase;
   };
 }
 
+#define GEMM_QKV_XETLA_DISPATCH(F)                         \
+  hgemm_qkv##F(q, reinterpret_cast<sycl::half*>(out1_ptr), \
+               reinterpret_cast<sycl::half*>(out2_ptr),    \
+               reinterpret_cast<sycl::half*>(out3_ptr),    \
+               reinterpret_cast<sycl::half*>(input_ptr),   \
+               reinterpret_cast<sycl::half*>(weight_ptr), m, n, k);
+
 template <typename ElementType, typename OutputType>
 Status RunGpuFQKVImpl(se::Stream* stream, se::DeviceMemoryBase in_buffer,
                       se::DeviceMemoryBase wei_buffer,
@@ -118,32 +126,24 @@ Status RunGpuFQKVImpl(se::Stream* stream, se::DeviceMemoryBase in_buffer,
                       se::DeviceMemoryBase out2_buffer,
                       se::DeviceMemoryBase out3_buffer, const int64_t m,
                       const int64_t n, const int64_t k) {
-  sycl::queue* dpcpp_stream = se::gpu::AsGpuStreamValue(stream);
-
+  sycl::queue q = *se::gpu::AsGpuStreamValue(stream);
   auto input_ptr = reinterpret_cast<ElementType*>(in_buffer.opaque());
   auto weight_ptr = reinterpret_cast<ElementType*>(wei_buffer.opaque());
   auto out1_ptr = reinterpret_cast<OutputType*>(out1_buffer.opaque());
   auto out2_ptr = reinterpret_cast<OutputType*>(out2_buffer.opaque());
   auto out3_ptr = reinterpret_cast<OutputType*>(out3_buffer.opaque());
-#if __LIBSYCL_MINOR_VERSION == 1
   if (m <= 32) {
-    if (n <= 4096) {
-      ::gpu::xetla::hgemm_qkv_16x256_8x16x16_1(*dpcpp_stream, out1_ptr,
-                                               out2_ptr, out3_ptr, input_ptr,
-                                               weight_ptr, m, n, k);
+    if (n >= 2048) {
+      GEMM_QKV_XETLA_DISPATCH(_16x256_8x16x16_1_true_);
     } else {
-      ::gpu::xetla::hgemm_qkv_8x128_8x16x32_4(*dpcpp_stream, out1_ptr, out2_ptr,
-                                              out3_ptr, input_ptr, weight_ptr,
-                                              m, n, k);
+      GEMM_QKV_XETLA_DISPATCH(_8x128_8x16x32_4_true_);
     }
   } else {
-    ::gpu::xetla::hgemm_qkv_256x256_32x64x32_1(*dpcpp_stream, out1_ptr,
-                                               out2_ptr, out3_ptr, input_ptr,
-                                               weight_ptr, m, n, k);
+    GEMM_QKV_XETLA_DISPATCH(_256x256_32x64x32_1_true_);
   }
-#endif
   return OkStatus();
 }
+#undef GEMM_QKV_XETLA_DISPATCH
 
 Status RunGpuFQKV(const GpufQKVConfig& config, se::DeviceMemoryBase in_buffer,
                   se::DeviceMemoryBase wei_buffer,
