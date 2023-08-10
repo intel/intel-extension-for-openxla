@@ -116,7 +116,7 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
       m::Op(), m::Broadcast(OptionalConvert(OptionalConvert(
                    m::Op()
                        .WithPredicate(IsReduceMax)
-                       .WithOperand(0, OptionalBitcast(OptionalConvert(
+                       .WithOperand(0, OptionalConvert(OptionalBitcast(
                                            m::Op(softmax_input))))))));
   // The reduce-add part of the softmax
   auto unfused_softmax_sum_subpattern = m::Divide(
@@ -124,7 +124,7 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
       m::Broadcast(
           OptionalBitcast(OptionalConvert(OptionalBitcast(OptionalConvert(
               m::Op()
-                  .WithOperand(0, OptionalBitcast(OptionalConvert(
+                  .WithOperand(0, OptionalConvert(OptionalBitcast(
                                       m::Exp(unfused_softmax_max_subpattern))))
                   .WithPredicate(IsReduceSum)
                   .WithOneUse())))))
@@ -384,7 +384,7 @@ bool MatchSoftmaxDropoutBmm(int64_t bmm2_operand_position,
               0, m::Compare(m::Op(), m::Op())
                      .WithComparisonDirection(ComparisonDirection::kLt))),
           OptionalConvert(m::MultiplyAnyOrder(
-              OptionalReshape(OptionalConvert(
+              OptionalBitcast(OptionalConvert(
                   GetUnfusedReduceMaxSumSoftmaxPattern(softmax_input))),
               m::Broadcast(m::Constant(dropout).WithPredicate(IsScalar)))),
           m::Op())
@@ -398,7 +398,7 @@ bool MatchSoftmaxDropoutBmm(int64_t bmm2_operand_position,
           .WithPredicate(IsBatchedMatmul)
           .WithOperand(
               bmm2_operand_position,
-              OptionalReshape(OptionalConvert(OptionalBitcast(
+              OptionalBitcast(OptionalConvert(OptionalBitcast(
                   GetUnfusedReduceMaxSumSoftmaxPattern(softmax_input)))));
   if (!Match(instr, softmax_dropout_bmm2_pattern) ||
       !IsSupportedPrimitiveType((*bmm_2))) {

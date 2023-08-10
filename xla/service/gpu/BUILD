@@ -266,6 +266,7 @@ cc_library(
     deps = [
         ":compile_module_to_llvm_ir",
         ":dot_expand_dims",
+        ":redundant_convert_mover",
         ":gemm_rewriter",
         ":gpu_executable",
         ":ir_emitter",
@@ -1030,5 +1031,22 @@ cc_library(
         "@xla//xla/service:pattern_matcher",
         "@xla//xla/service/gpu:ir_emission_utils",
         "@xla//xla/service/gpu:matmul_utils",
+    ],
+)
+
+cc_library(
+    name = "redundant_convert_mover",
+    srcs = ["redundant_convert_mover.cc"],
+    hdrs = ["redundant_convert_mover.h"],
+    deps = [
+        "@tsl//tsl/platform:errors",
+        "@tsl//tsl/platform:statusor",
+        "@xla//xla:comparison_util",
+        "@xla//xla:literal_util",
+        "@xla//xla:permutation_util",
+        "@xla//xla/hlo/ir:hlo",
+        "@xla//xla/service:hlo_creation_utils",
+        "@xla//xla/service:hlo_pass",
+        "@xla//xla/service:pattern_matcher",
     ],
 )
