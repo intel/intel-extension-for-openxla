@@ -285,8 +285,8 @@ void SPIRBackendInit(const HloModuleConfig& hlo_module_config) {
   // which don't exist in PTX *anyway*.  Disable these.
   FeedLLVMWithFlags({"-slp-vectorize-hor=false"});
 
-  bool vec = false;
-  tsl::ReadBoolFromEnvVar("VECTORIZE", false, &vec);
+  bool vec = true;
+  tsl::ReadBoolFromEnvVar("VECTORIZE", true, &vec);
   if (vec) {
     FeedLLVMWithFlags({
         "-slp-min-reg-size=64",
