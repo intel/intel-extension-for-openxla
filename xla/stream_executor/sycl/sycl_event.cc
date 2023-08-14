@@ -30,38 +30,40 @@ GpuEvent::GpuEvent(GpuExecutor* parent)
 GpuEvent::~GpuEvent() {}
 
 tsl::Status GpuEvent::Init() {
-  // ITEX_GPUDevice* device_handle;
-  // ITEX_GPUGetDevice(&device_handle, parent_->gpu_device());
   gpu_event_ = new ITEX_GPUEvent;
   return ::tsl::OkStatus();
 }
 
 tsl::Status GpuEvent::Destroy() {
-  // ITEX_GPUDevice* device_handle;
-  // ITEX_GPUGetDevice(&device_handle, parent_->gpu_device());
   delete gpu_event_;
   return ::tsl::OkStatus();
 }
 
 tsl::Status GpuEvent::Record(GpuStream* stream) {
-  *gpu_event_ = stream->gpu_stream()->ext_oneapi_submit_barrier();
+  if (IsMultipleStreamEnabled()) {
+    *gpu_event_ = stream->gpu_stream()->ext_oneapi_submit_barrier();
+  }
   return ::tsl::OkStatus();
 }
 
 GpuEventHandle GpuEvent::gpu_event() { return gpu_event_; }
 
 Event::Status GpuEvent::PollForStatus() {
-  auto event_status =
-      gpu_event_->get_info<cl::sycl::info::event::command_execution_status>();
+  if (IsMultipleStreamEnabled()) {
+    auto event_status =
+        gpu_event_->get_info<cl::sycl::info::event::command_execution_status>();
 
-  switch (event_status) {
-    case cl::sycl::info::event_command_status::submitted:
-    case cl::sycl::info::event_command_status::running:
-      return Event::Status::kPending;
-    case cl::sycl::info::event_command_status::complete:
-      return Event::Status::kComplete;
-    default:
-      return Event::Status::kUnknown;
+    switch (event_status) {
+      case cl::sycl::info::event_command_status::submitted:
+      case cl::sycl::info::event_command_status::running:
+        return Event::Status::kPending;
+      case cl::sycl::info::event_command_status::complete:
+        return Event::Status::kComplete;
+      default:
+        return Event::Status::kUnknown;
+    }
+  } else {
+    return Event::Status::kComplete;
   }
 }
 

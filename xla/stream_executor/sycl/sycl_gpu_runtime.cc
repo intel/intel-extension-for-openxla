@@ -513,23 +513,26 @@ ITEX_GPUError_t ITEX_GPUMemcpyDtoD(void* dstDevice, const void* srcDevice,
 ITEX_GPUError_t ITEX_GPUMemcpyDtoHAsync(void* dstHost, const void* srcDevice,
                                         size_t ByteCount,
                                         ITEX_GPUStream* stream) {
-  // TODO(itex): set async = True when we support
-  memcpyDeviceToHost(dstHost, srcDevice, ByteCount, false, stream);
+  sycl::usm::alloc DstAllocType =
+      get_pointer_type(dstHost, stream->get_context());
+  memcpyDeviceToHost(dstHost, srcDevice, ByteCount,
+                     DstAllocType == sycl::usm::alloc::host, stream);
   return ITEX_GPU_SUCCESS;
 }
 
 ITEX_GPUError_t ITEX_GPUMemcpyHtoDAsync(void* dstDevice, const void* srcHost,
                                         size_t ByteCount,
                                         ITEX_GPUStream* stream) {
-  // TODO(itex): set async = True when we support
-  memcpyHostToDevice(dstDevice, srcHost, ByteCount, false, stream);
+  sycl::usm::alloc SrcAllocType =
+      get_pointer_type(srcHost, stream->get_context());
+  memcpyHostToDevice(dstDevice, srcHost, ByteCount,
+                     SrcAllocType == sycl::usm::alloc::host, stream);
   return ITEX_GPU_SUCCESS;
 }
 
 ITEX_GPUError_t ITEX_GPUMemcpyDtoDAsync(void* dstDevice, const void* srcDevice,
                                         size_t ByteCount,
                                         ITEX_GPUStream* stream) {
-  // TODO(itex): set async = True when we support
   memcpyDeviceToDevice(dstDevice, srcDevice, ByteCount, true, stream);
   return ITEX_GPU_SUCCESS;
 }
