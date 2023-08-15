@@ -43,6 +43,7 @@ cc_library(
         "@xla//xla:util",
         "@xla//xla/client:client_library",
         "@xla//xla/pjrt:pjrt_stream_executor_client",
+        "@xla//xla/pjrt/gpu:gpu_helpers",
         "@xla//xla/service:platform_util",
         "@xla//xla/service/gpu:gpu_executable_run_options",
         "@xla//xla/stream_executor:device_mem_allocator",

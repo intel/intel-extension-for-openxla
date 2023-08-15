@@ -1569,18 +1569,20 @@ PJRT_LoadedExecutable::PJRT_LoadedExecutable(
 namespace pjrt {
 
 PJRT_Error* PJRT_Client_Create(PJRT_Client_Create_Args* args) {
-  // std::string jax_version = std::string(GetJaxVersion());
-  // if (jax_version.compare("0.4.4") < 0)
-  //   PJRT_RETURN_IF_ERROR(tsl::errors::Internal(
-  //       "The plugin requires jax version at least 0.4.4"));
+  PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
+      "PJRT_Client_Create_Args", PJRT_Client_Create_Args_STRUCT_SIZE,
+      args->struct_size));
 
+  // TODO(b/261916900) initializing allocator_config is important as should be
+  // passed through the args later.
+  xla::GpuAllocatorConfig allocator_config;
   PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
       "PJRT_Client_Create_Args", PJRT_Client_Create_Args_STRUCT_SIZE,
       args->struct_size));
 
   PJRT_ASSIGN_OR_RETURN(std::unique_ptr<xla::PjRtClient> client,
                         xla::GetStreamExecutorXpuClient(
-                            /*asynchronous=*/false,
+                            /*asynchronous=*/false, allocator_config,
                             /*node_id=*/0));
   args->client = pjrt::CreateWrapperClient(std::move(client));
   return nullptr;

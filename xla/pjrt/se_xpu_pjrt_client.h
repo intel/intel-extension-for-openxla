@@ -20,6 +20,7 @@ limitations under the License.
 #include <set>
 #include <string>
 
+#include "xla/pjrt/gpu/gpu_helpers.h"
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/statusor.h"
 
@@ -34,18 +35,20 @@ class StreamExecutorXpuDevice : public PjRtStreamExecutorDevice {
 
   int slice_index() const;
   absl::string_view device_vendor();
-  absl::string_view ToString() const override;
 
  private:
   std::string device_vendor_;
-  std::string to_string_;
   int slice_index_;
 };
 
 StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorXpuClient(
-    bool asynchronous, int node_id,
+    bool asynchronous, const GpuAllocatorConfig& allocator_config, int node_id,
+    int num_nodes = 1,
     const std::optional<std::set<int>>& allowed_devices = std::nullopt,
-    std::optional<std::string> platform_name = std::nullopt);
+    std::optional<std::string> platform_name = std::nullopt,
+    bool should_stage_host_to_device_transfers = true,
+    PjRtClient::KeyValueGetCallback kv_get = nullptr,
+    PjRtClient::KeyValuePutCallback kv_put = nullptr);
 
 }  // namespace xla
 
