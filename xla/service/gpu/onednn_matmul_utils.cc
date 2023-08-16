@@ -244,9 +244,8 @@ Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
   VLOG(2) << "lhs trans: " << TransposeString(lhs.transpose);
   VLOG(2) << "rhs trans: " << TransposeString(rhs.transpose);
 
-  // TODO: XeTLA for different gemm post ops.
-  bool flag = false;
-  tsl::ReadBoolFromEnvVar("XETLA_GEMM", false, &flag);
+  bool flag = true;
+  tsl::ReadBoolFromEnvVar("XETLA_GEMM", true, &flag);
   bool xetla_support = flag && std::is_same_v<Input, Eigen::half> &&
                        IsXetlaHardwareSupport() && (batch_size == 1) &&
                        (fabs(alpha - 1.0f) < 1e-6);
