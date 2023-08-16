@@ -10,7 +10,7 @@ This guide introduces the overview of OpenXLA high level integration structure a
 	 <img src="openxla_for_intel_gpu.jpg" width="50%">
  </p>
 
-* [JAX](https://jax.readthedocs.io/en/latest/) provides a familiar NumPy-style API, includes composable function transformations for compilation, batching, automatic differentiation, and parallelization, and  the same code executes on multiple backends.
+* [JAX](https://jax.readthedocs.io/en/latest/) provides a familiar NumPy-style API, includes composable function transformations for compilation, batching, automatic differentiation, and parallelization, and the same code executes on multiple backends.
 * TensorFlow and PyTorch support is on the way.
 
 ## 2. Hardware and Software Requirement
@@ -26,7 +26,7 @@ Verified Hardware Platforms:
   - Intel® Data Center GPU Flex Series
 - Ubuntu 22.04, Red Hat 8.6 (64-bit), SUSE Linux Enterprise Server(SLES) 15 SP3/SP4
   - Intel® Data Center GPU Max Series
-- Intel® oneAPI Base Toolkit 2023.2
+- Intel® oneAPI Base Toolkit 2023.1
 - Jax/Jaxlib 0.4.13
 - Python 3.8-3.10
 - pip 19.0 or later (requires manylinux2014 support)
@@ -42,9 +42,9 @@ Verified Hardware Platforms:
 ## Build and Install
 ```bash
     # Source OneAPI env
-    $ source /opt/intel/oneapi/compiler/latest/env/vars.sh
-    $ source /opt/intel/oneapi/mkl/latest/env/vars.sh
-    $ source /opt/intel/oneapi/tbb/latest/env/vars.sh
+    $ source /opt/intel/oneapi/compiler/2023.1.0/env/vars.sh
+    $ source /opt/intel/oneapi/mkl/2023.1.0/env/vars.sh
+    $ source /opt/intel/oneapi/tbb/2023.1.0/env/vars.sh
     
     $ git clone https://github.com/intel/intel-extension-for-openxla.git
     $ pip install jax==0.4.13 jaxlib==0.4.13
@@ -58,9 +58,8 @@ This repo pulls public openxla code as its third_party. For development, one oft
 bazel build --override_repository=xla=/path/to/xla //xla/tools/pip_package:build_pip_package
 ```
 
-**Notes**: 
-*  This project won't release any whl or .so library, only source code, so this "build and install" is only for testing purpose.
-* Besides python whl, we can also build .so `bazel build //xla:pjrt_plugin_xpu.so` and run with ENV `PJRT_NAMES_AND_LIBRARY_PATHS`, the same as https://intel.github.io/intel-extension-for-tensorflow/latest/docs/guide/OpenXLA_Support_on_GPU.html
+**Notes**:
+* Besides python whl, we can also build .so `bazel build //xla:pjrt_plugin_xpu.so` and run with ENV `PJRT_NAMES_AND_LIBRARY_PATHS='xpu:Your_openxla_path/bazel-bin/xla/pjrt_plugin_xpu.so'`
 
 ## 4. Run JAX Example
 
@@ -104,16 +103,13 @@ jax.local_devices():  [xpu(id=0), xpu(id=1)]
 
 ## 5. FAQ
 
-* **Q**: It can't detect xpu device.    
+* **Q**: There is an error 'No visible XPU devices'.    
   **A**:
-    Print `jax.local_devices()` to check which device is running.     
-   `export OCL_ICD_ENABLE_TRACE=1` to checks if it has driver error log.    
-   `export ONEDNN_VERBOSE=2` It shows detailed OneDNN execution info.    
-     The below code open more debug log for JAX app.
+    Print `jax.local_devices()` to check which device is running. Set `export OCL_ICD_ENABLE_TRACE=1` to check if there are driver error messages. The following code opens more debug log for JAX app.
 	```python
 	import logging
 	logging.basicConfig(level = logging.DEBUG)
 	```  
-* **Q**: There is the error 'version GLIBCXX_3.4.30' not found.    
-  **A**: please upgrade GCC to latest, for example for conda
+* **Q**: There is an error 'version GLIBCXX_3.4.30' not found.    
+  **A**: please upgrade libstdc++ to the latest, for example for conda
     ```$ conda install libstdcxx-ng==12.2.0 -c conda-forge```
