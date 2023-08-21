@@ -42,7 +42,7 @@ _VERSION = "0.1.0"
 
 REQUIRED_PACKAGES = []
 
-project_name = 'openxla_xpu'
+project_name = 'intel_extension_for_openxla'
 DEV_VERSION_SUFFIX = ""
 if "--weekly_build" in sys.argv:
         today_number = date.today().strftime("%Y%m%d")
@@ -57,7 +57,7 @@ if '--project_name' in sys.argv:
 REQUIRED_PACKAGES.append('wheel')
 CONSOLE_SCRIPTS = []
 
-_ext_path = 'jax_plugins.openxla_xpu'
+_ext_path = 'jax_plugins.intel_extension_for_openxla'
 
 class BinaryDistribution(Distribution):
 

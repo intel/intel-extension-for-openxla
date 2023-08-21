@@ -51,7 +51,7 @@ Verified Hardware Platforms:
     $ ./configure        # Choose Yes for all.
     $ bazel build //xla/tools/pip_package:build_pip_package
     $ ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-    $ pip install openxla_xpu-0.1.0-cp39-cp39-linux_x86_64.whl
+    $ pip install intel_extension_for_openxla-0.1.0-cp39-cp39-linux_x86_64.whl
    ```
 This repo pulls public openxla code as its third_party. For development, one often wants to make changes to the XLA repository as well. You can override the pinned xla repo with a local checkout by:
 ```
