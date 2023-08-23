@@ -85,7 +85,7 @@ index 000000000..81183a1f8
 +   PA.preserveSet<CFGAnalyses>();
 diff --git a/third_party/tsl/third_party/llvm/spirv.patch b/third_party/tsl/third_party/llvm/spirv.patch
 new file mode 100644
-index 000000000..5b8db357e
+index 000000000..378e1682d
 --- /dev/null
 +++ b/third_party/tsl/third_party/llvm/spirv.patch
 @@ -0,0 +1,104 @@
@@ -1076,7 +1076,7 @@ index 7708db56e..6be405a23 100644
  
    std::vector<llvm::Value*> actual_index;
 diff --git a/xla/service/llvm_ir/llvm_util.cc b/xla/service/llvm_ir/llvm_util.cc
-index 97e6b63e3..88797a802 100644
+index 97e6b63e3..a38e2a08c 100644
 --- a/xla/service/llvm_ir/llvm_util.cc
 +++ b/xla/service/llvm_ir/llvm_util.cc
 @@ -235,6 +235,8 @@ llvm::Type* PrimitiveTypeToIrType(PrimitiveType element_type,
@@ -1088,7 +1088,18 @@ index 97e6b63e3..88797a802 100644
      default:
        LOG(FATAL) << "unsupported type " << element_type;
    }
-@@ -437,6 +439,7 @@ void SetDereferenceableMetadataForLoad(llvm::LoadInst* load,
+@@ -317,8 +319,9 @@ llvm::AllocaInst* EmitAllocaAtFunctionEntryWithCount(llvm::Type* type,
+   llvm::Function* function = b->GetInsertBlock()->getParent();
+   b->SetInsertPoint(&function->getEntryBlock(),
+                     function->getEntryBlock().getFirstInsertionPt());
++  // SYCL: Fix atomic issue by allocating on private addrspace
+   llvm::AllocaInst* alloca =
+-      b->CreateAlloca(type, element_count, AsStringRef(name));
++      b->CreateAlloca(type, /*addrspace*/5, element_count, AsStringRef(name));
+   if (alignment != 0) {
+     alloca->setAlignment(llvm::Align(alignment));
+   }
+@@ -437,6 +440,7 @@ void SetDereferenceableMetadataForLoad(llvm::LoadInst* load,
  
  llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
                                      llvm::Instruction* inst) {
@@ -1096,7 +1107,7 @@ index 97e6b63e3..88797a802 100644
    llvm::LLVMContext& context = inst->getParent()->getContext();
    llvm::IntegerType* i32 = llvm::Type::getInt32Ty(context);
    inst->setMetadata(
-@@ -445,6 +448,7 @@ llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
+@@ -445,6 +449,7 @@ llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
            context,
            {llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i32, lower)),
             llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i32, upper))}));
