@@ -90,6 +90,8 @@ StatusOr<bool> ExpandDotDims(HloInstruction* original_dot) {
                               lhs_non_contracting_size);
       lhs_reshape_dims.insert(lhs_reshape_dims.begin() + 1,
                               lhs_contracting_size);
+      *dot_dnums.mutable_lhs_batch_dimensions() =
+          original_dnums.lhs_batch_dimensions();
       for (int64_t i = 0; i < num_batch_dims; ++i)
         dot_dnums.mutable_lhs_batch_dimensions()->at(i)++;
       dot_dnums.add_lhs_contracting_dimensions(1);
@@ -144,6 +146,8 @@ StatusOr<bool> ExpandDotDims(HloInstruction* original_dot) {
       rhs_reshape_dims.insert(rhs_reshape_dims.begin(), rhs_contracting_size);
       rhs_reshape_dims.insert(rhs_reshape_dims.begin() + 1,
                               rhs_non_contracting_size);
+      *dot_dnums.mutable_rhs_batch_dimensions() =
+          original_dnums.rhs_batch_dimensions();
       for (int64_t i = 0; i < num_batch_dims; ++i)
         dot_dnums.mutable_rhs_batch_dimensions()->at(i)++;
       dot_dnums.add_rhs_contracting_dimensions(0);
