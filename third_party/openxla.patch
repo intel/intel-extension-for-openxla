@@ -88,7 +88,7 @@ new file mode 100644
 index 000000000..378e1682d
 --- /dev/null
 +++ b/third_party/tsl/third_party/llvm/spirv.patch
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,121 @@
 +diff --git a/llvm/lib/Passes/PassBuilderPipelines.cpp b/llvm/lib/Passes/PassBuilderPipelines.cpp
 +index 34d3b9d7467e..bd26295c6527 100644
 +--- a/llvm/lib/Passes/PassBuilderPipelines.cpp
@@ -193,6 +193,23 @@ index 000000000..378e1682d
 + 
 +   /// Disable SROA entirely if there are unhandled users of the alloca.
 +   void visitInstruction(Instruction &I) { PI.setAborted(&I); }
++diff --git a/llvm/include/llvm/Analysis/TargetTransformInfoImpl.h b/llvm/include/llvm/Analysis/TargetTransformInfoImpl.h
++index 64ac5701c03e..f1370512db8f 100644
++--- a/llvm/include/llvm/Analysis/TargetTransformInfoImpl.h
+++++ b/llvm/include/llvm/Analysis/TargetTransformInfoImpl.h
++@@ -454,7 +454,11 @@ public:
++     return ElementCount::get(0, IsScalable);
++   }
++ 
++-  unsigned getMaximumVF(unsigned ElemWidth, unsigned Opcode) const { return 0; }
+++  unsigned getMaximumVF(unsigned ElemWidth, unsigned Opcode) const {
+++    if (Opcode == Instruction::Load || Opcode == Instruction::Store)
+++        return 32 * 4 / ElemWidth;
+++    return (ElemWidth == 16) ? 2 : 1;
+++  }
++   unsigned getStoreMinimumVF(unsigned VF, Type *, Type *) const { return VF; }
++ 
++   bool shouldConsiderAddressTypePromotion(
 diff --git a/third_party/tsl/third_party/llvm/workspace.bzl b/third_party/tsl/third_party/llvm/workspace.bzl
 index 0d5a44fe7..a418b02fc 100644
 --- a/third_party/tsl/third_party/llvm/workspace.bzl
