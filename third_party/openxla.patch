@@ -88,7 +88,7 @@ new file mode 100644
 index 000000000..2bd6686db
 --- /dev/null
 +++ b/third_party/tsl/third_party/llvm/spirv.patch
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,93 @@
 +diff --git a/llvm/lib/Passes/PassBuilderPipelines.cpp b/llvm/lib/Passes/PassBuilderPipelines.cpp
 +index 34d3b9d7467e..bd26295c6527 100644
 +--- a/llvm/lib/Passes/PassBuilderPipelines.cpp
@@ -165,34 +165,6 @@ index 000000000..2bd6686db
 +   // LoopSink pass sinks instructions hoisted by LICM, which serves as a
 +   // canonicalization pass that enables other optimizations. As a result,
 +   // LoopSink pass needs to be a very late IR pass to avoid undoing LICM
-+diff --git a/llvm/lib/Transforms/InstCombine/InstCombineCompares.cpp b/llvm/lib/Transforms/InstCombine/InstCombineCompares.cpp
-+index 03bbd22236ff..846f6965984d 100644
-+--- a/llvm/lib/Transforms/InstCombine/InstCombineCompares.cpp
-++++ b/llvm/lib/Transforms/InstCombine/InstCombineCompares.cpp
-+@@ -6479,6 +6479,7 @@ static Instruction *foldReductionIdiom(ICmpInst &I,
-+ 
-+ Instruction *InstCombinerImpl::visitICmpInst(ICmpInst &I) {
-+   bool Changed = false;
-++  return Changed ? &I : nullptr;
-+   const SimplifyQuery Q = SQ.getWithInstruction(&I);
-+   Value *Op0 = I.getOperand(0), *Op1 = I.getOperand(1);
-+   unsigned Op0Cplxity = getComplexity(Op0);
-+diff --git a/llvm/lib/Transforms/Scalar/SROA.cpp b/llvm/lib/Transforms/Scalar/SROA.cpp
-+index f6848d1ea838..eec81017d337 100644
-+--- a/llvm/lib/Transforms/Scalar/SROA.cpp
-++++ b/llvm/lib/Transforms/Scalar/SROA.cpp
-+@@ -1256,9 +1256,9 @@ private:
-+     insertUse(I, Offset, Size);
-+   }
-+ 
-+-  void visitPHINode(PHINode &PN) { visitPHINodeOrSelectInst(PN); }
-++  // void visitPHINode(PHINode &PN) { visitPHINodeOrSelectInst(PN); }
-+ 
-+-  void visitSelectInst(SelectInst &SI) { visitPHINodeOrSelectInst(SI); }
-++  // void visitSelectInst(SelectInst &SI) { visitPHINodeOrSelectInst(SI); }
-+ 
-+   /// Disable SROA entirely if there are unhandled users of the alloca.
-+   void visitInstruction(Instruction &I) { PI.setAborted(&I); }
 +diff --git a/llvm/include/llvm/Analysis/TargetTransformInfoImpl.h b/llvm/include/llvm/Analysis/TargetTransformInfoImpl.h
 +index 64ac5701c03e..f1370512db8f 100644
 +--- a/llvm/include/llvm/Analysis/TargetTransformInfoImpl.h
