@@ -44,7 +44,7 @@ Verified Hardware Platforms:
     # Source OneAPI env
     $ source /opt/intel/oneapi/compiler/2023.1.0/env/vars.sh
     $ source /opt/intel/oneapi/mkl/2023.1.0/env/vars.sh
-    $ source /opt/intel/oneapi/tbb/2023.1.0/env/vars.sh
+    $ source /opt/intel/oneapi/tbb/2021.9.0/env/vars.sh
     
     $ git clone https://github.com/intel/intel-extension-for-openxla.git
     $ pip install jax==0.4.13 jaxlib==0.4.13
