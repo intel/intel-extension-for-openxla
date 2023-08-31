@@ -111,6 +111,7 @@ function prepare_src() {
       "${XLA_TMPDIR}"
   
   # xla
+  cp xla/tools/pip_package/README.md ${XLA_TMPDIR}/README.md
   cp xla/tools/pip_package/xla_setup.py ${XLA_TMPDIR}/setup.py
   mkdir -p ${XLA_TMPDIR}/jax_plugins/intel_extension_for_openxla
   if [ -d ${XLA_TMPDIR}/xla ] ; then
