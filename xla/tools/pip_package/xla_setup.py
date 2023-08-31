@@ -84,8 +84,11 @@ for path in so_lib_paths:
 
 env_check_tool = ['tools/*']
 
-long_description = """# Intel® Extension for OpenXLA* library
-"""
+long_description = ''
+this_directory = os.path.abspath(os.path.dirname(__file__))
+with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+  long_description = f.read()
+
 
 class InstallCommand(InstallCommandBase):
   """Override the dir where the headers go."""
@@ -129,7 +132,7 @@ setup(
     exclude_package_data={
         'jax_plugins': ['tools']
     },
-    python_requires='>=3.8',
+    python_requires='>=3.9',
     zip_safe=False,
     distclass=BinaryDistribution,
     # PyPI package information.
@@ -139,7 +142,6 @@ setup(
         'Intended Audience :: Education',
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: Apache Software License',
-        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
