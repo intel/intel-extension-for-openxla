@@ -1,3 +1,9 @@
+# Intel® Extension for OpenXLA*
+
+[![Python](https://img.shields.io/pypi/pyversions/intel_extension_for_openxla)](https://badge.fury.io/py/intel-extension-for-openxla)
+[![PyPI version](https://badge.fury.io/py/intel-extension-for-openxla.svg)](https://badge.fury.io/py/intel-extension-for-openxla)
+[![version](https://img.shields.io/github/v/release/intel/intel-extension-for-openxla?color=brightgreen&include_prereleases)](https://github.com/intel/intel-extension-for-openxla/releases)
+[![license](https://img.shields.io/badge/license-Apache%202-blue)](LICENSE.txt)
 
 The [OpenXLA](https://github.com/openxla/xla) Project brings together a community of developers and leading AI/ML teams to accelerate ML and address infrastructure fragmentation across ML frameworks and hardware.
 
@@ -6,6 +12,7 @@ Intel® Extension for OpenXLA includes PJRT plugin implementation, which seamles
 This guide introduces the overview of OpenXLA high level integration structure and demonstrates how to build Intel® Extension for OpenXLA and run JAX example with OpenXLA on Intel GPU. JAX is the first supported front-end.
 
 ## 1. Overview
+
  <p align="center">
 	 <img src="openxla_for_intel_gpu.jpg" width="50%">
  </p>
@@ -13,58 +20,85 @@ This guide introduces the overview of OpenXLA high level integration structure a
 * [JAX](https://jax.readthedocs.io/en/latest/) provides a familiar NumPy-style API, includes composable function transformations for compilation, batching, automatic differentiation, and parallelization, and the same code executes on multiple backends.
 * TensorFlow and PyTorch support is on the way.
 
-## 2. Hardware and Software Requirement
+## 2. Requirements
 
 ### Hardware Requirements
 
 Verified Hardware Platforms:
- - Intel® Data Center GPU Max Series, Driver Version: [682](https://dgpu-docs.intel.com/releases/production_682.14_20230804.html)
- - Intel® Data Center GPU Flex Series 170, Driver Version: [682](https://dgpu-docs.intel.com/releases/production_682.14_20230804.html)
+
+* Intel® Data Center GPU Max Series, Driver Version: [682](https://dgpu-docs.intel.com/releases/production_682.14_20230804.html)
+
+* Intel® Data Center GPU Flex Series 170, Driver Version: [682](https://dgpu-docs.intel.com/releases/production_682.14_20230804.html)
 
 ### Software Requirements
-- Ubuntu 22.04, Red Hat 8.6/8.8/9.2 (64-bit)
-  - Intel® Data Center GPU Flex Series
-- Ubuntu 22.04, Red Hat 8.6/8.8/9.2 (64-bit), SUSE Linux Enterprise Server(SLES) 15 SP4
-  - Intel® Data Center GPU Max Series
-- Intel® oneAPI Base Toolkit 2023.1
-- Jax/Jaxlib 0.4.13
-- Python 3.9-3.11
-- pip 19.0 or later (requires manylinux2014 support)
 
+* Ubuntu 22.04, Red Hat 8.6/8.8/9.2 (64-bit)
+  * Intel® Data Center GPU Flex Series
+* Ubuntu 22.04, Red Hat 8.6/8.8/9.2 (64-bit), SUSE Linux Enterprise Server(SLES) 15 SP4
+  * Intel® Data Center GPU Max Series
+* Intel® oneAPI Base Toolkit 2023.1
+* Jax/Jaxlib 0.4.13
+* Python 3.9-3.11
+* pip 19.0 or later (requires manylinux2014 support)
 
-### Install GPU Drivers
+### Install Intel GPU Drivers
 
 |OS|Intel GPU|Install Intel GPU Driver|
 |-|-|-|
 |Ubuntu 22.04, Red Hat 8.6/8.8/9.2|Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-flex-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [682](https://dgpu-docs.intel.com/releases/production_682.14_20230804.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.22.26516.25-682~22.04`|
 |Ubuntu 22.04, Red Hat 8.6/8.8/9.2, SLES 15 SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-max-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [682](https://dgpu-docs.intel.com/releases/production_682.14_20230804.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.22.26516.25-682~22.04`|
 
-## Build and Install
+### Install oneAPI Base Toolkit Packages
+
+Need to install components of Intel® oneAPI Base Toolkit:
+
+* Intel® oneAPI DPC++ Compiler
+* Intel® oneAPI Math Kernel Library (oneMKL)
+* Intel® oneAPI Threading Building Blocks (TBB), dependency of DPC++ Compiler.
+
 ```bash
-    # Source OneAPI env
-    $ source /opt/intel/oneapi/compiler/2023.1.0/env/vars.sh
-    $ source /opt/intel/oneapi/mkl/2023.1.0/env/vars.sh
-    $ source /opt/intel/oneapi/tbb/2021.9.0/env/vars.sh
-    
-    $ git clone https://github.com/intel/intel-extension-for-openxla.git
-    $ pip install jax==0.4.13 jaxlib==0.4.13
-    $ ./configure        # Choose Yes for all.
-    $ bazel build //xla/tools/pip_package:build_pip_package
-    $ ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-    $ pip install intel_extension_for_openxla-0.1.0-cp39-cp39-linux_x86_64.whl
-   ```
-This repo pulls public openxla code as its third_party. For development, one often wants to make changes to the XLA repository as well. You can override the pinned xla repo with a local checkout by:
+wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/7deeaac4-f605-4bcf-a81b-ea7531577c61/l_BaseKit_p_2023.1.0.46401_offline.sh
+sudo sh ./l_BaseKit_p_2023.1.0.46401_offline.sh
+
+# Source OneAPI env
+source /opt/intel/oneapi/compiler/2023.1.0/env/vars.sh
+source /opt/intel/oneapi/mkl/2023.1.0/env/vars.sh
+source /opt/intel/oneapi/tbb/2021.9.0/env/vars.sh
 ```
+
+## 3. Install
+
+### Install via PyPI wheel
+
+```bash
+pip install --upgrade intel-extension-for-openxla
+```
+
+### Install from Source Build
+
+```bash
+git clone https://github.com/intel/intel-extension-for-openxla.git
+pip install jax==0.4.13 jaxlib==0.4.13
+./configure        # Choose Yes for all.
+bazel build //xla/tools/pip_package:build_pip_package
+./bazel-bin/xla/tools/pip_package/build_pip_package ./
+pip install intel_extension_for_openxla-0.1.0-cp39-cp39-linux_x86_64.whl
+```
+
+**Aditional Build Option**:
+
+This repo pulls public XLA code as its third party build dependency. As an openxla developer, you may need to modify and override this specific XLA repo with a local checkout version by the following command:
+
+```bash
 bazel build --override_repository=xla=/path/to/xla //xla/tools/pip_package:build_pip_package
 ```
 
-**Notes**:
-* Besides python whl, we can also build .so `bazel build //xla:pjrt_plugin_xpu.so` and run with ENV `PJRT_NAMES_AND_LIBRARY_PATHS='xpu:Your_openxla_path/bazel-bin/xla/pjrt_plugin_xpu.so'`
-
 ## 4. Run JAX Example
 
-* **Run the below jax python code.**    
+### Run the below jax python code
+
 When running jax code, `jax.local_devices()` can check which device is running.
+
 ```python
 import jax
 import jax.numpy as jnp
@@ -84,8 +118,10 @@ def lax_conv():
 
 print(lax_conv())
 ```
-* **Reference result:**
-```
+
+### Reference result
+
+```bash
 jax.local_devices():  [xpu(id=0), xpu(id=1)]
 [[[[2.0449753 2.093208  2.1844783 1.9769732 1.5857391 1.6942389]
    [1.9218378 2.2862523 2.1549542 1.8367321 1.3978379 1.3860377]
@@ -103,13 +139,15 @@ jax.local_devices():  [xpu(id=0), xpu(id=1)]
 
 ## 5. FAQ
 
-* **Q**: There is an error 'No visible XPU devices'.    
-  **A**:
-    Print `jax.local_devices()` to check which device is running. Set `export OCL_ICD_ENABLE_TRACE=1` to check if there are driver error messages. The following code opens more debug log for JAX app.
-	```python
-	import logging
-	logging.basicConfig(level = logging.DEBUG)
-	```  
-* **Q**: There is an error 'version GLIBCXX_3.4.30' not found.    
-  **A**: please upgrade libstdc++ to the latest, for example for conda
-    ```$ conda install libstdcxx-ng==12.2.0 -c conda-forge```
+1. If there is an error 'No visible XPU devices', print `jax.local_devices()` to check which device is running. Set `export OCL_ICD_ENABLE_TRACE=1` to check if there are driver error messages. The following code opens more debug log for JAX app.
+
+    ```python
+    import logging
+    logging.basicConfig(level = logging.DEBUG)
+    ```
+
+2. If there is an error 'version GLIBCXX_3.4.30' not found, upgrade libstdc++ to the latest, for example for conda
+
+    ```bash
+    conda install libstdcxx-ng==12.2.0 -c conda-forge
+    ```
