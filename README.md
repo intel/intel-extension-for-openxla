@@ -66,6 +66,12 @@ source /opt/intel/oneapi/mkl/2023.1.0/env/vars.sh
 source /opt/intel/oneapi/tbb/2021.9.0/env/vars.sh
 ```
 
+### Install Jax and Jaxlib
+
+```bash
+pip install jax==0.4.13 jaxlib==0.4.13
+```
+
 ## 3. Install
 
 ### Install via PyPI wheel
@@ -78,7 +84,6 @@ pip install --upgrade intel-extension-for-openxla
 
 ```bash
 git clone https://github.com/intel/intel-extension-for-openxla.git
-pip install jax==0.4.13 jaxlib==0.4.13
 ./configure        # Choose Yes for all.
 bazel build //xla/tools/pip_package:build_pip_package
 ./bazel-bin/xla/tools/pip_package/build_pip_package ./
