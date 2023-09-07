@@ -85,7 +85,7 @@ index 000000000..81183a1f8
 +   PA.preserveSet<CFGAnalyses>();
 diff --git a/third_party/tsl/third_party/llvm/spirv.patch b/third_party/tsl/third_party/llvm/spirv.patch
 new file mode 100644
-index 000000000..2bd6686db
+index 000000000..1ee88dd1e
 --- /dev/null
 +++ b/third_party/tsl/third_party/llvm/spirv.patch
 @@ -0,0 +1,93 @@
@@ -1132,6 +1132,79 @@ index 97e6b63e3..a38e2a08c 100644
    return inst;
  }
  
+diff --git a/xla/stream_executor/build_defs.bzl b/xla/stream_executor/build_defs.bzl
+index 1f0fd03d3..a3eb37189 100644
+--- a/xla/stream_executor/build_defs.bzl
++++ b/xla/stream_executor/build_defs.bzl
+@@ -22,10 +22,12 @@ def tf_additional_cudnn_plugin_copts():
+ 
+ # Returns whether any GPU backend is configuered.
+ def if_gpu_is_configured(x):
+-    return if_cuda_is_configured(x) + if_rocm_is_configured(x)
++    # hardcode to enable sycl
++    return if_cuda_is_configured(x) + if_rocm_is_configured(x) + x
+ 
+ def if_cuda_or_rocm(x):
+-    return if_gpu_is_configured(x)
++    # hardcode to enable sycl
++    return if_gpu_is_configured(x) + x
+ 
+ # nvlink is not available via the pip wheels, disable it since it will create
+ # unnecessary dependency
+diff --git a/xla/stream_executor/gpu/gpu_types.h b/xla/stream_executor/gpu/gpu_types.h
+index 94337c729..656d1195a 100644
+--- a/xla/stream_executor/gpu/gpu_types.h
++++ b/xla/stream_executor/gpu/gpu_types.h
+@@ -18,7 +18,20 @@ limitations under the License.
+ #ifndef XLA_STREAM_EXECUTOR_GPU_GPU_TYPES_H_
+ #define XLA_STREAM_EXECUTOR_GPU_GPU_TYPES_H_
+ 
+-#if TENSORFLOW_USE_ROCM
++#define TENSORFLOW_USE_SYCL 1
++
++#if TENSORFLOW_USE_SYCL
++
++#if __has_include(<sycl/sycl.hpp>)
++#include <sycl/sycl.hpp>
++#elif __has_include(<CL/sycl.hpp>)
++#include <CL/sycl.hpp>
++#else
++#error "Unsupported compiler"
++#endif
++#include <level_zero/ze_api.h>
++
++#elif TENSORFLOW_USE_ROCM
+ 
+ #define __HIP_DISABLE_CPP_FUNCTIONS__
+ 
+@@ -42,7 +55,26 @@ typedef struct curandGenerator_st* curandGenerator_t;
+ namespace stream_executor {
+ namespace gpu {
+ 
+-#if TENSORFLOW_USE_ROCM
++#if TENSORFLOW_USE_SYCL
++
++using GpuContextHandle = const void*;
++using GpuStreamHandle = ::sycl::queue*;
++using GpuEventHandle = ::sycl::event*;
++using GpuFunctionHandle = ::sycl::kernel*;
++using GpuFunctionAttribute = const void*;
++using GpuDeviceHandle = ::sycl::device*;
++using GpuDevicePtr = void*;
++using GpuDeviceAttribute = const void*;
++using GpuDeviceProperty = const void*;
++using GpuModuleHandle = ze_module_handle_t;
++using GpuStatus = const void*;
++using GpuFuncCachePreference = const void*;
++using GpuSharedMemConfig = const void*;
++using GpuComplexType = const void*;
++using GpuDoubleComplexType = const void*;
++using GpuRngHandle = const void*;
++
++#elif TENSORFLOW_USE_ROCM
+ 
+ using GpuContextHandle = hipCtx_t;
+ using GpuStreamHandle = hipStream_t;
 diff --git a/xla/stream_executor/kernel_spec.cc b/xla/stream_executor/kernel_spec.cc
 index a8efbb398..878316ae5 100644
 --- a/xla/stream_executor/kernel_spec.cc

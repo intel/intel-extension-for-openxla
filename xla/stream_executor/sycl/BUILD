@@ -105,14 +105,6 @@ cc_library(
 )
 
 cc_library(
-    name = "sycl_types_header",
-    hdrs = ["sycl_types.h"],
-    deps = [
-        "@xla//xla/stream_executor/platform",
-    ],
-)
-
-cc_library(
     name = "sycl_executor_header",
     textual_hdrs = ["sycl_executor.h"],
     visibility = ["//visibility:public"],
@@ -130,9 +122,9 @@ cc_library(
     hdrs = ["sycl_kernel.h"],
     deps = [
         ":sycl_gpu_runtime_imp",
-        ":sycl_types_header",
         "@xla//xla/stream_executor:event",
         "@xla//xla/stream_executor:stream_executor_pimpl_header",
+        "@xla//xla/stream_executor/gpu:gpu_kernel_header",
         "@xla//xla/stream_executor/platform",
     ],
 )
@@ -145,6 +137,7 @@ cc_library(
         ":sycl_executor_header",
         ":sycl_stream",
         "@xla//xla/stream_executor:stream_executor_headers",
+        "@xla//xla/stream_executor/gpu:gpu_event",
     ],
 )
 
@@ -155,6 +148,7 @@ cc_library(
     deps = [
         ":sycl_executor_header",
         "@xla//xla/stream_executor:stream_executor_headers",
+        "@xla//xla/stream_executor/gpu:gpu_stream",
         "@xla//xla/stream_executor/platform",
     ],
 )

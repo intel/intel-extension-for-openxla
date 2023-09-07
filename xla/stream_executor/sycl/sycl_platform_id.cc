@@ -18,9 +18,9 @@ limitations under the License.
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
 
 namespace stream_executor {
-namespace gpu {
+namespace sycl {
 
 PLATFORM_DEFINE_ID(kSyclPlatformId);
 
-}  // namespace gpu
+}  // namespace sycl
 }  // namespace stream_executor

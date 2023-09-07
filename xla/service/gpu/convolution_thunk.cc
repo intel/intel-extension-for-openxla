@@ -81,7 +81,7 @@ Status CreateOneDnnPrimitive(
     const GpuConvDescriptor& conv_descriptor,
     absl::Span<const se::DeviceMemoryBase> operand_buffers,
     se::DeviceMemoryBase result_buffer, const Thunk::ExecuteParams& params) {
-  ITEX_GPUStream* dpcpp_stream = se::gpu::AsGpuStreamValue(params.stream);
+  sycl::queue* dpcpp_stream = se::gpu::AsGpuStreamValue(params.stream);
   auto& buffer_allocations = *params.buffer_allocations;
   se::OwningScratchAllocator<> scratch_allocator(
       buffer_allocations.device_ordinal(),

@@ -30,6 +30,7 @@ limitations under the License.
 #include "tsl/platform/status.h"
 #include "xla/stream_executor/platform/initialize.h"
 #include "xla/stream_executor/sycl/sycl_executor.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
 
 namespace stream_executor {
@@ -126,7 +127,7 @@ tsl::StatusOr<StreamExecutor*> SyclPlatform::FirstExecutorForBus(
       absl::StrFormat("Executor for bus %d not found.", bus_ordinal));
 }
 
-Platform::Id SyclPlatform::id() const { return gpu::kSyclPlatformId; }
+Platform::Id SyclPlatform::id() const { return sycl::kSyclPlatformId; }
 
 int SyclPlatform::VisibleDeviceCount() const {
   // Throw away the result - it logs internally, and this [containing] function

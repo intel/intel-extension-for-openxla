@@ -20,7 +20,7 @@ limitations under the License.
 
 static bool InitCompilerModule() {
   xla::Compiler::RegisterCompilerFactory(
-      stream_executor::gpu::kSyclPlatformId,
+      stream_executor::sycl::kSyclPlatformId,
       []() { return std::make_unique<xla::gpu::SPIRCompiler>(); });
   return true;
 }

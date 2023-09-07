@@ -18,9 +18,9 @@ limitations under the License.
 #include "xla/service/gpu/matrix_descriptor.h"
 #include "xla/service/gpu/xetla/gemm/gemm.h"
 #include "xla/stream_executor/blas.h"
+#include "xla/stream_executor/gpu/gpu_types.h"
 #include "xla/stream_executor/sycl/hw_info.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
-#include "xla/stream_executor/sycl/sycl_types.h"
 
 using namespace gpu::xetla;
 namespace se = ::stream_executor;

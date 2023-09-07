@@ -26,14 +26,14 @@ namespace gpu {
 
 bool GpuStream::Init() {
   ITEX_GPUDevice* device_handle;
-  ITEX_GPUGetDevice(&device_handle, parent_->gpu_device());
+  ITEX_GPUGetDevice(&device_handle, parent_->gpu_device_ordinal());
   ITEX_GPUCreateStream(device_handle, &gpu_stream_);
   return true;
 }
 
 void GpuStream::Destroy() {
   ITEX_GPUDevice* device_handle;
-  ITEX_GPUGetDevice(&device_handle, parent_->gpu_device());
+  ITEX_GPUGetDevice(&device_handle, parent_->gpu_device_ordinal());
   ITEX_GPUDestroyStream(device_handle, gpu_stream_);
 }
 

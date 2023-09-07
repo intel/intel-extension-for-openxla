@@ -19,7 +19,7 @@ limitations under the License.
 #define XLA_PYTHON_PY_CLIENT_GPU_H_
 
 #include "xla/service/custom_call_status.h"
-#include "xla/stream_executor/sycl/sycl_types.h"
+#include "xla/stream_executor/gpu/gpu_types.h"
 
 using gpuStreamHandle = stream_executor::gpu::GpuStreamHandle;
 

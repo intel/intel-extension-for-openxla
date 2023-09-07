@@ -33,9 +33,14 @@ limitations under the License.
 #include "xla/stream_executor/trace_listener.h"
 
 namespace stream_executor {
-namespace gpu {
-
+namespace sycl {
+// Opaque and unique identifier for the CUDA platform plugin.
+// This is needed so that plugins can refer to/identify this platform without
+// instantiating a CudaPlatform object.
 extern const Platform::Id kSyclPlatformId;
+}  // namespace sycl
+
+namespace gpu {
 // Cuda-specific platform plugin, registered as a singleton value via module
 // initializer.
 class SyclPlatform : public Platform {

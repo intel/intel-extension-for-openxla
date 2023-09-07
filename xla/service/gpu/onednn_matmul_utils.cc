@@ -44,7 +44,6 @@ limitations under the License.
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/sycl/hw_info.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
-#include "xla/stream_executor/sycl/sycl_types.h"
 #include "xla/types.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"

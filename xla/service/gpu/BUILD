@@ -266,10 +266,10 @@ cc_library(
     deps = [
         ":compile_module_to_llvm_ir",
         ":dot_expand_dims",
-        ":redundant_convert_mover",
         ":gemm_rewriter",
         ":gpu_executable",
         ":ir_emitter",
+        ":redundant_convert_mover",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:variant",
         "@llvm-project//llvm:AsmParser",
@@ -862,6 +862,7 @@ cc_library(
         "@xla//xla/service/gpu:stream_executor_util",
         "@xla//xla/service/gpu:thunk",
         "@xla//xla/stream_executor",
+        "@xla//xla/stream_executor/gpu:gpu_types_header",
     ],
 )
 

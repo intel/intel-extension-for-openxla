@@ -275,7 +275,7 @@ std::unique_ptr<llvm::Module> MaybeLoadLLVMFromFile(const HloModule* module,
 }  // namespace
 
 SPIRCompiler::SPIRCompiler()
-    : GpuCompiler(stream_executor::gpu::kSyclPlatformId, spir::TargetTriple(),
+    : GpuCompiler(stream_executor::sycl::kSyclPlatformId, spir::TargetTriple(),
                   spir::DataLayout()) {}
 
 HloDataflowAnalysis::CanShareBuffer SPIRCompiler::GetCanShareBuffer() {

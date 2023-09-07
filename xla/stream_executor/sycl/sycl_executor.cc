@@ -54,6 +54,7 @@ limitations under the License.
 #include "xla/stream_executor/stream_executor_pimpl.h"
 #include "xla/stream_executor/sycl/gpu_pool_allocator.h"
 #include "xla/stream_executor/sycl/sycl_event.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
 
@@ -66,6 +67,30 @@ bool FLAGS_prefer_cubin_to_ptx = true;
 
 namespace stream_executor {
 namespace gpu {
+
+namespace sycl = ::sycl;
+class GpuContext {
+ public:
+  GpuContext(sycl::device* d) : device_(d) {
+    context_ = new sycl::context(*device_);
+  }
+  ~GpuContext() {
+    if (context_) delete context_;
+  }
+
+  sycl::device* device() const { return device_; }
+  sycl::context* context() const { return context_; }
+
+  // Disallow copying and moving.
+  GpuContext(GpuContext&&) = delete;
+  GpuContext(const GpuContext&) = delete;
+  GpuContext& operator=(GpuContext&&) = delete;
+  GpuContext& operator=(const GpuContext&) = delete;
+
+ private:
+  sycl::device* device_;
+  sycl::context* context_;
+};
 
 // Hook that can be used to CUBIN-ate PTX before it is loaded into the driver.
 // It has been observed that loading both PTX and cubins into the driver library
@@ -97,11 +122,9 @@ GpuExecutor::~GpuExecutor() {
 tsl::Status GpuExecutor::Init(int device_ordinal,
                               DeviceOptions device_options) {
   device_ordinal_ = device_ordinal;
-  device_ = device_ordinal;
   ITEX_GPUDevice* device_handle;
   ITEX_GPUGetDevice(&device_handle, device_ordinal);
-  sycl_device_ = *device_handle;
-  sycl_context_ = ::sycl::context(sycl_device_);
+  context_ = new GpuContext(device_handle);
   return ::tsl::OkStatus();
 }
 
@@ -115,13 +138,13 @@ namespace {
     }                                      \
   }
 
-tsl::Status LoadLevelzero(const sycl::context& sycl_context,
-                          const sycl::device& sycl_device, const char* spir,
+tsl::Status LoadLevelzero(const sycl::context* sycl_context,
+                          const sycl::device* sycl_device, const char* spir,
                           size_t size, ze_module_handle_t* ze_module) {
   auto ze_device =
-      sycl::get_native<::sycl::backend::ext_oneapi_level_zero>(sycl_device);
+      sycl::get_native<sycl::backend::ext_oneapi_level_zero>(*sycl_device);
   auto ze_context =
-      sycl::get_native<::sycl::backend::ext_oneapi_level_zero>(sycl_context);
+      sycl::get_native<sycl::backend::ext_oneapi_level_zero>(*sycl_context);
 
   ze_module_desc_t moduleDesc = {ZE_STRUCTURE_TYPE_MODULE_DESC,
                                  nullptr,
@@ -147,7 +170,7 @@ tsl::Status LoadLevelzero(const sycl::context& sycl_context,
   return ::tsl::OkStatus();
 }
 
-bool GetModuleFunction(const sycl::context& sycl_context,
+bool GetModuleFunction(const sycl::context* sycl_context,
                        ze_module_handle_t module, const char* kernel_name,
                        sycl::kernel** sycl_kernel) {
   CHECK(module != nullptr && kernel_name != nullptr);
@@ -176,9 +199,9 @@ bool GetModuleFunction(const sycl::context& sycl_context,
   sycl::kernel_bundle<sycl::bundle_state::executable> kernel_bundle =
       sycl::make_kernel_bundle<sycl::backend::ext_oneapi_level_zero,
                                sycl::bundle_state::executable>({module},
-                                                               sycl_context);
+                                                               *sycl_context);
   auto kernel = sycl::make_kernel<sycl::backend::ext_oneapi_level_zero>(
-      {kernel_bundle, ze_kernel}, sycl_context);
+      {kernel_bundle, ze_kernel}, *sycl_context);
   *sycl_kernel = new sycl::kernel(kernel);
   return true;
 }
@@ -213,8 +236,8 @@ tsl::Status GpuExecutor::LoadModuleFromSpir(const char* spirv,
   std::tie(*module, module_refcount) = gpu_binary_to_module_[spirv];
 
   if (*module == nullptr) {
-    TF_RETURN_IF_ERROR(
-        LoadLevelzero(sycl_context_, sycl_device_, spirv, size, module));
+    TF_RETURN_IF_ERROR(LoadLevelzero(context_->context(), context_->device(),
+                                     spirv, size, module));
 
     module_refcount = 1;
     in_memory_modules_[spirv] = *module;
@@ -249,7 +272,7 @@ tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
   }
 
   VLOG(2) << "getting function " << kernelname << " from module " << module;
-  if (!GetModuleFunction(sycl_context_, module, kernelname.c_str(),
+  if (!GetModuleFunction(context_->context(), module, kernelname.c_str(),
                          l0_kernel->gpu_function_ptr())) {
     return tsl::Status(absl::StatusCode::kInternal,
                        absl::StrFormat("Failed getting module function"));
@@ -442,11 +465,11 @@ tsl::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
 
   std::vector<int32_t> sizes(kernargs.size(), sizeof(void*));
 
-  auto sycl_global_range = ::sycl::range<3>(thread_dims.z * block_dims.z,
-                                            thread_dims.y * block_dims.y,
-                                            thread_dims.x * block_dims.x);
+  auto sycl_global_range =
+      sycl::range<3>(thread_dims.z * block_dims.z, thread_dims.y * block_dims.y,
+                     thread_dims.x * block_dims.x);
   auto sycl_local_range =
-      ::sycl::range<3>(thread_dims.z, thread_dims.y, thread_dims.x);
+      sycl::range<3>(thread_dims.z, thread_dims.y, thread_dims.x);
   sycl::nd_range<3> sycl_nd_range(
       sycl::nd_range<3>(sycl_global_range, sycl_local_range));
 
@@ -486,6 +509,26 @@ void GpuExecutor::Deallocate(DeviceMemoryBase* mem) {
   CHECK(status == ITEX_GPU_SUCCESS)
       << "Failed to get device allocator, device handle: " << device_handle;
   alloc->DeallocateRaw(mem->opaque());
+}
+
+void* GpuExecutor::UnifiedMemoryAllocate(uint64_t size) {
+  aligned_alloc_shared(64, size, *(context_->device()), *(context_->context()));
+}
+
+void GpuExecutor::UnifiedMemoryDeallocate(void* location) {
+  sycl::free(location, *(context_->context()));
+}
+
+// CUDA allocation/registration functions are necessary because the driver
+// internally sets up buffers for DMA operations (and page locks them).
+// There's no external interface for us to otherwise control these DMA
+// settings.
+void* GpuExecutor::HostMemoryAllocate(uint64_t size) {
+  return aligned_alloc_host(64, size, *(context_->context()));
+}
+
+void GpuExecutor::HostMemoryDeallocate(void* location) {
+  sycl::free(location, *(context_->context()));
 }
 
 bool GpuExecutor::HostMemoryRegister(void* location, uint64_t size) {
@@ -534,7 +577,7 @@ tsl::Status GpuExecutor::SynchronousMemcpy(void* host_dst,
                                            const DeviceMemoryBase& gpu_src,
                                            uint64_t size) {
   ITEX_GPUDevice* device_handle;
-  ITEX_GPUGetDevice(&device_handle, device_);
+  ITEX_GPUGetDevice(&device_handle, device_ordinal_);
   ITEX_GPUMemcpyDtoH(host_dst, gpu_src.opaque(), size, device_handle);
   return ::tsl::OkStatus();
 }
@@ -542,7 +585,7 @@ tsl::Status GpuExecutor::SynchronousMemcpy(void* host_dst,
 tsl::Status GpuExecutor::SynchronousMemcpyDeviceToDevice(
     DeviceMemoryBase* gpu_dst, const DeviceMemoryBase& gpu_src, uint64_t size) {
   ITEX_GPUDevice* device_handle;
-  ITEX_GPUGetDevice(&device_handle, device_);
+  ITEX_GPUGetDevice(&device_handle, device_ordinal_);
   ITEX_GPUMemcpyDtoD(gpu_dst->opaque(), gpu_src.opaque(), size, device_handle);
   return ::tsl::OkStatus();
 }
@@ -704,7 +747,7 @@ tsl::Status GpuExecutor::EnablePeerAccessTo(StreamExecutorInterface* other) {
 
 bool GpuExecutor::DeviceMemoryUsage(int64_t* free, int64_t* total) const {
   ITEX_GPUDevice* device_handle;
-  ITEX_GPUGetDevice(&device_handle, device_);
+  ITEX_GPUGetDevice(&device_handle, device_ordinal_);
   *free =
       device_handle->template get_info<sycl::info::device::global_mem_size>();
   *total =
@@ -748,10 +791,7 @@ GpuExecutor::GetStreamImplementation() {
   return std::unique_ptr<internal::StreamInterface>(new GpuStream(this));
 }
 
-// std::unique_ptr<internal::TimerInterface>
-// GpuExecutor::GetTimerImplementation() {
-//   return std::unique_ptr<internal::TimerInterface>(new GpuTimer(this));
-// }
+GpuContext* GpuExecutor::gpu_context() { return context_; }
 
 #define L0_SAFE_CALL(call)                 \
   {                                        \

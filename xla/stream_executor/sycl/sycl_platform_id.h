@@ -21,7 +21,7 @@ limitations under the License.
 #include "xla/stream_executor/platform.h"
 
 namespace stream_executor {
-namespace gpu {
+namespace sycl {
 
 // Opaque and unique identifier for the cuda platform.
 // This is needed so that plugins can refer to/identify this platform without
@@ -30,7 +30,7 @@ namespace gpu {
 // and CudaExecutor.
 extern const Platform::Id kSyclPlatformId;
 
-}  // namespace gpu
+}  // namespace sycl
 }  // namespace stream_executor
 
 #endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_ID_H_

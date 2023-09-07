@@ -41,12 +41,13 @@ limitations under the License.
 #include "tsl/platform/status.h"
 #include "tsl/platform/statusor.h"
 #include "xla/stream_executor/event.h"
+#include "xla/stream_executor/gpu/gpu_types.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/platform/port.h"
 #include "xla/stream_executor/stream_executor_internal.h"
 #include "xla/stream_executor/stream_executor_pimpl.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_kernel.h"
-#include "xla/stream_executor/sycl/sycl_types.h"
 
 namespace stream_executor {
 
@@ -146,29 +147,17 @@ class GpuExecutor : public internal::StreamExecutorInterface {
 
   void Deallocate(DeviceMemoryBase* mem) override;
 
-  void* UnifiedMemoryAllocate(uint64_t size) override {
-    aligned_alloc_shared(64, size, sycl_device_, sycl_context_);
-    //  return GpuDriver::UnifiedMemoryAllocate(context_, size);
-  }
+  void* UnifiedMemoryAllocate(uint64_t size);
 
-  void UnifiedMemoryDeallocate(void* location) override {
-    ::sycl::free(location, sycl_context_);
-    // return GpuDriver::UnifiedMemoryDeallocate(context_, location);
-  }
+  void UnifiedMemoryDeallocate(void* location);
 
   // CUDA allocation/registration functions are necessary because the driver
   // internally sets up buffers for DMA operations (and page locks them).
   // There's no external interface for us to otherwise control these DMA
   // settings.
-  void* HostMemoryAllocate(uint64_t size) override {
-    return aligned_alloc_host(/*alignment = */ 64, size, sycl_context_);
-    // return GpuDriver::HostAllocate(context_, size);
-  }
+  void* HostMemoryAllocate(uint64_t size);
 
-  void HostMemoryDeallocate(void* location) override {
-    ::sycl::free(location, sycl_context_);
-    // return GpuDriver::HostDeallocate(context_, location);
-  }
+  void HostMemoryDeallocate(void* location);
 
   bool HostMemoryRegister(void* location, uint64_t size) override;
 
@@ -277,8 +266,8 @@ class GpuExecutor : public internal::StreamExecutorInterface {
 
   // void* GpuContextHack() override;
 
-  // GpuContext* gpu_context();
-  GpuDeviceHandle gpu_device() { return device_ordinal_; }
+  GpuContext* gpu_context();
+  int gpu_device_ordinal() { return device_ordinal_; }
   // Provide a type-erased way of attaching arbitrary XLA specific state to the
   // GpuExecutor. XLA based execution will use this method to attach per-stream
   // executor XLA specific objects (like the Infeed and Outfeed managers) to the
@@ -401,14 +390,14 @@ class GpuExecutor : public internal::StreamExecutorInterface {
   GpuDeviceHandle device_;
 
   // Handle for session with the library/driver. Immutable post-initialization.
-  // GpuContext* context_;
+  GpuContext* context_;
 
   // The device ordinal value that this executor was initialized with; recorded
   // for use in getting device metadata. Immutable post-initialization.
   int device_ordinal_;
 
-  ::sycl::device sycl_device_;
-  ::sycl::context sycl_context_;
+  // sycl::device sycl_device_;
+  // sycl::context sycl_context_;
   // The major version of the compute capability for device_.
   // int cc_major_;
 
