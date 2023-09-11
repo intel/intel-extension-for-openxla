@@ -623,6 +623,7 @@ cc_library(
         ":scratch_allocator",
         "//xla/service:onednn_util",
         "//xla/service/gpu/xetla/gemm:gemm_kernel",
+        "//xla/stream_executor/sycl:hw_info",
         "//xla/stream_executor/sycl:sycl_executor",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/types:span",

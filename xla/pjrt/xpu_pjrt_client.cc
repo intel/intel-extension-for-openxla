@@ -1580,10 +1580,12 @@ PJRT_Error* PJRT_Client_Create(PJRT_Client_Create_Args* args) {
       "PJRT_Client_Create_Args", PJRT_Client_Create_Args_STRUCT_SIZE,
       args->struct_size));
 
-  PJRT_ASSIGN_OR_RETURN(std::unique_ptr<xla::PjRtClient> client,
-                        xla::GetStreamExecutorXpuClient(
-                            /*asynchronous=*/false, allocator_config,
-                            /*node_id=*/0));
+  PJRT_ASSIGN_OR_RETURN(
+      std::unique_ptr<xla::PjRtClient> client,
+      xla::GetStreamExecutorXpuClient(
+          /*asynchronous=*/false, allocator_config,
+          /*node_id=*/0, /*num_nodes*/ 1,
+          /*allowed_devices*/ std::nullopt, /*platform_name*/ "SYCL"));
   args->client = pjrt::CreateWrapperClient(std::move(client));
   return nullptr;
 }

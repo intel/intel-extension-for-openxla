@@ -52,7 +52,6 @@ limitations under the License.
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor_internal.h"
 #include "xla/stream_executor/stream_executor_pimpl.h"
-#include "xla/stream_executor/sycl/gpu_pool_allocator.h"
 #include "xla/stream_executor/sycl/sycl_event.h"
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
@@ -487,12 +486,7 @@ DeviceMemoryBase GpuExecutor::Allocate(uint64_t size, int64_t memory_space) {
   CHECK_EQ(memory_space, 0);
   ITEX_GPUDevice* device_handle;
   ITEX_GPUGetDevice(&device_handle, device_ordinal_);
-  std::shared_ptr<itex::BFCAllocator> alloc;
-  auto status = ITEX_GPUGetAllocator(device_handle, &alloc);
-  CHECK(status == ITEX_GPU_SUCCESS)
-      << "Failed to get device allocator, device handle: " << device_handle;
-
-  return DeviceMemoryBase(alloc->AllocateRaw(size), size);
+  return DeviceMemoryBase(ITEX_GPUMalloc(device_handle, size), size);
 }
 
 void* GpuExecutor::GetSubBuffer(DeviceMemoryBase* mem, uint64_t offset_bytes,
@@ -504,11 +498,7 @@ void* GpuExecutor::GetSubBuffer(DeviceMemoryBase* mem, uint64_t offset_bytes,
 void GpuExecutor::Deallocate(DeviceMemoryBase* mem) {
   ITEX_GPUDevice* device_handle;
   ITEX_GPUGetDevice(&device_handle, device_ordinal_);
-  std::shared_ptr<itex::BFCAllocator> alloc;
-  auto status = ITEX_GPUGetAllocator(device_handle, &alloc);
-  CHECK(status == ITEX_GPU_SUCCESS)
-      << "Failed to get device allocator, device handle: " << device_handle;
-  alloc->DeallocateRaw(mem->opaque());
+  return ITEX_GPUFree(device_handle, mem->opaque());
 }
 
 void* GpuExecutor::UnifiedMemoryAllocate(uint64_t size) {

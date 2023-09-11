@@ -41,38 +41,6 @@ cc_library(
 )
 
 cc_library(
-    name = "bfc_allocator",
-    srcs = ["bfc_allocator.cc"],
-    hdrs = [
-        "allocator.h",
-        "bfc_allocator.h",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":hw_info",
-        ":sycl_gpu_header",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@tsl//tsl/platform:logging",
-        "@tsl//tsl/platform:mutex",
-        "@tsl//tsl/platform/default:types",
-        "@tsl//tsl/util:env_var",
-    ],
-    alwayslink = True,
-)
-
-cc_library(
-    name = "gpu_pool_allocator",
-    hdrs = [
-        "gpu_pool_allocator.h",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":bfc_allocator",
-        ":sycl_gpu_header",
-    ],
-)
-
-cc_library(
     name = "sycl_platform_id",
     srcs = ["sycl_platform_id.cc"],
     hdrs = ["sycl_platform_id.h"],
@@ -162,7 +130,6 @@ cc_library(
         ":sycl_kernel",
         ":sycl_platform_id",
         ":sycl_stream",
-        "//xla/stream_executor/sycl:gpu_pool_allocator",
         "@com_google_absl//absl/strings",
         "@xla//xla/stream_executor:event",
         "@xla//xla/stream_executor:stream_executor_internal",

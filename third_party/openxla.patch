@@ -268,6 +268,45 @@ index 2a527ac55..94e0d78be 100644
    let genSpecializedAttr = 0;
    let cppNamespace = "::mlir::lmhlo_gpu";
  }
+diff --git a/xla/pjrt/gpu/gpu_helpers.cc b/xla/pjrt/gpu/gpu_helpers.cc
+index b7064ac25..dcb1efbd8 100644
+--- a/xla/pjrt/gpu/gpu_helpers.cc
++++ b/xla/pjrt/gpu/gpu_helpers.cc
+@@ -37,11 +37,12 @@ namespace xla {
+ StatusOr<LocalClient*> GetGpuXlaClient(
+     const std::optional<std::string>& platform_name,
+     const std::optional<std::set<int>>& allowed_devices) {
++  // SYCL: hardcode to xpu
+   TF_ASSIGN_OR_RETURN(
+       se::Platform * platform,
+-      PlatformUtil::GetPlatform(platform_name ? *platform_name : "gpu"));
++      PlatformUtil::GetPlatform(platform_name ? *platform_name : "xpu"));
+   if (platform->VisibleDeviceCount() <= 0) {
+-    return FailedPrecondition("No visible GPU devices.");
++    return FailedPrecondition("No visible XPU devices.");
+   }
+   LocalClientOptions options;
+   options.set_platform(platform);
+@@ -113,7 +114,8 @@ StatusOr<std::unique_ptr<tsl::BFCAllocator>> CreateBFCAllocator(
+   opts.allow_growth = !preallocate;
+   return std::make_unique<tsl::BFCAllocator>(
+       std::move(sub_allocator), allocator_memory,
+-      absl::StrCat("GPU_", device_ordinal, "_bfc"), opts);
++      // SYCL: hardcode to xpu
++      absl::StrCat("XPU_", device_ordinal, "_bfc"), opts);
+ }
+ 
+ // Returns a GPU pinned host memory allocator to use when staging host->GPU
+@@ -131,7 +133,8 @@ std::unique_ptr<tsl::BFCAllocator> GetGpuHostAllocator(
+   opts.allow_growth = true;
+   return std::make_unique<tsl::BFCAllocator>(std::move(sub_allocator),
+                                              kGpuHostMemoryLimitBytes,
+-                                             /*name=*/"xla_gpu_host_bfc", opts);
++                                             // SYCL: hardcode to xpu
++                                             /*name=*/"xla_xpu_host_bfc", opts);
+ }
+ 
+ }  // namespace xla
 diff --git a/xla/service/algebraic_simplifier.h b/xla/service/algebraic_simplifier.h
 index 32be0a59d..a8dbddd3a 100644
 --- a/xla/service/algebraic_simplifier.h

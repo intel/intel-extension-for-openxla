@@ -24,6 +24,12 @@ limitations under the License.
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/statusor.h"
 
+namespace stream_executor {
+
+class MultiDeviceAdapter;
+
+}
+
 namespace xla {
 
 class StreamExecutorXpuDevice : public PjRtStreamExecutorDevice {
