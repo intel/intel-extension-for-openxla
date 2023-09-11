@@ -27,30 +27,6 @@ namespace gpu {
 
 namespace sycl = ::sycl;
 
-GpuEvent::GpuEvent(GpuExecutor* parent)
-    : parent_(parent), gpu_event_(nullptr) {}
-
-GpuEvent::~GpuEvent() {}
-
-tsl::Status GpuEvent::Init() {
-  gpu_event_ = new ITEX_GPUEvent;
-  return ::tsl::OkStatus();
-}
-
-tsl::Status GpuEvent::Destroy() {
-  delete gpu_event_;
-  return ::tsl::OkStatus();
-}
-
-tsl::Status GpuEvent::Record(GpuStream* stream) {
-  if (IsMultipleStreamEnabled()) {
-    *gpu_event_ = stream->gpu_stream()->ext_oneapi_submit_barrier();
-  }
-  return ::tsl::OkStatus();
-}
-
-GpuEventHandle GpuEvent::gpu_event() { return gpu_event_; }
-
 Event::Status GpuEvent::PollForStatus() {
   if (IsMultipleStreamEnabled()) {
     auto event_status =

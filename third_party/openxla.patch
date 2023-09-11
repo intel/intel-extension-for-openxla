@@ -1190,6 +1190,72 @@ index 1f0fd03d3..a3eb37189 100644
  
  # nvlink is not available via the pip wheels, disable it since it will create
  # unnecessary dependency
+diff --git a/xla/stream_executor/cuda/cuda_driver.cc b/xla/stream_executor/cuda/cuda_driver.cc
+index 3d9264374..c8a9b0a35 100644
+--- a/xla/stream_executor/cuda/cuda_driver.cc
++++ b/xla/stream_executor/cuda/cuda_driver.cc
+@@ -576,6 +576,14 @@ bool DeviceOptionsToContextFlags(const DeviceOptions& device_options,
+       "Feature not supported on CUDA platform (LoadHsaco)");
+ }
+ 
++/* static */ tsl::Status GpuDriver::LoadLevelzero(GpuContext* context,
++                                                  const char* spir_contents,
++                                                  const size_t size,
++                                                  CUmodule* module) {
++  LOG(ERROR) << "Feature not supported on CUDA platform (LoadLevelzero)";
++  return tsl::errors::Internal("Not Implemented");
++}
++
+ /* static */ tsl::Status GpuDriver::SynchronousMemsetUint8(GpuContext* context,
+                                                            CUdeviceptr location,
+                                                            uint8_t value,
+diff --git a/xla/stream_executor/cuda/cuda_gpu_executor.cc b/xla/stream_executor/cuda/cuda_gpu_executor.cc
+index 3e171c793..6cad72bf2 100644
+--- a/xla/stream_executor/cuda/cuda_gpu_executor.cc
++++ b/xla/stream_executor/cuda/cuda_gpu_executor.cc
+@@ -182,6 +182,12 @@ tsl::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,
+       "Feature not supported on CUDA platform (LoadModuleFromHsaco)");
+ }
+ 
++tsl::Status GpuExecutor::LoadModuleFromSpir(const char* spir, const size_t size,
++                                            CUmodule* module) {
++  return tsl::errors::Internal(
++      "Feature not supported on CUDA platform (LoadModuleFromSpir)");
++}
++
+ tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
+                                    KernelBase* kernel) {
+   GpuKernel* cuda_kernel = AsGpuKernel(kernel);
+diff --git a/xla/stream_executor/gpu/gpu_driver.h b/xla/stream_executor/gpu/gpu_driver.h
+index 9fce9d68d..4badb209b 100644
+--- a/xla/stream_executor/gpu/gpu_driver.h
++++ b/xla/stream_executor/gpu/gpu_driver.h
+@@ -295,6 +295,9 @@ class GpuDriver {
+   // (supported on ROCm only)
+   static tsl::Status LoadHsaco(GpuContext* context, const char* hsaco_contents,
+                                GpuModuleHandle* module);
++  static tsl::Status LoadLevelzero(GpuContext* context,
++                                   const char* spir_contents, const size_t size,
++                                   GpuModuleHandle* module);
+ 
+   // Retrieves a named kernel from a loaded module, and places the resulting
+   // handle into function (outparam) on success. Neither kernel_name nor
+diff --git a/xla/stream_executor/gpu/gpu_executor.h b/xla/stream_executor/gpu/gpu_executor.h
+index dba3e08a3..14f694069 100644
+--- a/xla/stream_executor/gpu/gpu_executor.h
++++ b/xla/stream_executor/gpu/gpu_executor.h
+@@ -320,6 +320,11 @@ class GpuExecutor : public internal::StreamExecutorInterface {
+   tsl::Status LoadModuleFromHsaco(const char* hsaco, GpuModuleHandle* module)
+       TF_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
+ 
++  // (supported on SYCL only)
++  tsl::Status LoadModuleFromSpir(const char* spir, const size_t size,
++                                 GpuModuleHandle* module)
++      TF_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
++
+   bool UnloadGpuBinary(const void* gpu_binary)
+       TF_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
+ 
 diff --git a/xla/stream_executor/gpu/gpu_types.h b/xla/stream_executor/gpu/gpu_types.h
 index 94337c729..656d1195a 100644
 --- a/xla/stream_executor/gpu/gpu_types.h
@@ -1303,6 +1369,41 @@ index 8b33a5fe8..9c3ae880b 100644
                                                absl::string_view kernelname);
    MultiKernelLoaderSpec *AddCudaPtxInMemory(absl::string_view ptx,
                                              absl::string_view kernelname);
+diff --git a/xla/stream_executor/rocm/rocm_driver.cc b/xla/stream_executor/rocm/rocm_driver.cc
+index a65f5e87b..267b0fe39 100644
+--- a/xla/stream_executor/rocm/rocm_driver.cc
++++ b/xla/stream_executor/rocm/rocm_driver.cc
+@@ -457,6 +457,14 @@ GpuDriver::ContextGetSharedMemConfig(GpuContext* context) {
+   return ret;
+ }
+ 
++/* static */ tsl::Status GpuDriver::LoadLevelzero(GpuContext* context,
++                                                  const char* spir_contents,
++                                                  const size_t size,
++                                                  hipModule_t* module) {
++  LOG(ERROR) << "Feature not supported on ROCm platform (LoadLevelzero)";
++  return tsl::errors::Internal("Not Implemented");
++}
++
+ /* static */ tsl::Status GpuDriver::SynchronousMemsetUint8(
+     GpuContext* context, hipDeviceptr_t location, uint8 value, size_t size) {
+   ScopedActivateContext activation{context};
+diff --git a/xla/stream_executor/rocm/rocm_gpu_executor.cc b/xla/stream_executor/rocm/rocm_gpu_executor.cc
+index 105fadf78..a756b8170 100644
+--- a/xla/stream_executor/rocm/rocm_gpu_executor.cc
++++ b/xla/stream_executor/rocm/rocm_gpu_executor.cc
+@@ -368,6 +368,11 @@ tsl::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,
+   return tsl::OkStatus();
+ }
+ 
++tsl::Status GpuExecutor::LoadModuleFromSpir(const char* spir, const size_t size,
++                                            hipModule_t* module) {
++  LOG(FATAL) << "Feature not supported on ROCM platform (LoadModuleFromSpir)";
++}
++
+ // This is a non-essential operation; if there's a failure, proceed without
+ // logging an error. It's nearly certain that in case of failures, we'd never
+ // get here in the first place; these are very low-impact routines.
 diff --git a/xla/stream_executor/stream_executor_pimpl.h b/xla/stream_executor/stream_executor_pimpl.h
 index c2bb16bce..41a1e3f89 100644
 --- a/xla/stream_executor/stream_executor_pimpl.h

@@ -29,21 +29,21 @@ limitations under the License.
 #error "Unsupported compiler"
 #endif
 
-enum ITEX_GPUError_t {
-  ITEX_GPU_SUCCESS,
-  ITEX_GPU_ERROR_NO_DEVICE,
-  ITEX_GPU_ERROR_NOT_READY,
-  ITEX_GPU_ERROR_INVALID_DEVICE,
-  ITEX_GPU_ERROR_INVALID_POINTER,
-  ITEX_GPU_ERROR_INVALID_STREAM,
-  ITEX_GPU_ERROR_DESTROY_DEFAULT_STREAM,
+enum SYCLError_t {
+  SYCL_SUCCESS,
+  SYCL_ERROR_NO_DEVICE,
+  SYCL_ERROR_NOT_READY,
+  SYCL_ERROR_INVALID_DEVICE,
+  SYCL_ERROR_INVALID_POINTER,
+  SYCL_ERROR_INVALID_STREAM,
+  SYCL_ERROR_DESTROY_DEFAULT_STREAM,
 };
 
 typedef int DeviceOrdinal;
 
-using ITEX_GPUDevice = sycl::device;
-using ITEX_GPUStream = sycl::queue;
-using ITEX_GPUEvent = sycl::event;
+using SYCLDevice = sycl::device;
+using SYCLStream = sycl::queue;
+using SYCLEvent = sycl::event;
 
 inline bool IsMultipleStreamEnabled() {
   bool is_multiple_stream_enabled = false;
@@ -62,82 +62,73 @@ inline bool IsMultipleStreamEnabled() {
   return is_multiple_stream_enabled;
 }
 
-const char* ITEX_GPUGetErrorName(ITEX_GPUError_t error);
+const char* ToString(SYCLError_t error);
 
-ITEX_GPUError_t ITEX_GPUGetDeviceCount(int* count);
+SYCLError_t SYCLGetDeviceCount(int* count);
 
-ITEX_GPUError_t ITEX_GPUGetDevice(ITEX_GPUDevice** device, int device_ordinal);
+SYCLError_t SYCLGetDevice(SYCLDevice** device, int device_ordinal);
 
-ITEX_GPUError_t ITEX_GPUGetDeviceOrdinal(const ITEX_GPUDevice& device,
-                                         DeviceOrdinal* device_ordinal);
+SYCLError_t SYCLGetDeviceOrdinal(const SYCLDevice& device,
+                                 DeviceOrdinal* device_ordinal);
 
-ITEX_GPUError_t ITEX_GPUGetCurrentDeviceOrdinal(DeviceOrdinal* ordinal);
+SYCLError_t SYCLGetCurrentDeviceOrdinal(DeviceOrdinal* ordinal);
 
-ITEX_GPUError_t ITEX_GPUSetCurrentDeviceOrdinal(DeviceOrdinal ordinal);
+SYCLError_t SYCLSetCurrentDeviceOrdinal(DeviceOrdinal ordinal);
 
-ITEX_GPUError_t ITEX_GPUCreateStream(ITEX_GPUDevice* device_handle,
-                                     ITEX_GPUStream** stream);
+SYCLError_t SYCLCreateStream(SYCLDevice* device_handle, SYCLStream** stream);
 
-ITEX_GPUError_t ITEX_GPUGetDefaultStream(ITEX_GPUDevice* device_handle,
-                                         ITEX_GPUStream** stream);
+SYCLError_t SYCLGetDefaultStream(SYCLDevice* device_handle,
+                                 SYCLStream** stream);
 
-ITEX_GPUError_t ITEX_GPUDestroyStream(ITEX_GPUDevice* device_handle,
-                                      ITEX_GPUStream* stream);
+SYCLError_t SYCLDestroyStream(SYCLDevice* device_handle, SYCLStream* stream);
 
-ITEX_GPUError_t ITEX_GPUGetStreamPool(ITEX_GPUDevice* device_handle,
-                                      std::vector<ITEX_GPUStream*>* streams);
+SYCLError_t SYCLGetStreamPool(SYCLDevice* device_handle,
+                              std::vector<SYCLStream*>* streams);
 
-ITEX_GPUError_t ITEX_GPUCreateEvent(ITEX_GPUDevice* device_handle,
-                                    ITEX_GPUEvent* event);
-ITEX_GPUError_t ITEX_GPUDestroyEvent(ITEX_GPUDevice* device_handle,
-                                     ITEX_GPUEvent event);
+SYCLError_t SYCLCreateEvent(SYCLDevice* device_handle, SYCLEvent* event);
+SYCLError_t SYCLDestroyEvent(SYCLDevice* device_handle, SYCLEvent event);
 
-ITEX_GPUError_t ITEX_GPUStreamWaitEvent(ITEX_GPUStream* stream,
-                                        ITEX_GPUEvent event);
+SYCLError_t SYCLStreamWaitEvent(SYCLStream* stream, SYCLEvent event);
 
-ITEX_GPUError_t ITEX_GPUStreamWaitStream(ITEX_GPUStream* dependent,
-                                         ITEX_GPUStream* other);
+SYCLError_t SYCLStreamWaitStream(SYCLStream* dependent, SYCLStream* other);
 
-ITEX_GPUError_t ITEX_GPUCtxSynchronize(ITEX_GPUDevice* device_handle);
+SYCLError_t SYCLCtxSynchronize(SYCLDevice* device_handle);
 
-ITEX_GPUError_t ITEX_GPUStreamSynchronize(ITEX_GPUStream* stream);
+SYCLError_t SYCLStreamSynchronize(SYCLStream* stream);
 
-ITEX_GPUError_t ITEX_GPUMemcpyDtoH(void* dstHost, const void* srcDevice,
-                                   size_t ByteCount, ITEX_GPUDevice* device);
+SYCLError_t SYCLMemcpyDtoH(void* dstHost, const void* srcDevice,
+                           size_t ByteCount, SYCLDevice* device);
 
-ITEX_GPUError_t ITEX_GPUMemcpyHtoD(void* dstDevice, const void* srcHost,
-                                   size_t ByteCount, ITEX_GPUDevice* device);
+SYCLError_t SYCLMemcpyHtoD(void* dstDevice, const void* srcHost,
+                           size_t ByteCount, SYCLDevice* device);
 
-ITEX_GPUError_t ITEX_GPUMemcpyDtoD(void* dstDevice, const void* srcDevice,
-                                   size_t ByteCount, ITEX_GPUDevice* device);
+SYCLError_t SYCLMemcpyDtoD(void* dstDevice, const void* srcDevice,
+                           size_t ByteCount, SYCLDevice* device);
 
-ITEX_GPUError_t ITEX_GPUMemcpyDtoHAsync(void* dstHost, const void* srcDevice,
-                                        size_t ByteCount,
-                                        ITEX_GPUStream* stream);
+SYCLError_t SYCLMemcpyDtoHAsync(void* dstHost, const void* srcDevice,
+                                size_t ByteCount, SYCLStream* stream);
 
-ITEX_GPUError_t ITEX_GPUMemcpyHtoDAsync(void* dstDevice, const void* srcHost,
-                                        size_t ByteCount,
-                                        ITEX_GPUStream* stream);
+SYCLError_t SYCLMemcpyHtoDAsync(void* dstDevice, const void* srcHost,
+                                size_t ByteCount, SYCLStream* stream);
 
-ITEX_GPUError_t ITEX_GPUMemcpyDtoDAsync(void* dstDevice, const void* srcDevice,
-                                        size_t ByteCount,
-                                        ITEX_GPUStream* stream);
+SYCLError_t SYCLMemcpyDtoDAsync(void* dstDevice, const void* srcDevice,
+                                size_t ByteCount, SYCLStream* stream);
 
-ITEX_GPUError_t ITEX_GPUMemsetD8(void* dstDevice, unsigned char uc, size_t N,
-                                 ITEX_GPUDevice* device);
+SYCLError_t SYCLMemsetD8(void* dstDevice, unsigned char uc, size_t N,
+                         SYCLDevice* device);
 
-ITEX_GPUError_t ITEX_GPUMemsetD8Async(void* dstDevice, unsigned char uc,
-                                      size_t N, ITEX_GPUStream* stream);
+SYCLError_t SYCLMemsetD8Async(void* dstDevice, unsigned char uc, size_t N,
+                              SYCLStream* stream);
 
-ITEX_GPUError_t ITEX_GPUMemsetD32(void* dstDevice, unsigned int ui, size_t N,
-                                  ITEX_GPUDevice* device);
+SYCLError_t SYCLMemsetD32(void* dstDevice, unsigned int ui, size_t N,
+                          SYCLDevice* device);
 
-ITEX_GPUError_t ITEX_GPUMemsetD32Async(void* dstDevice, unsigned int ui,
-                                       size_t N, ITEX_GPUStream* stream);
+SYCLError_t SYCLMemsetD32Async(void* dstDevice, unsigned int ui, size_t N,
+                               SYCLStream* stream);
 
-void* ITEX_GPUMalloc(ITEX_GPUDevice* device, size_t ByteCount);
+void* SYCLMalloc(SYCLDevice* device, size_t ByteCount);
 
-void* ITEX_GPUMallocHost(size_t ByteCount);
+void* SYCLMallocHost(size_t ByteCount);
 
-void ITEX_GPUFree(ITEX_GPUDevice* device, void* ptr);
+void SYCLFree(SYCLDevice* device, void* ptr);
 #endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_GPU_RUNTIME_H_

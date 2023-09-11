@@ -30,47 +30,10 @@ limitations under the License.
 #include "tsl/platform/status.h"
 #include "xla/stream_executor/platform/initialize.h"
 #include "xla/stream_executor/sycl/sycl_executor.h"
-#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
 
 namespace stream_executor {
 namespace gpu {
-namespace {
-
-// Synchronize with spinlocks.
-const char kScheduleSpinString[] = "spin";
-// Synchronize with spinlocks that also call CPU yield instructions.
-const char kScheduleYieldString[] = "yield";
-// Synchronize with a "synchronization primitive" (e.g. mutex).
-const char kScheduleBlockingSyncString[] = "blocking_sync";
-
-const DeviceOptions GetDeviceOptionsFromEnv() {
-  const char* gpu_schedule_string =
-      std::getenv("TF_CUDA_PLATFORM_GPU_DEVICE_SCHEDULE");
-
-  if (gpu_schedule_string == nullptr) {
-    return DeviceOptions::Default();
-  }
-
-  unsigned device_flags = 0;
-  if (strcmp(kScheduleSpinString, gpu_schedule_string) == 0) {
-    device_flags = DeviceOptions::kScheduleSpin;
-  } else if (strcmp(kScheduleYieldString, gpu_schedule_string) == 0) {
-    device_flags = DeviceOptions::kScheduleYield;
-  } else if (strcmp(kScheduleBlockingSyncString, gpu_schedule_string) == 0) {
-    device_flags = DeviceOptions::kScheduleBlockingSync;
-  } else {
-    LOG(QFATAL) << "Unknown option for environment variable "
-                   "TF_CUDA_PLATFORM_GPU_DEVICE_SCHEDULE "
-                << gpu_schedule_string << " should be one of {"
-                << kScheduleBlockingSyncString << ", " << kScheduleSpinString
-                << ", " << kScheduleYieldString << "}";
-  }
-
-  return DeviceOptions(device_flags);
-}
-
-}  // namespace
 
 SyclPlatform::SyclPlatform()
     : name_("SYCL"), min_numa_node_(0), limit_numa_node_(0) {}
@@ -130,11 +93,7 @@ tsl::StatusOr<StreamExecutor*> SyclPlatform::FirstExecutorForBus(
 Platform::Id SyclPlatform::id() const { return sycl::kSyclPlatformId; }
 
 int SyclPlatform::VisibleDeviceCount() const {
-  // Throw away the result - it logs internally, and this [containing] function
-  // isn't in the path of user control. It's safe to call this > 1x.
-  int device_count;
-  ITEX_GPUGetDeviceCount(&device_count);
-  return device_count;
+  return GpuDriver::GetDeviceCount();
 }
 
 const std::string& SyclPlatform::Name() const { return name_; }
@@ -148,7 +107,7 @@ tsl::StatusOr<StreamExecutor*> SyclPlatform::ExecutorForDevice(int ordinal) {
   StreamExecutorConfig config;
   config.ordinal = ordinal;
   config.plugin_config = PluginConfig();
-  config.device_options = GetDeviceOptionsFromEnv();
+  config.device_options = DeviceOptions::Default();
   return GetExecutor(config);
 }
 
@@ -157,7 +116,7 @@ tsl::StatusOr<StreamExecutor*> SyclPlatform::ExecutorForDeviceWithPluginConfig(
   StreamExecutorConfig config;
   config.ordinal = device_ordinal;
   config.plugin_config = plugin_config;
-  config.device_options = GetDeviceOptionsFromEnv();
+  config.device_options = DeviceOptions::Default();
   return GetExecutor(config);
 }
 

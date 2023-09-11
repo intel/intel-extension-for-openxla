@@ -41,6 +41,26 @@ cc_library(
 )
 
 cc_library(
+    name = "sycl_driver",
+    srcs = ["sycl_driver.cc"],
+    deps = [
+        ":sycl_gpu_runtime_imp",
+        "@com_google_absl//absl/base",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/strings",
+        "@tsl//tsl/platform:env",
+        "@tsl//tsl/platform:numbers",
+        "@tsl//tsl/platform:stacktrace",
+        "@tsl//tsl/platform:static_threadlocal",
+        "@xla//xla/stream_executor:device_options",
+        "@xla//xla/stream_executor:stream_executor_headers",
+        "@xla//xla/stream_executor/gpu:gpu_driver_header",
+        "@xla//xla/stream_executor/platform",
+        "@xla//xla/stream_executor/platform:dso_loader",
+    ],
+)
+
+cc_library(
     name = "sycl_platform_id",
     srcs = ["sycl_platform_id.cc"],
     hdrs = ["sycl_platform_id.h"],
@@ -102,6 +122,7 @@ cc_library(
     srcs = ["sycl_event.cc"],
     hdrs = ["sycl_event.h"],
     deps = [
+        ":sycl_driver",
         ":sycl_executor_header",
         ":sycl_stream",
         "@xla//xla/stream_executor:stream_executor_headers",
@@ -111,7 +132,6 @@ cc_library(
 
 cc_library(
     name = "sycl_stream",
-    srcs = ["sycl_stream.cc"],
     hdrs = ["sycl_stream.h"],
     deps = [
         ":sycl_executor_header",
@@ -126,6 +146,7 @@ cc_library(
     srcs = ["sycl_executor.cc"],
     hdrs = ["sycl_executor.h"],
     deps = [
+        ":sycl_driver",
         ":sycl_event",
         ":sycl_kernel",
         ":sycl_platform_id",
