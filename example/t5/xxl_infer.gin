@@ -1,0 +1,30 @@
+include 't5x/contrib/gpu/t5/t5_1_1/xxl.gin'
+#include 't5x/contrib/gpu/t5/configs/runs/infer_from_tfexample_file.gin'
+include 't5x/contrib/gpu/t5/configs/runs/infer.gin'
+
+
+# Register necessary SeqIO Tasks/Mixtures
+
+DROPOUT_RATE = 0.0
+#BATCH_SIZE = 8
+
+import t5.data.mixtures
+import t5x.contrib.gpu.scripts_gpu.seqio_tasks
+#MIXTURE_OR_TASK_NAME = "the_pile_span_corruption"
+MIXTURE_OR_TASK_NAME = "wmt_t2t_ende_v003"
+#TASK_FEATURE_LENGTHS = {"inputs": 1024, "targets": 1}
+TASK_FEATURE_LENGTHS = {"inputs": 1024, "targets": 1}
+seqio.SentencePieceVocabulary.sentencepiece_model_file = "/home/sdp/yuqingding/intel/llm/t5x/t5x/contrib/gpu/scripts_gpu/dyq/sentencepiece.model"
+
+#FEATURE_LENGTHS = {"inputs": 1024, "targets": 1}
+#TF_EXAMPLE_FILE_TYPE='tfrecord'
+#TF_EXAMPLE_FILE_PATHS=['/home/yuqingding/intel/llm/t5x/t5x/contrib/gpu/scripts_gpu/dyq/dataset/*train.tfrecord*']
+#create_task_from_tfexample_file.inputs_key='question'
+
+
+partitioning.PjitPartitioner:
+  model_parallel_submesh = (1, 1, 1, 1)
+
+#network.T5Config:
+#  num_encoder_layers = 1
+#  num_decoder_layers = 1
