@@ -25,105 +25,7 @@ limitations under the License.
 using namespace gpu::xetla;
 namespace se = ::stream_executor;
 
-#define HGEMM_DISPATCH(F)                                            \
-  {                                                                  \
-    F(q, reinterpret_cast<sycl::half*>(c_->data.opaque()),           \
-      reinterpret_cast<sycl::half*>(a_->data.opaque()),              \
-      reinterpret_cast<sycl::half*>(b_->data.opaque()), m_, n_, k_); \
-  }
-
-#define HGEMM_BIAS_DISPATCH(F)                                   \
-  {                                                              \
-    F(q, reinterpret_cast<sycl::half*>(c_->data.opaque()),       \
-      reinterpret_cast<sycl::half*>(a_->data.opaque()),          \
-      reinterpret_cast<sycl::half*>(b_->data.opaque()),          \
-      reinterpret_cast<sycl::half*>(epilogues_[0]), m_, n_, k_); \
-  }
-
-#define HGEMM_BIAS_RES_RES_DISPATCH(F)                           \
-  {                                                              \
-    F(q, reinterpret_cast<sycl::half*>(c_->data.opaque()),       \
-      reinterpret_cast<sycl::half*>(a_->data.opaque()),          \
-      reinterpret_cast<sycl::half*>(b_->data.opaque()),          \
-      reinterpret_cast<sycl::half*>(epilogues_[0]),              \
-      reinterpret_cast<sycl::half*>(epilogues_[1]),              \
-      reinterpret_cast<sycl::half*>(epilogues_[2]), m_, n_, k_); \
-  }
-
-#define HGEMM_BIAS_GELU_DISPATCH(F)                              \
-  {                                                              \
-    F(q, reinterpret_cast<sycl::half*>(c_->data.opaque()),       \
-      reinterpret_cast<sycl::half*>(a_->data.opaque()),          \
-      reinterpret_cast<sycl::half*>(b_->data.opaque()),          \
-      reinterpret_cast<sycl::half*>(epilogues_[0]), m_, n_, k_); \
-  }
-
-#define HGEMM_RESMUL_DISPATCH(F)                                 \
-  {                                                              \
-    F(q, reinterpret_cast<sycl::half*>(c_->data.opaque()),       \
-      reinterpret_cast<sycl::half*>(a_->data.opaque()),          \
-      reinterpret_cast<sycl::half*>(b_->data.opaque()),          \
-      reinterpret_cast<sycl::half*>(epilogues_[0]), m_, n_, k_); \
-  }
-
-#define HGEMM_SILU_DISPATCH(F)                                       \
-  {                                                                  \
-    F(q, reinterpret_cast<sycl::half*>(c_->data.opaque()),           \
-      reinterpret_cast<sycl::half*>(a_->data.opaque()),              \
-      reinterpret_cast<sycl::half*>(b_->data.opaque()), m_, n_, k_); \
-  }
-
-#define HGEMM_RES_DISPATCH(F)                                    \
-  {                                                              \
-    F(q, reinterpret_cast<sycl::half*>(c_->data.opaque()),       \
-      reinterpret_cast<sycl::half*>(a_->data.opaque()),          \
-      reinterpret_cast<sycl::half*>(b_->data.opaque()),          \
-      reinterpret_cast<sycl::half*>(epilogues_[0]), m_, n_, k_); \
-  }
-
-#define HGEMM_BIAS_XRES_DISPATCH(F)                                            \
-  {                                                                            \
-    F(q, reinterpret_cast<sycl::half*>(c_->data.opaque()),                     \
-      reinterpret_cast<sycl::half*>(a_->data.opaque()),                        \
-      reinterpret_cast<sycl::half*>(b_->data.opaque()),                        \
-      reinterpret_cast<sycl::half*>(epilogues_[0]),                            \
-      reinterpret_cast<sycl::half*>(epilogues_[1]), (scalar_t)pf32[1], m_, n_, \
-      k_);                                                                     \
-  }
-
-#define HGEMM_COMMON_DISPATCH_IMPL(DISPATCHER, F) \
-  if (is_b_row_major_)                            \
-    DISPATCHER(F##true_)                          \
-  else                                            \
-    DISPATCHER(F##false_)
-
-#define HGEMM_COMMON_DISPATCH(F)                                               \
-  {                                                                            \
-    if (num_epilogues_ == 0)                                                   \
-      HGEMM_COMMON_DISPATCH_IMPL(HGEMM_DISPATCH, hgemm##F)                     \
-    else if (num_epilogues_ == 1 && epilogue_type_[0] == BIAS)                 \
-      HGEMM_COMMON_DISPATCH_IMPL(HGEMM_BIAS_DISPATCH, hgemm_bias##F)           \
-    else if (num_epilogues_ == 3 && epilogue_type_[0] == BIAS &&               \
-             epilogue_type_[1] == RES_ADD && epilogue_type_[2] == RES_ADD)     \
-      HGEMM_COMMON_DISPATCH_IMPL(HGEMM_BIAS_RES_RES_DISPATCH,                  \
-                                 hgemm_bias_res_res##F)                        \
-    else if (num_epilogues_ == 2 && epilogue_type_[0] == BIAS &&               \
-             epilogue_type_[1] == GELU)                                        \
-      HGEMM_COMMON_DISPATCH_IMPL(HGEMM_BIAS_GELU_DISPATCH, hgemm_bias_gelu##F) \
-    else if (num_epilogues_ == 1 && epilogue_type_[0] == RES_MUL)              \
-      HGEMM_COMMON_DISPATCH_IMPL(HGEMM_RESMUL_DISPATCH, hgemm_resmul##F)       \
-    else if (num_epilogues_ == 1 && epilogue_type_[0] == SILU)                 \
-      HGEMM_COMMON_DISPATCH_IMPL(HGEMM_SILU_DISPATCH, hgemm_silu##F)           \
-    else if (num_epilogues_ == 1 && epilogue_type_[0] == RES_ADD)              \
-      HGEMM_COMMON_DISPATCH_IMPL(HGEMM_RES_DISPATCH, hgemm_res##F)             \
-    else if (num_epilogues_ == 2 && epilogue_type_[0] == BIAS &&               \
-             epilogue_type_[1] == SCALED_RES_ADD)                              \
-      HGEMM_COMMON_DISPATCH_IMPL(HGEMM_BIAS_XRES_DISPATCH, hgemm_bias_res##F)  \
-    else                                                                       \
-      LOG(FATAL) << "Unsupported DISPATCHER";                                  \
-  }
-
-class HGEMMXetla final {
+class HGEMM_XETLA final {
  public:
   enum EpilogueType {
     BIAS = 0,
@@ -139,9 +41,9 @@ class HGEMMXetla final {
     MAX_EPILOGUES = 4,
   };
   xla::gpu::MatrixDescriptor *a_, *b_, *c_;
-  void* epilogues_[MAX_EPILOGUES];
-  EpilogueType epilogue_type_[MAX_EPILOGUES];
-  float pf32[MAX_EPILOGUES];
+  void* epilogue_tensors_[MAX_EPILOGUES];
+  EpilogueType epilogue_types_[MAX_EPILOGUES];
+  float epilogue_params_[MAX_EPILOGUES];
   int num_epilogues_ = 0;
   bool is_a_row_major_;
   bool is_a_col_major_;
@@ -149,37 +51,39 @@ class HGEMMXetla final {
   bool is_b_col_major_;
   bool fallback_;
   int m_, n_, k_;
+  int selected_policy_;
+  float alpha_ = 1.0f;
 
  public:
-  HGEMMXetla() = default;
+  HGEMM_XETLA() = default;
   bool fallback() const { return fallback_; }
-  HGEMMXetla& add_matrix_c(const xla::gpu::MatrixDescriptor& c) {
+  HGEMM_XETLA& add_alpha(const float alpha) {
+    alpha_ = alpha;
+    return *this;
+  }
+  HGEMM_XETLA& add_matrix_c(const xla::gpu::MatrixDescriptor& c) {
     c_ = const_cast<xla::gpu::MatrixDescriptor*>(&c);
     return *this;
   }
-  HGEMMXetla& add_matrix_a(const xla::gpu::MatrixDescriptor& a) {
+  HGEMM_XETLA& add_matrix_a(const xla::gpu::MatrixDescriptor& a) {
     a_ = const_cast<xla::gpu::MatrixDescriptor*>(&a);
     return *this;
   }
-  HGEMMXetla& add_matrix_b(const xla::gpu::MatrixDescriptor& b) {
+  HGEMM_XETLA& add_matrix_b(const xla::gpu::MatrixDescriptor& b) {
     b_ = const_cast<xla::gpu::MatrixDescriptor*>(&b);
     return *this;
   }
-  HGEMMXetla& add_epilogue(void* t, EpilogueType eptype) {
-    epilogues_[num_epilogues_] = const_cast<void*>(t);
-    epilogue_type_[num_epilogues_++] = eptype;
-    return *this;
-  }
-  HGEMMXetla& add_epilogue(const void* t, EpilogueType eptype, const float x) {
-    epilogues_[num_epilogues_] = const_cast<void*>(t);
-    pf32[num_epilogues_] = x;
-    epilogue_type_[num_epilogues_++] = eptype;
+
+  HGEMM_XETLA& add_epilogue(const void* t, EpilogueType eptype,
+                            const float x = 1.0) {
+    epilogue_tensors_[num_epilogues_] = const_cast<void*>(t);
+    epilogue_params_[num_epilogues_] = x;
+    epilogue_types_[num_epilogues_++] = eptype;
     return *this;
   }
 
-  HGEMMXetla& build() {
+  HGEMM_XETLA& build() {
     fallback_ = true;
-
     is_a_row_major_ = (a_->transpose == se::blas::Transpose::kNoTranspose);
     is_a_col_major_ = (a_->transpose == se::blas::Transpose::kTranspose);
     is_b_row_major_ = (b_->transpose == se::blas::Transpose::kNoTranspose);
@@ -188,41 +92,100 @@ class HGEMMXetla final {
     k_ = is_a_row_major_ ? a_->num_cols : a_->num_rows;
     n_ = is_b_row_major_ ? b_->num_cols : b_->num_rows;
     if (is_a_col_major_) return *this;
-    if (!(n_ >= 4096 && k_ >= 1024)) return *this;
     fallback_ = false;
+    selected_policy_ = select_gemm_config(m_, n_, k_, is_b_row_major_,
+                                          64);  // 64 is subslice count per tile
     return *this;
   }
 
   void run(se::gpu::GpuStreamHandle handle) {
     using scalar_t = sycl::half;
     sycl::queue q = *handle;
-    if (m_ == 60 && n_ == 4096 && k_ == 4096) {
-      HGEMM_COMMON_DISPATCH(_32x64_8x16x32_2_);
-    } else if (m_ == 60 && (n_ >= 16384) && k_ == 4096) {
-      HGEMM_COMMON_DISPATCH(_256x256_32x64x16_1_);
-    } else if (m_ >= 1024) {
-      HGEMM_COMMON_DISPATCH(_256x256_32x64x32_1_);
-    } else if (m_ >= 32) {
-      HGEMM_COMMON_DISPATCH(_32x256_8x32x16_1_);
-    } else if (n_ == 13824 && (k_ == 4096 || k_ == 5120)) {
-      HGEMM_COMMON_DISPATCH(
-          _8x512_8x32x16_2_);  // HGEMM_IMPL_FUNC(8, 256, 8, 32, 16, 2, false)
-      return;
-    } else if ((n_ == 4096 || n_ == 5120) && k_ == 13824) {
-      HGEMM_COMMON_DISPATCH(_8x128_8x16x16_4_);
-      return;
-    } else if (n_ >= 4096 && n_ < 5120) {
-      HGEMM_COMMON_DISPATCH(_32x64_8x16x16_2_);
-      return;
-    } else if (n_ >= 5120 && n_ < 11008) {
-      HGEMM_COMMON_DISPATCH(_8x128_8x16x16_4_);  // 8, 128, 8, 16, 16, 4
-      return;
-    } else if (n_ >= 11008 && n_ < 13824) {
-      HGEMM_COMMON_DISPATCH(_16x256_8x16x16_1_);  // 16, 256, 8, 16, 16, 1
-      return;
+    if (num_epilogues_ == 0) {
+      CHECK(alpha_ == 1.0f);
+      hgemm_common_policies[selected_policy_](
+          q, reinterpret_cast<sycl::half*>(c_->data.opaque()),
+          reinterpret_cast<sycl::half*>(a_->data.opaque()),
+          reinterpret_cast<sycl::half*>(b_->data.opaque()), m_, n_, k_);
+    } else if (num_epilogues_ == 1 && epilogue_types_[0] == RES_ADD) {
+      if (alpha_ == 1.0f) {
+        hgemm_res_policies[selected_policy_](
+            q, reinterpret_cast<sycl::half*>(c_->data.opaque()),
+            reinterpret_cast<sycl::half*>(a_->data.opaque()),
+            reinterpret_cast<sycl::half*>(b_->data.opaque()),
+            reinterpret_cast<sycl::half*>(epilogue_tensors_[0]), m_, n_, k_,
+            epilogue_params_[0]);
+      } else {
+        hgemm_addmm_policies[selected_policy_](
+            q, reinterpret_cast<sycl::half*>(c_->data.opaque()),
+            reinterpret_cast<sycl::half*>(epilogue_tensors_[0]),
+            reinterpret_cast<sycl::half*>(a_->data.opaque()),
+            reinterpret_cast<sycl::half*>(b_->data.opaque()), m_, n_, k_,
+            alpha_, epilogue_params_[0]);
+      }
+    } else if (num_epilogues_ == 2 && epilogue_types_[0] == RES_ADD &&
+               epilogue_types_[1] == RES_ADD) {
+      CHECK(alpha_ == 1.0f);
+      hgemm_res_res_policies[selected_policy_](
+          q, reinterpret_cast<sycl::half*>(c_->data.opaque()),
+          reinterpret_cast<sycl::half*>(a_->data.opaque()),
+          reinterpret_cast<sycl::half*>(b_->data.opaque()),
+          reinterpret_cast<sycl::half*>(epilogue_tensors_[0]),
+          reinterpret_cast<sycl::half*>(epilogue_tensors_[1]), m_, n_, k_,
+          epilogue_params_[0], epilogue_params_[1]);
+    } else if (num_epilogues_ == 1 && epilogue_types_[0] == BIAS) {
+      CHECK(alpha_ == 1.0f);
+      hgemm_bias_policies[selected_policy_](
+          q, reinterpret_cast<sycl::half*>(c_->data.opaque()),
+          reinterpret_cast<sycl::half*>(a_->data.opaque()),
+          reinterpret_cast<sycl::half*>(b_->data.opaque()),
+          reinterpret_cast<sycl::half*>(epilogue_tensors_[0]), m_, n_, k_,
+          epilogue_params_[0]);
+    } else if (num_epilogues_ == 2 && epilogue_types_[0] == BIAS &&
+               epilogue_types_[1] == SCALED_RES_ADD) {
+      CHECK(alpha_ == 1.0f);
+      hgemm_bias_res_policies[selected_policy_](
+          q, reinterpret_cast<sycl::half*>(c_->data.opaque()),
+          reinterpret_cast<sycl::half*>(a_->data.opaque()),
+          reinterpret_cast<sycl::half*>(b_->data.opaque()),
+          reinterpret_cast<sycl::half*>(epilogue_tensors_[0]),
+          reinterpret_cast<sycl::half*>(epilogue_tensors_[1]), m_, n_, k_,
+          epilogue_params_[0], epilogue_params_[1]);
+    } else if (num_epilogues_ == 3 && epilogue_types_[0] == BIAS &&
+               epilogue_types_[1] == RES_ADD && epilogue_types_[2] == RES_ADD) {
+      CHECK(alpha_ == 1.0f);
+      hgemm_bias_res_res_policies[selected_policy_](
+          q, reinterpret_cast<sycl::half*>(c_->data.opaque()),
+          reinterpret_cast<sycl::half*>(a_->data.opaque()),
+          reinterpret_cast<sycl::half*>(b_->data.opaque()),
+          reinterpret_cast<sycl::half*>(epilogue_tensors_[0]),
+          reinterpret_cast<sycl::half*>(epilogue_tensors_[1]),
+          reinterpret_cast<sycl::half*>(epilogue_tensors_[2]), m_, n_, k_,
+          epilogue_params_[0], epilogue_params_[1], epilogue_params_[2]);
+    } else if (num_epilogues_ == 2 && epilogue_types_[0] == BIAS &&
+               epilogue_types_[1] == GELU) {
+      CHECK(alpha_ == 1.0f);
+      hgemm_bias_gelu_policies[selected_policy_](
+          q, reinterpret_cast<sycl::half*>(c_->data.opaque()),
+          reinterpret_cast<sycl::half*>(a_->data.opaque()),
+          reinterpret_cast<sycl::half*>(b_->data.opaque()),
+          reinterpret_cast<sycl::half*>(epilogue_tensors_[0]), m_, n_, k_,
+          epilogue_params_[0]);
+    } else if (num_epilogues_ == 1 && epilogue_types_[0] == RES_MUL) {
+      CHECK(alpha_ == 1.0f);
+      hgemm_resmul_policies[selected_policy_](
+          q, reinterpret_cast<sycl::half*>(c_->data.opaque()),
+          reinterpret_cast<sycl::half*>(a_->data.opaque()),
+          reinterpret_cast<sycl::half*>(b_->data.opaque()),
+          reinterpret_cast<sycl::half*>(epilogue_tensors_[0]), m_, n_, k_);
+    } else if (num_epilogues_ == 1 && epilogue_types_[0] == SILU) {
+      CHECK(alpha_ == 1.0f);
+      hgemm_silu_policies[selected_policy_](
+          q, reinterpret_cast<sycl::half*>(c_->data.opaque()),
+          reinterpret_cast<sycl::half*>(a_->data.opaque()),
+          reinterpret_cast<sycl::half*>(b_->data.opaque()), m_, n_, k_);
     } else {
-      HGEMM_COMMON_DISPATCH(_8x512_8x16x16_1_);  // 8, 512, 8, 16, 16, 1
-      return;
+      LOG(ERROR) << "No mateched policy";
     }
   }
 };

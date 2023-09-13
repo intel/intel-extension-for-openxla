@@ -9,7 +9,8 @@ xetla_library(
     hdrs = [
         "XEGEMM.h",
         "gemm.h",
-        "hgemm_splitk.h",
+        "hgemm_impl.h",
+        "epilogue_impl.h",
     ],
     copts = [
         "-Wall",

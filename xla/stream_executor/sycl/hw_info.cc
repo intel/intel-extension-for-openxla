@@ -62,12 +62,6 @@ bool IsXeHPC(sycl::device* device_ptr) {
 }
 
 bool IsXetlaHardwareSupport() {
-// TODO: there is bug for __LIBSYCL_MINOR_VERSION == 2.
-// Remove once it is fixed
-#if __LIBSYCL_MINOR_VERSION == 1
   static bool flag = IsXeHPC(nullptr);
   return flag;
-#else
-  return false;
-#endif
 }

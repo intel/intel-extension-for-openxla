@@ -103,14 +103,14 @@ StatusOr<bool> RunXetlaGemm(se::gpu::GpuStreamHandle handle,
   void* c_data = const_cast<void*>(c.data.opaque());
   switch (epilogue) {
     case se::cuda::BlasLt::Epilogue::kDefault: {
-      auto policy = HGEMMXetla()
+      auto policy = HGEMM_XETLA()
                         .add_matrix_c(out)
                         .add_matrix_a(lhs)
                         .add_matrix_b(rhs)
                         .build();
       if (fabs(beta) - 0.0f > 1e-6) {
         if (fabs(beta) - 1.0f < 1e-6) {
-          policy.add_epilogue(c_data, HGEMMXetla::EpilogueType::RES_ADD)
+          policy.add_epilogue(c_data, HGEMM_XETLA::EpilogueType::RES_ADD)
               .build();
         } else {
           return true;
@@ -122,15 +122,16 @@ StatusOr<bool> RunXetlaGemm(se::gpu::GpuStreamHandle handle,
       return policy.fallback();
     }
     case se::cuda::BlasLt::Epilogue::kBias: {
-      auto policy = HGEMMXetla()
-                        .add_matrix_c(out)
-                        .add_matrix_a(lhs)
-                        .add_matrix_b(rhs)
-                        .add_epilogue(bias_data, HGEMMXetla::EpilogueType::BIAS)
-                        .build();
+      auto policy =
+          HGEMM_XETLA()
+              .add_matrix_c(out)
+              .add_matrix_a(lhs)
+              .add_matrix_b(rhs)
+              .add_epilogue(bias_data, HGEMM_XETLA::EpilogueType::BIAS)
+              .build();
       if (fabs(beta) - 0.0f > 1e-6) {
         policy
-            .add_epilogue(c_data, HGEMMXetla::EpilogueType::SCALED_RES_ADD,
+            .add_epilogue(c_data, HGEMM_XETLA::EpilogueType::SCALED_RES_ADD,
                           beta)
             .build();
       }
@@ -140,11 +141,11 @@ StatusOr<bool> RunXetlaGemm(se::gpu::GpuStreamHandle handle,
       return policy.fallback();
     }
     case se::cuda::BlasLt::Epilogue::kGELU: {
-      auto policy = HGEMMXetla()
+      auto policy = HGEMM_XETLA()
                         .add_matrix_c(out)
                         .add_matrix_a(lhs)
                         .add_matrix_b(rhs)
-                        .add_epilogue(nullptr, HGEMMXetla::EpilogueType::GELU)
+                        .add_epilogue(nullptr, HGEMM_XETLA::EpilogueType::GELU)
                         .build();
       if (policy.fallback() == false) {
         policy.run(handle);
@@ -152,13 +153,14 @@ StatusOr<bool> RunXetlaGemm(se::gpu::GpuStreamHandle handle,
       return policy.fallback();
     }
     case se::cuda::BlasLt::Epilogue::kBiasThenGELU: {
-      auto policy = HGEMMXetla()
-                        .add_matrix_c(out)
-                        .add_matrix_a(lhs)
-                        .add_matrix_b(rhs)
-                        .add_epilogue(bias_data, HGEMMXetla::EpilogueType::BIAS)
-                        .add_epilogue(nullptr, HGEMMXetla::EpilogueType::GELU)
-                        .build();
+      auto policy =
+          HGEMM_XETLA()
+              .add_matrix_c(out)
+              .add_matrix_a(lhs)
+              .add_matrix_b(rhs)
+              .add_epilogue(bias_data, HGEMM_XETLA::EpilogueType::BIAS)
+              .add_epilogue(nullptr, HGEMM_XETLA::EpilogueType::GELU)
+              .build();
       if (policy.fallback() == false) {
         policy.run(handle);
       }
@@ -254,7 +256,6 @@ Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
         RunXetlaGemm(stream_handle, lhs, rhs, c, output, bias, epilogue, beta));
     if (!fallback) return OkStatus();
   }
-
   auto params = CreateMatMulParams(batch_size, lhs, rhs, output);
 
   auto src_md = dnnl::memory::desc(params->a_dims, OneDnnType<Input>(),

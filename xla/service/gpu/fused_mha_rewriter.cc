@@ -116,7 +116,7 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
       m::Op(), m::Broadcast(OptionalConvert(OptionalConvert(
                    m::Op()
                        .WithPredicate(IsReduceMax)
-                       .WithOperand(0, OptionalConvert(OptionalBitcast(
+                       .WithOperand(0, OptionalBitcast(OptionalConvert(
                                            m::Op(softmax_input))))))));
   // The reduce-add part of the softmax
   auto unfused_softmax_sum_subpattern = m::Divide(
@@ -124,7 +124,7 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
       m::Broadcast(
           OptionalBitcast(OptionalConvert(OptionalBitcast(OptionalConvert(
               m::Op()
-                  .WithOperand(0, OptionalConvert(OptionalBitcast(
+                  .WithOperand(0, OptionalBitcast(OptionalConvert(
                                       m::Exp(unfused_softmax_max_subpattern))))
                   .WithPredicate(IsReduceSum)
                   .WithOneUse())))))
