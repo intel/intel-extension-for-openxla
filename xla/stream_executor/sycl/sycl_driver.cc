@@ -39,17 +39,20 @@ limitations under the License.
 #include "xla/stream_executor/platform/port.h"
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 
+#define RETURN_IF_SYCL_RES_ERROR(expr, ...)                            \
+  do {                                                                 \
+    SYCLError_t _res = (expr);                                         \
+    if (ABSL_PREDICT_FALSE(_res != SYCL_SUCCESS)) {                    \
+      return tsl::errors::Internal(__VA_ARGS__, ": ", ToString(_res)); \
+    }                                                                  \
+  } while (0)
+
 namespace stream_executor {
 namespace gpu {
 
 class GpuContext {
  public:
-  GpuContext(sycl::device* d) : device_(d) {
-    context_ = new sycl::context(*device_);
-  }
-  ~GpuContext() {
-    if (context_) delete context_;
-  }
+  GpuContext(sycl::device* d, sycl::context* c) : device_(d), context_(c) {}
 
   sycl::device* device() const { return device_; }
   sycl::context* context() const { return context_; }
@@ -66,7 +69,7 @@ class GpuContext {
 };
 
 /* static */ tsl::Status GpuDriver::GetDevice(int device_ordinal,
-                                              SYCLDevice** device) {
+                                              sycl::device** device) {
   auto res = SYCLGetDevice(device, device_ordinal);
   if (res == SYCL_SUCCESS) {
     return tsl::OkStatus();
@@ -77,11 +80,53 @@ class GpuContext {
       absl::StrCat("failed call to syclDeviceGet: ", ToString(res))};
 }
 
+/* static */ tsl::Status GpuDriver::GetDeviceName(sycl::device* device,
+                                                  std::string* device_name) {
+  *device_name = device->get_info<sycl::info::device::name>();
+  return ::tsl::OkStatus();
+}
+
 /* static */ tsl::Status GpuDriver::CreateContext(
-    int device_ordinal, SYCLDevice* device, const DeviceOptions& device_options,
-    GpuContext** context) {
-  *context = new GpuContext(device);
+    int device_ordinal, sycl::device* device,
+    const DeviceOptions& device_options, GpuContext** context) {
+  sycl::context* sycl_context;
+  SYCLGetContext(&sycl_context);
+  *context = new GpuContext(device, sycl_context);
   return tsl::OkStatus();
+}
+
+/* static */ void GpuDriver::DestroyContext(GpuContext* context) {
+  if (context == nullptr) {
+    return;
+  }
+  delete context;
+}
+
+/* static */ tsl::Status GpuDriver::LaunchKernel(
+    GpuContext* context, absl::string_view kernel_name, sycl::kernel* function,
+    unsigned int grid_dim_x, unsigned int grid_dim_y, unsigned int grid_dim_z,
+    unsigned int block_dim_x, unsigned int block_dim_y,
+    unsigned int block_dim_z, unsigned int shared_mem_bytes,
+    sycl::queue* stream, void** kernel_params, void** extra) {
+  VLOG(2) << "launching kernel: " << kernel_name << "; gdx: " << grid_dim_x
+          << " gdy: " << grid_dim_y << " gdz: " << grid_dim_z
+          << " bdx: " << block_dim_x << " bdy: " << block_dim_y
+          << " bdz: " << block_dim_z;
+  auto sycl_global_range =
+      sycl::range<3>(block_dim_z * grid_dim_z, block_dim_y * grid_dim_y,
+                     block_dim_x * grid_dim_x);
+  auto sycl_local_range = sycl::range<3>(block_dim_z, block_dim_y, block_dim_x);
+  sycl::nd_range<3> sycl_nd_range(
+      sycl::nd_range<3>(sycl_global_range, sycl_local_range));
+
+  stream->submit([&](auto& cgh) {
+    for (uint32_t i = 0; i < static_cast<size_t*>(extra[1])[0]; i++) {
+      cgh.set_arg(i, static_cast<void**>(extra[0])[i]);
+    }
+    cgh.parallel_for(sycl_nd_range, *function);
+  });
+
+  return ::tsl::OkStatus();
 }
 
 /* static */ tsl::Status GpuDriver::LoadPtx(GpuContext* context,
@@ -183,7 +228,67 @@ class GpuContext {
   *sycl_kernel = new sycl::kernel(kernel);
   return tsl::OkStatus();
 }
+
+/* static */ bool GpuDriver::GetModuleSymbol(GpuContext* context,
+                                             ze_module_handle_t module,
+                                             const char* symbol_name,
+                                             void** dptr, size_t* bytes) {
+  CHECK(module != nullptr && symbol_name != nullptr &&
+        (*dptr != nullptr || bytes != nullptr));
+  ze_result_t status =
+      zeModuleGetGlobalPointer(module, symbol_name, bytes, dptr);
+  if (status != ZE_RESULT_SUCCESS) {
+    // symbol may not be found in the current module, but it may reside in
+    // another module.
+    VLOG(2) << "failed to get symbol \"" << symbol_name
+            << "\" from module. L0 error: " << status;
+    return false;
+  }
+  return true;
+}
+
+/* static */ void GpuDriver::UnloadModule(GpuContext* context,
+                                          ze_module_handle_t module) {
+  if (module) L0_SAFE_CALL(zeModuleDestroy(module));
+}
+
 #undef L0_SAFE_CALL
+
+/* static */ tsl::Status GpuDriver::SynchronousMemsetUint8(GpuContext* context,
+                                                           void* location,
+                                                           uint8_t value,
+                                                           size_t size) {
+  RETURN_IF_SYCL_RES_ERROR(
+      SYCLMemsetD8(location, value, size, context->device()),
+      "Failed to memset memory");
+  return ::tsl::OkStatus();
+}
+
+/* static */ tsl::Status GpuDriver::SynchronousMemsetUint32(
+    GpuContext* context, void* location, uint32_t value, size_t uint32_count) {
+  RETURN_IF_SYCL_RES_ERROR(
+      SYCLMemsetD32(location, value, uint32_count, context->device()),
+      "Failed to memset memory");
+  return ::tsl::OkStatus();
+}
+
+/* static */ tsl::Status GpuDriver::AsynchronousMemsetUint8(
+    GpuContext* context, void* location, uint8_t value, size_t uint32_count,
+    sycl::queue* stream) {
+  RETURN_IF_SYCL_RES_ERROR(
+      SYCLMemsetD8Async(location, value, uint32_count, stream),
+      "Failed to enqueue async memset operation");
+  return ::tsl::OkStatus();
+}
+
+/* static */ tsl::Status GpuDriver::AsynchronousMemsetUint32(
+    GpuContext* context, void* location, uint32_t value, size_t uint32_count,
+    sycl::queue* stream) {
+  RETURN_IF_SYCL_RES_ERROR(
+      SYCLMemsetD32Async(location, value, uint32_count, stream),
+      "Failed to enqueue async memset operation");
+  return ::tsl::OkStatus();
+}
 
 /* static */ bool GpuDriver::CreateStream(GpuContext* context,
                                           sycl::queue** stream, int priority) {
@@ -196,7 +301,7 @@ class GpuContext {
   }
 
   if (res != SYCL_SUCCESS) {
-    LOG(ERROR) << "could not allocate CUDA stream for context "
+    LOG(ERROR) << "could not allocate SYCL stream for context "
                << context->context() << ": " << ToString(res);
     return false;
   }
@@ -214,7 +319,7 @@ class GpuContext {
   SYCLError_t res = SYCLDestroyStream(context->device(), *stream);
 
   if (res != SYCL_SUCCESS) {
-    LOG(ERROR) << "failed to destroy CUDA stream for context "
+    LOG(ERROR) << "failed to destroy SYCL stream for context "
                << context->context() << ": " << ToString(res);
   } else {
     VLOG(2) << "successfully destroyed stream " << *stream << " for context "
@@ -222,25 +327,14 @@ class GpuContext {
     *stream = nullptr;
   }
 }
-#if 0
+
 /* static */ void* GpuDriver::DeviceAllocate(GpuContext* context,
                                              uint64_t bytes) {
   if (bytes == 0) {
     return nullptr;
   }
 
-  ScopedActivateContext activated{context};
-  CUdeviceptr result = 0;
-  CUresult res = cuMemAlloc(&result, bytes);
-  if (res != CUDA_SUCCESS) {
-    // LOG(INFO) because this isn't always important to users (e.g. BFCAllocator
-    // implements a retry if the first allocation fails).
-    LOG(INFO) << "failed to allocate "
-              << tsl::strings::HumanReadableNumBytes(bytes) << " (" << bytes
-              << " bytes) from device: " << ToString(res);
-    return nullptr;
-  }
-  void* ptr = reinterpret_cast<void*>(result);
+  void* ptr = SYCLMalloc(context->device(), bytes);
   VLOG(2) << "allocated " << ptr << " for context " << context->context()
           << " of " << bytes << " bytes";
   return ptr;
@@ -248,18 +342,9 @@ class GpuContext {
 
 /* static */ void GpuDriver::DeviceDeallocate(GpuContext* context,
                                               void* location) {
-  ScopedActivateContext activation(context);
-  CUdeviceptr pointer = absl::bit_cast<CUdeviceptr>(location);
-  CUresult res = cuMemFree(pointer);
-  if (res != CUDA_SUCCESS) {
-    LOG(ERROR) << "failed to free device memory at " << location
-               << "; result: " << ToString(res);
-  } else {
-    VLOG(2) << "deallocated " << location << " for context "
-            << context->context();
-  }
+  SYCLFree(context->device(), location);
 }
-#endif
+
 /* static */ void* GpuDriver::UnifiedMemoryAllocate(GpuContext* context,
                                                     uint64_t bytes) {
   auto ptr = aligned_alloc_shared(64, bytes, *(context->device()),
@@ -274,8 +359,14 @@ class GpuContext {
 
 /* static */ void* GpuDriver::HostAllocate(GpuContext* context,
                                            uint64_t bytes) {
-  void* host_mem = aligned_alloc_host(64, bytes, *(context->context()));
-  return host_mem;
+  if (bytes == 0) {
+    return nullptr;
+  }
+
+  void* ptr = SYCLMallocHost(context->device(), bytes);
+  VLOG(2) << "allocated " << ptr << " for context " << context->context()
+          << " of " << bytes << " bytes";
+  return ptr;
 }
 
 /* static */ void GpuDriver::HostDeallocate(GpuContext* context,
@@ -285,7 +376,6 @@ class GpuContext {
 
 /* static */ int GpuDriver::GetGpuStreamPriority(
     GpuContext* context, stream_executor::StreamPriority stream_priority) {
-  // ScopedActivateContext activation(context);
   if (stream_priority == stream_executor::StreamPriority::Default) {
     return 0;
   }
@@ -295,7 +385,7 @@ class GpuContext {
 /* static */ tsl::Status GpuDriver::InitEvent(GpuContext* context,
                                               GpuEventHandle* event,
                                               EventFlags flags) {
-  *event = new SYCLEvent;
+  *event = new sycl::event;
   return tsl::OkStatus();
 }
 
@@ -319,8 +409,137 @@ class GpuContext {
   return tsl::OkStatus();
 }
 
+/* static */ bool GpuDriver::WaitStreamOnEvent(GpuContext* context,
+                                               sycl::queue* stream,
+                                               sycl::event* event) {
+  if (IsMultipleStreamEnabled()) {
+    const std::vector<sycl::event> event_list{*event};
+    stream->ext_oneapi_submit_barrier(event_list);
+  } else {
+    stream->wait();
+  }
+  return true;
+}
+
+/* static */ bool GpuDriver::SynchronizeContext(GpuContext* context) {
+  SYCLError_t res = SYCLCtxSynchronize(context->device());
+  if (res != SYCL_SUCCESS) {
+    LOG(ERROR) << "could not synchronize on SYCL context: " << ToString(res)
+               << " :: " << tsl::CurrentStackTrace();
+    return false;
+  }
+
+  return true;
+}
+
+/* static */ tsl::Status GpuDriver::SynchronizeStream(GpuContext* context,
+                                                      sycl::queue* stream) {
+  CHECK(stream != nullptr);
+  stream->wait();
+  return ::tsl::OkStatus();
+}
+
 /* static */ bool GpuDriver::IsStreamIdle(GpuContext* context,
                                           GpuStreamHandle stream) {
+  return true;
+}
+
+/* static */ tsl::Status GpuDriver::SynchronousMemcpyD2H(GpuContext* context,
+                                                         void* host_dst,
+                                                         void* gpu_src,
+                                                         uint64_t size) {
+  RETURN_IF_SYCL_RES_ERROR(
+      SYCLMemcpyDtoH(host_dst, gpu_src, size, context->device()),
+      absl::StrFormat("failed to synchronous memcpy from device to host "
+                      "host dst: %p; GPU src: %p; size: %u=0x%x",
+                      host_dst, absl::bit_cast<void*>(gpu_src), size, size));
+  VLOG(2) << "successfully sync memcpy'd d2h of " << size << " bytes to "
+          << host_dst;
+  return ::tsl::OkStatus();
+}
+
+/* static */ tsl::Status GpuDriver::SynchronousMemcpyH2D(GpuContext* context,
+                                                         void* gpu_dst,
+                                                         const void* host_src,
+                                                         uint64_t size) {
+  RETURN_IF_SYCL_RES_ERROR(
+      SYCLMemcpyDtoH(gpu_dst, host_src, size, context->device()),
+      absl::StrFormat(
+          "failed to synchronous memcpy from host to device: GPU dst: %p;"
+          " host src: %p; size: %u=0x%x",
+          absl::bit_cast<void*>(gpu_dst), host_src, size, size));
+  VLOG(2) << "successfully enqueued sync memcpy h2d of " << size << " bytes";
+  return ::tsl::OkStatus();
+}
+
+/* static */ tsl::Status GpuDriver::SynchronousMemcpyD2D(GpuContext* context,
+                                                         void* gpu_dst,
+                                                         void* gpu_src,
+                                                         uint64_t size) {
+  RETURN_IF_SYCL_RES_ERROR(
+      SYCLMemcpyDtoD(gpu_dst, gpu_src, size, context->device()),
+      absl::StrFormat(
+          "failed to synchronous memcpy from device to device: GPU dst: %p; "
+          "GPU src: %p; size: %u=0x%x",
+          absl::bit_cast<void*>(gpu_dst), absl::bit_cast<void*>(gpu_src), size,
+          size));
+  VLOG(2) << "successfully sync memcpy'd d2d of " << size << " bytes";
+  return ::tsl::OkStatus();
+}
+
+/* static */ bool GpuDriver::AsynchronousMemcpyD2H(GpuContext* context,
+                                                   void* host_dst,
+                                                   void* gpu_src, uint64_t size,
+                                                   sycl::queue* stream) {
+  SYCLError_t res = SYCLMemcpyDtoHAsync(host_dst, gpu_src, size, stream);
+  if (res != SYCL_SUCCESS) {
+    LOG(ERROR) << absl::StrFormat(
+        "failed to enqueue async memcpy from device to host: %s; host dst: %p; "
+        "GPU src: %p; size: %u=0x%x",
+        ToString(res), host_dst, absl::bit_cast<void*>(gpu_src), size, size);
+    return false;
+  }
+  VLOG(2) << "successfully enqueued async memcpy d2h of " << size
+          << " bytes from " << absl::bit_cast<void*>(gpu_src) << " to "
+          << host_dst << " on stream " << stream;
+  return true;
+}
+
+/* static */ bool GpuDriver::AsynchronousMemcpyH2D(GpuContext* context,
+                                                   void* gpu_dst,
+                                                   const void* host_src,
+                                                   uint64_t size,
+                                                   sycl::queue* stream) {
+  SYCLError_t res = SYCLMemcpyHtoDAsync(gpu_dst, host_src, size, stream);
+  if (res != SYCL_SUCCESS) {
+    LOG(ERROR) << absl::StrFormat(
+        "failed to enqueue async memcpy from host to device: %s; GPU dst: %p; "
+        "host src: %p; size: %u=0x%x",
+        ToString(res), absl::bit_cast<void*>(gpu_dst), host_src, size, size);
+    return false;
+  }
+  VLOG(2) << "successfully enqueued async memcpy h2d of " << size << " bytes"
+          << " from " << host_src << " to " << absl::bit_cast<void*>(gpu_dst)
+          << " on stream " << stream;
+  return true;
+}
+
+/* static */ bool GpuDriver::AsynchronousMemcpyD2D(GpuContext* context,
+                                                   void* gpu_dst, void* gpu_src,
+                                                   uint64_t size,
+                                                   sycl::queue* stream) {
+  SYCLError_t res = SYCLMemcpyDtoDAsync(gpu_dst, gpu_src, size, stream);
+  if (res != SYCL_SUCCESS) {
+    LOG(ERROR) << absl::StrFormat(
+        "failed to enqueue async memcpy from device to device: %s; GPU dst: "
+        "%p; "
+        "GPU src: %p; size: %u=0x%x",
+        ToString(res), absl::bit_cast<void*>(gpu_dst), gpu_src, size, size);
+    return false;
+  }
+  VLOG(2) << "successfully enqueued async memcpy d2d of " << size << " bytes"
+          << " from " << gpu_src << " to " << absl::bit_cast<void*>(gpu_dst)
+          << " on stream " << stream;
   return true;
 }
 
@@ -333,6 +552,51 @@ class GpuContext {
   }
 
   return device_count;
+}
+
+/* static */ tsl::StatusOr<int> GpuDriver::GetMultiprocessorCount(
+    sycl::device* device) {
+  return device->template get_info<
+             sycl::ext::intel::info::device::gpu_subslices_per_slice>() *
+         device
+             ->template get_info<sycl::ext::intel::info::device::gpu_slices>();
+}
+
+/* static */ tsl::StatusOr<int64_t> GpuDriver::GetMaxSharedMemoryPerCore(
+    sycl::device* device) {
+  return device->template get_info<sycl::info::device::local_mem_size>();
+}
+
+/* static */ tsl::StatusOr<int64_t> GpuDriver::GetMaxSharedMemoryPerBlock(
+    sycl::device* device) {
+  return device->template get_info<sycl::info::device::local_mem_size>();
+}
+
+/* static */ tsl::Status GpuDriver::GetGridLimits(int* x, int* y, int* z,
+                                                  sycl::device* device) {
+  BlockDim block_dim_limit;
+  *x = device->template get_info<
+      sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
+  *y = device->template get_info<
+      sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
+  *z = device->template get_info<
+      sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
+  return tsl::OkStatus();
+}
+
+/* static */ bool GpuDriver::GetDeviceMemoryInfo(GpuContext* context,
+                                                 int64_t* free_out,
+                                                 int64_t* total_out) {
+  *free_out = -1;
+  *total_out = context->device()
+                   ->template get_info<sycl::info::device::global_mem_size>();
+  return true;
+}
+
+/* static */ bool GpuDriver::GetDeviceTotalMemory(sycl::device* device,
+                                                  uint64_t* result) {
+  *result = device->get_info<sycl::info::device::global_mem_size>();
+  return true;
 }
 
 }  // namespace gpu

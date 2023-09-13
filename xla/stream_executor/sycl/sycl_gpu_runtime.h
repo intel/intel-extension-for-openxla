@@ -39,12 +39,6 @@ enum SYCLError_t {
   SYCL_ERROR_DESTROY_DEFAULT_STREAM,
 };
 
-typedef int DeviceOrdinal;
-
-using SYCLDevice = sycl::device;
-using SYCLStream = sycl::queue;
-using SYCLEvent = sycl::event;
-
 inline bool IsMultipleStreamEnabled() {
   bool is_multiple_stream_enabled = false;
   const char* env = std::getenv("ITEX_ENABLE_MULTIPLE_STREAM");
@@ -64,71 +58,57 @@ inline bool IsMultipleStreamEnabled() {
 
 const char* ToString(SYCLError_t error);
 
+SYCLError_t SYCLGetContext(sycl::context** context);
+
 SYCLError_t SYCLGetDeviceCount(int* count);
 
-SYCLError_t SYCLGetDevice(SYCLDevice** device, int device_ordinal);
+SYCLError_t SYCLGetDevice(sycl::device** device, int device_ordinal);
 
-SYCLError_t SYCLGetDeviceOrdinal(const SYCLDevice& device,
-                                 DeviceOrdinal* device_ordinal);
+SYCLError_t SYCLCreateStream(sycl::device* device_handle, sycl::queue** stream);
 
-SYCLError_t SYCLGetCurrentDeviceOrdinal(DeviceOrdinal* ordinal);
+SYCLError_t SYCLGetDefaultStream(sycl::device* device_handle,
+                                 sycl::queue** stream);
 
-SYCLError_t SYCLSetCurrentDeviceOrdinal(DeviceOrdinal ordinal);
+SYCLError_t SYCLDestroyStream(sycl::device* device_handle, sycl::queue* stream);
 
-SYCLError_t SYCLCreateStream(SYCLDevice* device_handle, SYCLStream** stream);
+SYCLError_t SYCLGetStreamPool(sycl::device* device_handle,
+                              std::vector<sycl::queue*>* streams);
 
-SYCLError_t SYCLGetDefaultStream(SYCLDevice* device_handle,
-                                 SYCLStream** stream);
-
-SYCLError_t SYCLDestroyStream(SYCLDevice* device_handle, SYCLStream* stream);
-
-SYCLError_t SYCLGetStreamPool(SYCLDevice* device_handle,
-                              std::vector<SYCLStream*>* streams);
-
-SYCLError_t SYCLCreateEvent(SYCLDevice* device_handle, SYCLEvent* event);
-SYCLError_t SYCLDestroyEvent(SYCLDevice* device_handle, SYCLEvent event);
-
-SYCLError_t SYCLStreamWaitEvent(SYCLStream* stream, SYCLEvent event);
-
-SYCLError_t SYCLStreamWaitStream(SYCLStream* dependent, SYCLStream* other);
-
-SYCLError_t SYCLCtxSynchronize(SYCLDevice* device_handle);
-
-SYCLError_t SYCLStreamSynchronize(SYCLStream* stream);
+SYCLError_t SYCLCtxSynchronize(sycl::device* device_handle);
 
 SYCLError_t SYCLMemcpyDtoH(void* dstHost, const void* srcDevice,
-                           size_t ByteCount, SYCLDevice* device);
+                           size_t ByteCount, sycl::device* device);
 
 SYCLError_t SYCLMemcpyHtoD(void* dstDevice, const void* srcHost,
-                           size_t ByteCount, SYCLDevice* device);
+                           size_t ByteCount, sycl::device* device);
 
 SYCLError_t SYCLMemcpyDtoD(void* dstDevice, const void* srcDevice,
-                           size_t ByteCount, SYCLDevice* device);
+                           size_t ByteCount, sycl::device* device);
 
 SYCLError_t SYCLMemcpyDtoHAsync(void* dstHost, const void* srcDevice,
-                                size_t ByteCount, SYCLStream* stream);
+                                size_t ByteCount, sycl::queue* stream);
 
 SYCLError_t SYCLMemcpyHtoDAsync(void* dstDevice, const void* srcHost,
-                                size_t ByteCount, SYCLStream* stream);
+                                size_t ByteCount, sycl::queue* stream);
 
 SYCLError_t SYCLMemcpyDtoDAsync(void* dstDevice, const void* srcDevice,
-                                size_t ByteCount, SYCLStream* stream);
+                                size_t ByteCount, sycl::queue* stream);
 
 SYCLError_t SYCLMemsetD8(void* dstDevice, unsigned char uc, size_t N,
-                         SYCLDevice* device);
+                         sycl::device* device);
 
 SYCLError_t SYCLMemsetD8Async(void* dstDevice, unsigned char uc, size_t N,
-                              SYCLStream* stream);
+                              sycl::queue* stream);
 
 SYCLError_t SYCLMemsetD32(void* dstDevice, unsigned int ui, size_t N,
-                          SYCLDevice* device);
+                          sycl::device* device);
 
 SYCLError_t SYCLMemsetD32Async(void* dstDevice, unsigned int ui, size_t N,
-                               SYCLStream* stream);
+                               sycl::queue* stream);
 
-void* SYCLMalloc(SYCLDevice* device, size_t ByteCount);
+void* SYCLMalloc(sycl::device* device, size_t ByteCount);
 
-void* SYCLMallocHost(size_t ByteCount);
+void* SYCLMallocHost(sycl::device* device, size_t ByteCount);
 
-void SYCLFree(SYCLDevice* device, void* ptr);
+void SYCLFree(sycl::device* device, void* ptr);
 #endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_GPU_RUNTIME_H_

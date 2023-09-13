@@ -26,21 +26,13 @@ limitations under the License.
 
 namespace {
 
-// ITEX_TILE_AS_DEVICE
+// SYCL_TILE_AS_DEVICE
 //   True (default behaviour): Tile as an individual device in device list
 //   False: Only root device as an individual device in device list
 inline bool TileAsDevice() {
   bool tile_as_device;
-  if (std::getenv(std::string("ITEX_ENABLE_TILE_AS_DEVICE").c_str()) &&
-      !std::getenv(std::string("ITEX_TILE_AS_DEVICE").c_str())) {
-    TF_CHECK_OK(tsl::ReadBoolFromEnvVar("ITEX_ENABLE_TILE_AS_DEVICE", true,
-                                        &tile_as_device));
-    LOG(WARNING) << "`ITEX_ENABLE_TILE_AS_DEVICE` will be deprecated, "
-                    "please use `ITEX_TILE_AS_DEVICE` instead.";
-  } else {
-    TF_CHECK_OK(
-        tsl::ReadBoolFromEnvVar("ITEX_TILE_AS_DEVICE", true, &tile_as_device));
-  }
+  TF_CHECK_OK(
+      tsl::ReadBoolFromEnvVar("SYCL_TILE_AS_DEVICE", true, &tile_as_device));
   return tile_as_device;
 }
 
@@ -72,7 +64,7 @@ bool hasDevice() {
   return true;
 }
 
-bool isValidDevice(DeviceOrdinal ordinal) {
+bool isValidDevice(int ordinal) {
   int count = 0;
   SYCLGetDeviceCount(&count);
 
@@ -97,7 +89,7 @@ class DevicePool {
     return SYCL_SUCCESS;
   }
 
-  static SYCLError_t getDevice(SYCLDevice** device, int device_ordinal) {
+  static SYCLError_t getDevice(sycl::device** device, int device_ordinal) {
     // absl::ReaderMutexLock lock(&mu_);
     if (device_ordinal >= DevicePool::GetDevicesPool().size()) {
       return SYCL_ERROR_INVALID_DEVICE;
@@ -107,8 +99,7 @@ class DevicePool {
     }
   }
 
-  SYCLError_t getDeviceOrdinal(const SYCLDevice& device,
-                               DeviceOrdinal* device_ordinal) {
+  SYCLError_t getint(const sycl::device& device, int* device_ordinal) {
     const auto& devices = DevicePool::GetDevicesPool();
     auto it = std::find(devices.begin(), devices.end(), device);
     if (it != devices.end()) {
@@ -119,19 +110,15 @@ class DevicePool {
     }
   }
 
-  SYCLError_t setCurrentDeviceOrdinal(DeviceOrdinal ordinal);
-
-  SYCLError_t getCurrentDeviceOrdinal(DeviceOrdinal* ordinal);
-
   static DevicePool* GetInstance();
 
  private:
-  static std::vector<SYCLDevice>& GetDevicesPool() {
+  static std::vector<sycl::device>& GetDevicesPool() {
     static std::once_flag init_device_flag;
-    static std::vector<SYCLDevice> devices;
+    static std::vector<sycl::device> devices;
 
     std::call_once(init_device_flag, []() {
-      std::vector<SYCLDevice> root_devices;
+      std::vector<sycl::device> root_devices;
       // Get root device list from platform list.
       auto platform_list = sycl::platform::get_platforms();
       for (const auto& platform : platform_list) {
@@ -154,7 +141,7 @@ class DevicePool {
       }
 
       if (TileAsDevice()) {
-        // If ITEX_TILE_AS_DEVICE is true.
+        // If SYCL_TILE_AS_DEVICE is true.
         // Create sub devices from root devices:
         //   If succ, add sub devices into devices list
         //   If fail, add root devices into devices list
@@ -163,7 +150,7 @@ class DevicePool {
         constexpr auto next_partitionable =
             sycl::info::partition_affinity_domain::next_partitionable;
         for (const auto& root_device : root_devices) {
-          std::vector<SYCLDevice> sub_devices;
+          std::vector<sycl::device> sub_devices;
           auto max_sub_devices =
               root_device
                   .get_info<sycl::info::device::partition_max_sub_devices>();
@@ -179,7 +166,7 @@ class DevicePool {
           }
         }
       } else {
-        // If ITEX_TILE_AS_DEVICE is false.
+        // If SYCL_TILE_AS_DEVICE is false.
         // Only set root device as device list.
         devices = std::move(root_devices);
       }
@@ -195,7 +182,7 @@ class DevicePool {
     return devices;
   }
 
-  DeviceOrdinal current_ordinal_;
+  int current_ordinal_;
   static absl::Mutex mu_;
   static DevicePool* instance_;
 };
@@ -210,33 +197,6 @@ DevicePool* DevicePool::GetInstance() {
   }
 
   return instance_;
-}
-
-SYCLError_t DevicePool::setCurrentDeviceOrdinal(DeviceOrdinal ordinal) {
-  absl::MutexLock lock(&mu_);
-
-  if (!hasDevice()) {
-    return SYCL_ERROR_NO_DEVICE;
-  }
-
-  if (!isValidDevice(ordinal)) {
-    return SYCL_ERROR_INVALID_DEVICE;
-  }
-
-  current_ordinal_ = ordinal;
-
-  return SYCL_SUCCESS;
-}
-
-SYCLError_t DevicePool::getCurrentDeviceOrdinal(DeviceOrdinal* ordinal) {
-  absl::MutexLock lock(&mu_);
-
-  if (!hasDevice()) {
-    return SYCL_ERROR_NO_DEVICE;
-  }
-
-  *ordinal = current_ordinal_;
-  return SYCL_SUCCESS;
 }
 }  // namespace
 
@@ -254,18 +214,18 @@ static sycl::async_handler SYCLAsyncHandler = [](sycl::exception_list eL) {
 
 class StreamPool {
  public:
-  static SYCLError_t getDefaultStream(SYCLDevice* device_handle,
-                                      SYCLStream** stream_p) {
+  static SYCLError_t getDefaultStream(sycl::device* device_handle,
+                                      sycl::queue** stream_p) {
     *stream_p = StreamPool::GetStreamsPool(device_handle)[0].get();
     return SYCL_SUCCESS;
   }
 
-  static SYCLError_t createStream(SYCLDevice* device_handle,
-                                  SYCLStream** stream_p) {
+  static SYCLError_t createStream(sycl::device* device_handle,
+                                  sycl::queue** stream_p) {
     if (IsMultipleStreamEnabled()) {
       sycl::property_list propList{sycl::property::queue::in_order()};
       StreamPool::GetStreamsPool(device_handle)
-          .push_back(std::make_shared<SYCLStream>(
+          .push_back(std::make_shared<sycl::queue>(
               DevicePool::getDeviceContext(), *device_handle, SYCLAsyncHandler,
               propList));
     }
@@ -273,20 +233,15 @@ class StreamPool {
     return SYCL_SUCCESS;
   }
 
-  static SYCLError_t syncStream(SYCLStream* stream) {
-    stream->wait();
-    return SYCL_SUCCESS;
-  }
-
-  static SYCLError_t syncContext(SYCLDevice* device_handle) {
+  static SYCLError_t syncContext(sycl::device* device_handle) {
     for (auto stream : StreamPool::GetStreamsPool(device_handle)) {
       stream->wait();
     }
     return SYCL_SUCCESS;
   }
 
-  static SYCLError_t destroyStream(SYCLDevice* device_handle,
-                                   SYCLStream* stream_handle) {
+  static SYCLError_t destroyStream(sycl::device* device_handle,
+                                   sycl::queue* stream_handle) {
     if (stream_handle == nullptr) return SYCL_ERROR_INVALID_STREAM;
     auto stream_pool = StreamPool::GetStreamsPool(device_handle);
     for (int i = 0; i < stream_pool.size(); i++) {
@@ -298,8 +253,8 @@ class StreamPool {
     return SYCL_ERROR_INVALID_STREAM;
   }
 
-  static SYCLError_t getStreams(SYCLDevice* device_handle,
-                                std::vector<SYCLStream*>* streams) {
+  static SYCLError_t getStreams(sycl::device* device_handle,
+                                std::vector<sycl::queue*>* streams) {
     auto stream_pool = StreamPool::GetStreamsPool(device_handle);
     for (int i = 0; i < stream_pool.size(); i++) {
       streams->push_back(stream_pool[i].get());
@@ -308,102 +263,57 @@ class StreamPool {
   }
 
  private:
-  static std::vector<std::shared_ptr<SYCLStream>>& GetStreamsPool(
-      SYCLDevice* device_handle) {
-    static std::unordered_map<SYCLDevice*,
-                              std::vector<std::shared_ptr<SYCLStream>>>
+  static std::vector<std::shared_ptr<sycl::queue>>& GetStreamsPool(
+      sycl::device* device_handle) {
+    static std::unordered_map<sycl::device*,
+                              std::vector<std::shared_ptr<sycl::queue>>>
         stream_pool_map;
     auto iter = stream_pool_map.find(device_handle);
     if (iter != stream_pool_map.end()) return iter->second;
     sycl::property_list propList{sycl::property::queue::in_order()};
-    std::vector<std::shared_ptr<SYCLStream>> stream_pool = {
-        std::make_shared<SYCLStream>(DevicePool::getDeviceContext(),
-                                     *device_handle, SYCLAsyncHandler,
-                                     propList)};
+    std::vector<std::shared_ptr<sycl::queue>> stream_pool = {
+        std::make_shared<sycl::queue>(DevicePool::getDeviceContext(),
+                                      *device_handle, SYCLAsyncHandler,
+                                      propList)};
     stream_pool_map.insert(std::make_pair(device_handle, stream_pool));
     return stream_pool_map[device_handle];
   }
 };
 
+SYCLError_t SYCLGetContext(sycl::context** context) {
+  *context = &DevicePool::getDeviceContext();
+}
+
 SYCLError_t SYCLGetDeviceCount(int* count) {
   return DevicePool::getDeviceCount(count);
 }
 
-SYCLError_t SYCLGetDevice(SYCLDevice** device, int device_ordinal) {
+SYCLError_t SYCLGetDevice(sycl::device** device, int device_ordinal) {
   return DevicePool::getDevice(device, device_ordinal);
 }
 
-SYCLError_t SYCLGetCurrentDeviceOrdinal(DeviceOrdinal* ordinal) {
-  return DevicePool::GetInstance()->getCurrentDeviceOrdinal(ordinal);
-}
-
-SYCLError_t SYCLGetDeviceOrdinal(const SYCLDevice& device,
-                                 DeviceOrdinal* device_ordinal) {
-  return DevicePool::GetInstance()->getDeviceOrdinal(device, device_ordinal);
-}
-
-SYCLError_t SYCLSetCurrentDeviceOrdinal(DeviceOrdinal ordinal) {
-  return DevicePool::GetInstance()->setCurrentDeviceOrdinal(ordinal);
-}
-
-SYCLError_t SYCLCreateStream(SYCLDevice* device_handle, SYCLStream** stream_p) {
+SYCLError_t SYCLCreateStream(sycl::device* device_handle,
+                             sycl::queue** stream_p) {
   return StreamPool::createStream(device_handle, stream_p);
 }
 
-SYCLError_t SYCLGetDefaultStream(SYCLDevice* device_handle,
-                                 SYCLStream** stream) {
+SYCLError_t SYCLGetDefaultStream(sycl::device* device_handle,
+                                 sycl::queue** stream) {
   return StreamPool::getDefaultStream(device_handle, stream);
 }
 
-SYCLError_t SYCLDestroyStream(SYCLDevice* device_handle,
-                              SYCLStream* stream_handle) {
+SYCLError_t SYCLDestroyStream(sycl::device* device_handle,
+                              sycl::queue* stream_handle) {
   return StreamPool::destroyStream(device_handle, stream_handle);
 }
 
-SYCLError_t SYCLGetStreamPool(SYCLDevice* device_handle,
-                              std::vector<SYCLStream*>* streams) {
+SYCLError_t SYCLGetStreamPool(sycl::device* device_handle,
+                              std::vector<sycl::queue*>* streams) {
   return StreamPool::getStreams(device_handle, streams);
 }
 
-SYCLError_t SYCLCreateEvent(SYCLDevice* device_handle,
-                            SYCLEvent* event_handle) {
-  *event_handle = sycl::event();
-  return SYCL_SUCCESS;
-}
-
-SYCLError_t SYCLDestroyEvent(SYCLDevice* device_handle,
-                             SYCLEvent event_handle) {
-  return SYCL_SUCCESS;
-}
-
-SYCLError_t SYCLStreamWaitEvent(SYCLStream* stream, SYCLEvent event) {
-  if (IsMultipleStreamEnabled()) {
-    const std::vector<SYCLEvent> event_list{event};
-    stream->ext_oneapi_submit_barrier(event_list);
-  } else {
-    stream->wait();
-  }
-  return SYCL_SUCCESS;
-}
-
-SYCLError_t SYCLStreamWaitStream(SYCLStream* dependent, SYCLStream* other) {
-  if (IsMultipleStreamEnabled()) {
-    SYCLEvent event = other->ext_oneapi_submit_barrier();
-    const std::vector<SYCLEvent> event_list{event};
-    dependent->ext_oneapi_submit_barrier(event_list);
-  } else {
-    dependent->wait();
-    other->wait();
-  }
-  return SYCL_SUCCESS;
-}
-
-SYCLError_t SYCLCtxSynchronize(SYCLDevice* device_handle) {
+SYCLError_t SYCLCtxSynchronize(sycl::device* device_handle) {
   return StreamPool::syncContext(device_handle);
-}
-
-SYCLError_t SYCLStreamSynchronize(SYCLStream* stream_handle) {
-  return StreamPool::syncStream(stream_handle);
 }
 
 /************************* SYCL memory management
@@ -411,7 +321,7 @@ SYCLError_t SYCLStreamSynchronize(SYCLStream* stream_handle) {
 
 static void memcpyHostToDevice(void* dstDevice, const void* srcHost,
                                size_t ByteCount, bool async,
-                               SYCLStream* stream) {
+                               sycl::queue* stream) {
   if (ByteCount == 0) return;
 
   auto event = stream->memcpy(dstDevice, srcHost, ByteCount);
@@ -422,7 +332,7 @@ static void memcpyHostToDevice(void* dstDevice, const void* srcHost,
 
 static void memcpyDeviceToHost(void* dstHost, const void* srcDevice,
                                size_t ByteCount, bool async,
-                               SYCLStream* stream) {
+                               sycl::queue* stream) {
   if (ByteCount == 0) return;
 
   auto event = stream->memcpy(dstHost, srcDevice, ByteCount);
@@ -434,7 +344,7 @@ static void memcpyDeviceToHost(void* dstHost, const void* srcDevice,
 
 static void memcpyDeviceToDevice(void* dstDevice, const void* srcDevice,
                                  size_t ByteCount, bool async,
-                                 SYCLStream* stream) {
+                                 sycl::queue* stream) {
   if (ByteCount == 0) return;
 
   auto event = stream->memcpy(dstDevice, srcDevice, ByteCount);
@@ -445,7 +355,7 @@ static void memcpyDeviceToDevice(void* dstDevice, const void* srcDevice,
 }
 
 static void memsetDeviceD8(void* dstDevice, unsigned char value, size_t n,
-                           bool async, SYCLStream* stream) {
+                           bool async, sycl::queue* stream) {
   if (n == 0) return;
 
   auto event = stream->memset(dstDevice, value, n * sizeof(uint8_t));
@@ -456,7 +366,7 @@ static void memsetDeviceD8(void* dstDevice, unsigned char value, size_t n,
 
 struct MemsetD32;
 static void memsetDeviceD32(void* dstDevice, int value, size_t n, bool async,
-                            SYCLStream* stream) {
+                            sycl::queue* stream) {
   if (n == 0) return;
 
   auto group_size =
@@ -482,31 +392,31 @@ static void memsetDeviceD32(void* dstDevice, int value, size_t n, bool async,
 }
 
 SYCLError_t SYCLMemcpyDtoH(void* dstHost, const void* srcDevice,
-                           size_t ByteCount, SYCLDevice* device) {
-  SYCLStream* stream;
+                           size_t ByteCount, sycl::device* device) {
+  sycl::queue* stream;
   auto res = StreamPool::getDefaultStream(device, &stream);
   memcpyDeviceToHost(dstHost, srcDevice, ByteCount, false, stream);
   return res;
 }
 
 SYCLError_t SYCLMemcpyHtoD(void* dstDevice, const void* srcHost,
-                           size_t ByteCount, SYCLDevice* device) {
-  SYCLStream* stream;
+                           size_t ByteCount, sycl::device* device) {
+  sycl::queue* stream;
   auto res = StreamPool::getDefaultStream(device, &stream);
   memcpyHostToDevice(dstDevice, srcHost, ByteCount, false, stream);
   return res;
 }
 
 SYCLError_t SYCLMemcpyDtoD(void* dstDevice, const void* srcDevice,
-                           size_t ByteCount, SYCLDevice* device) {
-  SYCLStream* stream;
+                           size_t ByteCount, sycl::device* device) {
+  sycl::queue* stream;
   auto res = StreamPool::getDefaultStream(device, &stream);
   memcpyDeviceToDevice(dstDevice, srcDevice, ByteCount, false, stream);
   return res;
 }
 
 SYCLError_t SYCLMemcpyDtoHAsync(void* dstHost, const void* srcDevice,
-                                size_t ByteCount, SYCLStream* stream) {
+                                size_t ByteCount, sycl::queue* stream) {
   sycl::usm::alloc DstAllocType =
       get_pointer_type(dstHost, stream->get_context());
   memcpyDeviceToHost(dstHost, srcDevice, ByteCount,
@@ -515,7 +425,7 @@ SYCLError_t SYCLMemcpyDtoHAsync(void* dstHost, const void* srcDevice,
 }
 
 SYCLError_t SYCLMemcpyHtoDAsync(void* dstDevice, const void* srcHost,
-                                size_t ByteCount, SYCLStream* stream) {
+                                size_t ByteCount, sycl::queue* stream) {
   sycl::usm::alloc SrcAllocType =
       get_pointer_type(srcHost, stream->get_context());
   memcpyHostToDevice(dstDevice, srcHost, ByteCount,
@@ -524,54 +434,50 @@ SYCLError_t SYCLMemcpyHtoDAsync(void* dstDevice, const void* srcHost,
 }
 
 SYCLError_t SYCLMemcpyDtoDAsync(void* dstDevice, const void* srcDevice,
-                                size_t ByteCount, SYCLStream* stream) {
+                                size_t ByteCount, sycl::queue* stream) {
   memcpyDeviceToDevice(dstDevice, srcDevice, ByteCount, true, stream);
   return SYCL_SUCCESS;
 }
 
 SYCLError_t SYCLMemsetD8(void* dstDevice, unsigned char uc, size_t N,
-                         SYCLDevice* device) {
-  SYCLStream* stream;
+                         sycl::device* device) {
+  sycl::queue* stream;
   auto res = StreamPool::getDefaultStream(device, &stream);
   memsetDeviceD8(dstDevice, uc, N, false, stream);
   return res;
 }
 
 SYCLError_t SYCLMemsetD8Async(void* dstDevice, unsigned char uc, size_t N,
-                              SYCLStream* stream) {
+                              sycl::queue* stream) {
   memsetDeviceD8(dstDevice, uc, N, true, stream);
   return SYCL_SUCCESS;
 }
 
 SYCLError_t SYCLMemsetD32(void* dstDevice, unsigned int ui, size_t N,
-                          SYCLDevice* device) {
-  SYCLStream* stream;
+                          sycl::device* device) {
+  sycl::queue* stream;
   auto res = StreamPool::getDefaultStream(device, &stream);
   memsetDeviceD32(dstDevice, ui, N, false, stream);
   return res;
 }
 
 SYCLError_t SYCLMemsetD32Async(void* dstDevice, unsigned int ui, size_t N,
-                               SYCLStream* stream) {
+                               sycl::queue* stream) {
   memsetDeviceD32(dstDevice, ui, N, true, stream);
   return SYCL_SUCCESS;
 }
 
-void* SYCLMalloc(SYCLDevice* device, size_t ByteCount) {
-  SYCLStream* stream;
+void* SYCLMalloc(sycl::device* device, size_t ByteCount) {
+  sycl::queue* stream;
   StreamPool::getDefaultStream(device, &stream);
 
   // Always use default 0 stream to allocate mem
-  auto ptr = aligned_alloc_device(64, ByteCount, *stream);
+  auto ptr = aligned_alloc_device(/*alignment=*/64, ByteCount, *stream);
   return static_cast<void*>(ptr);
 }
 
-void* SYCLMallocHost(size_t ByteCount) {
-  SYCLStream* stream;
-  SYCLDevice* device;
-  DeviceOrdinal device_ordinal;
-  SYCLGetCurrentDeviceOrdinal(&device_ordinal);
-  SYCLGetDevice(&device, device_ordinal);
+void* SYCLMallocHost(sycl::device* device, size_t ByteCount) {
+  sycl::queue* stream;
   StreamPool::getDefaultStream(device, &stream);
 
   // Always use default 0 stream to allocate mem
@@ -579,8 +485,8 @@ void* SYCLMallocHost(size_t ByteCount) {
   return static_cast<void*>(ptr);
 }
 
-void SYCLFree(SYCLDevice* device, void* ptr) {
-  SYCLStream* stream;
+void SYCLFree(sycl::device* device, void* ptr) {
+  sycl::queue* stream;
   StreamPool::getDefaultStream(device, &stream);
 
   // Always use default 0 stream to free mem
