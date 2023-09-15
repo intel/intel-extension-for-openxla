@@ -425,45 +425,6 @@ index 50eddecea..fff26fb91 100644
  StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(const HloCustomCallInstruction* instr);
  
  std::string CudnnfMHAKindToString(CudnnfMHAKind kind);
-diff --git a/xla/service/gpu/elemental_ir_emitter.cc b/xla/service/gpu/elemental_ir_emitter.cc
-index f0709a7f1..ce93976fb 100644
---- a/xla/service/gpu/elemental_ir_emitter.cc
-+++ b/xla/service/gpu/elemental_ir_emitter.cc
-@@ -323,12 +323,13 @@ StatusOr<llvm::Value*> GpuElementalIrEmitter::EmitTanh(PrimitiveType prim_type,
-                 value->getType(), "tanh");
- }
- 
--StatusOr<llvm::Value*> GpuElementalIrEmitter::EmitComplexAbs(
--    PrimitiveType prim_type, llvm::Value* value) {
--  return EmitDeviceMathCall(TargetDeviceFunctionID::kHypot,
--                            {EmitExtractReal(value), EmitExtractImag(value)},
--                            {prim_type, prim_type}, prim_type);
--}
-+// TODO: hypot has accuracy issue on PVC. Fallback it.
-+// StatusOr<llvm::Value*> GpuElementalIrEmitter::EmitComplexAbs(
-+//     PrimitiveType prim_type, llvm::Value* value) {
-+//   return EmitDeviceMathCall(TargetDeviceFunctionID::kHypot,
-+//                             {EmitExtractReal(value), EmitExtractImag(value)},
-+//                             {prim_type, prim_type}, prim_type);
-+// }
- 
- llvm::Value* GpuElementalIrEmitter::EmitThreadId() {
-   llvm::Value* block_id = IntCast(
-diff --git a/xla/service/gpu/elemental_ir_emitter.h b/xla/service/gpu/elemental_ir_emitter.h
-index 12f5f03ac..d9e4a4170 100644
---- a/xla/service/gpu/elemental_ir_emitter.h
-+++ b/xla/service/gpu/elemental_ir_emitter.h
-@@ -93,8 +93,8 @@ class GpuElementalIrEmitter : public ElementalIrEmitter {
-   StatusOr<llvm::Value*> EmitTanh(PrimitiveType prim_type,
-                                   llvm::Value* value) override;
- 
--  StatusOr<llvm::Value*> EmitComplexAbs(PrimitiveType prim_type,
--                                        llvm::Value* value) override;
-+  // StatusOr<llvm::Value*> EmitComplexAbs(PrimitiveType prim_type,
-+  //                                       llvm::Value* value) override;
- 
-   StatusOr<std::vector<llvm::Value*>> EmitThreadLocalCall(
-       const HloComputation& callee, absl::Span<llvm::Value* const> parameters,
 diff --git a/xla/service/gpu/gpu_layout_assignment.cc b/xla/service/gpu/gpu_layout_assignment.cc
 index 590f5ff41..6dcb1939b 100644
 --- a/xla/service/gpu/gpu_layout_assignment.cc
