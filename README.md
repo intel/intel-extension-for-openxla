@@ -36,7 +36,7 @@ Verified Hardware Platforms:
   * Intel® Data Center GPU Flex Series
 * Ubuntu 22.04, Red Hat 8.6/8.8/9.2 (64-bit), SUSE Linux Enterprise Server(SLES) 15 SP4
   * Intel® Data Center GPU Max Series
-* Intel® oneAPI Base Toolkit 2023.1
+* Intel® oneAPI Base Toolkit 2023.2
 * Jax/Jaxlib 0.4.13
 * Python 3.9-3.11
 * pip 19.0 or later (requires manylinux2014 support)
@@ -57,12 +57,12 @@ Need to install components of Intel® oneAPI Base Toolkit:
 * Intel® oneAPI Threading Building Blocks (TBB), dependency of DPC++ Compiler.
 
 ```bash
-wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/7deeaac4-f605-4bcf-a81b-ea7531577c61/l_BaseKit_p_2023.1.0.46401_offline.sh
-sudo sh ./l_BaseKit_p_2023.1.0.46401_offline.sh
+wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/992857b9-624c-45de-9701-f6445d845359/l_BaseKit_p_2023.2.0.49397_offline.sh
+sudo sh ./l_BaseKit_p_2023.2.0.49397_offline.sh
 
 # Source OneAPI env
-source /opt/intel/oneapi/compiler/2023.1.0/env/vars.sh
-source /opt/intel/oneapi/mkl/2023.1.0/env/vars.sh
+source /opt/intel/oneapi/compiler/2023.2.0/env/vars.sh
+source /opt/intel/oneapi/mkl/2023.2.0/env/vars.sh
 source /opt/intel/oneapi/tbb/2021.9.0/env/vars.sh
 ```
 

@@ -30,10 +30,6 @@ For more T5-like models, please go to the official [T5 website](https://t5x.read
 gsutil -m cp -r "gs://t5-data/vocabs/cc_all.32000.100extra/sentencepiece.model" .
 ```
 
-### Mount checkpoint from internal disk (internal use)
-```
-sudo mount cboss-HP-EliteDesk-800-G1-TWR.sh.intel.com:/nfs2 /nfs2
-```
 ## Installation
 
 ```
