@@ -5593,13 +5593,13 @@ Status IrEmitterUnnested::EmitUnnestedReduction(
   // block_id_y instead of block_id_x simplifies the index calculation
   // for reduction code generation as the block_id_y is orthogonal to
   // the indices used within the reductions.
-  llvm::CallInst* raw_block_id_y_i64 = gpu::EmitCallToTargetIntrinsic(
+  llvm::Value* raw_block_id_y = gpu::EmitCallToTargetIntrinsic(
       gpu::TargetIntrinsicID::kBlockIdy, {}, {}, &b_);
-  // SYCL: Cast to int32 output.
-  llvm::Value* raw_block_id_y = b_.CreateIntCast(
-      raw_block_id_y_i64, b_.getInt32Ty(), /*isSigned=*/true, "raw_block_id_y");
   llvm_ir::AddRangeMetadata(0, instr_index_groups.size(),
                             llvm::cast<llvm::Instruction>(raw_block_id_y));
+  // SYCL: Cast to int32 output.
+  raw_block_id_y =
+      b_.CreateZExtOrTrunc(raw_block_id_y, b_.getInt32Ty(), "raw_block_id_y");
   for (int i = 0; i < instr_index_groups.size(); ++i) {
     TF_RETURN_IF_ERROR(ksl.IfWithStatus(
         StrCat("reduce-group-", i),
