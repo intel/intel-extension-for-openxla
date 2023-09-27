@@ -669,7 +669,7 @@ xpu_library(
     ],
 )
 
-xpu_library(
+cc_library(
     name = "ccl_collective_thunks",
     srcs = [
         "ccl_all_gather_thunk.cc",
@@ -724,7 +724,7 @@ xpu_library(
     ],
 )
 
-xpu_library(
+cc_library(
     name = "gpu_executable",
     srcs = [
         "conditional_thunk.cc",

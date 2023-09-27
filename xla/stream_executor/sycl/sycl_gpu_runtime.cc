@@ -364,27 +364,11 @@ static void memsetDeviceD8(void* dstDevice, unsigned char value, size_t n,
   }
 }
 
-struct MemsetD32;
 static void memsetDeviceD32(void* dstDevice, int value, size_t n, bool async,
                             sycl::queue* stream) {
   if (n == 0) return;
 
-  auto group_size =
-      (*stream)
-          .get_device()
-          .template get_info<sycl::info::device::max_work_group_size>();
-  auto num_workgroup = (n + group_size - 1) / group_size;
-  auto event = stream->submit([&](sycl::handler& cgh) {
-    int* ptr = reinterpret_cast<int*>(dstDevice);
-    cgh.parallel_for<MemsetD32>(
-        sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                          sycl::range<1>(group_size)),
-        [=](sycl::nd_item<1> item) {
-          const int index = item.get_global_linear_id();
-          if (index >= n) return;
-          ptr[index] = value;
-        });
-  });
+  auto event = stream->fill(dstDevice, value, n);
 
   if (!async) {
     event.wait();
