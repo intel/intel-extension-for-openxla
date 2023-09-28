@@ -30,9 +30,6 @@ limitations under the License.
 // #include <sycl/ext/oneapi/bfloat16.hpp>
 #include <sycl/half_type.hpp>
 
-using namespace gpu::xetla;
-using half = sycl::half;
-
 namespace xla {
 namespace gpu {
 
@@ -112,31 +109,38 @@ using se::DeviceMemoryBase;
   };
 }
 
+MatrixDescriptor GetMatrixDescriptor(const MatrixLayout& layout,
+                                     se::DeviceMemoryBase data) {
+  bool transpose = layout.order == MatrixLayout::Order::kColumnMajor;
+  return {
+      data,
+      transpose ? se::blas::Transpose::kTranspose
+                : se::blas::Transpose::kNoTranspose,
+      transpose ? layout.num_cols : layout.num_rows,
+      transpose ? layout.num_rows : layout.num_cols,
+      layout.batch_stride,
+      layout.leading_dim_stride,
+  };
+}
+
 template <typename ElementType, typename OutputType>
-Status RunGpuFQKVImpl(se::Stream* stream, se::DeviceMemoryBase in_buffer,
-                      se::DeviceMemoryBase wei_buffer,
-                      se::DeviceMemoryBase out1_buffer,
-                      se::DeviceMemoryBase out2_buffer,
-                      se::DeviceMemoryBase out3_buffer, const int64_t m,
+Status RunGpuFQKVImpl(se::Stream* stream, const MatrixDescriptor& in_buffer,
+                      const MatrixDescriptor& wei_buffer,
+                      const MatrixDescriptor& out1_buffer,
+                      const MatrixDescriptor& out2_buffer,
+                      const MatrixDescriptor& out3_buffer, const int64_t m,
                       const int64_t n, const int64_t k, bool is_b_row_major) {
   sycl::queue q = *se::gpu::AsGpuStreamValue(stream);
-  auto input_ptr = reinterpret_cast<ElementType*>(in_buffer.opaque());
-  auto weight_ptr = reinterpret_cast<ElementType*>(wei_buffer.opaque());
-  auto out1_ptr = reinterpret_cast<OutputType*>(out1_buffer.opaque());
-  auto out2_ptr = reinterpret_cast<OutputType*>(out2_buffer.opaque());
-  auto out3_ptr = reinterpret_cast<OutputType*>(out3_buffer.opaque());
-  int selected_policy;
-  selected_policy = hgemm_qkv_mapped_config(m, n, k, is_b_row_major);
-  if (selected_policy < 0) {
-    int m_real = (3 * (m + 127) / 128 * 128);
-    selected_policy = select_gemm_config(m_real, n, k, is_b_row_major, 64);
+  auto policy = ::gpu::xetla::XetlaQKVGemmKernel<ElementType>()
+                    .add_matrix_q_out(out1_buffer)
+                    .add_matrix_k_out(out2_buffer)
+                    .add_matrix_v_out(out3_buffer)
+                    .add_matrix_a(in_buffer)
+                    .add_matrix_b(wei_buffer)
+                    .build();
+  if (policy.fallback() == false) {
+    policy.run(&q);
   }
-  hgemm_qkv_policies[selected_policy](
-      q, reinterpret_cast<sycl::half*>(out1_ptr),
-      reinterpret_cast<sycl::half*>(out2_ptr),
-      reinterpret_cast<sycl::half*>(out3_ptr),
-      reinterpret_cast<sycl::half*>(input_ptr),
-      reinterpret_cast<sycl::half*>(weight_ptr), m, n, k);
   return OkStatus();
 }
 
@@ -176,9 +180,13 @@ Status RunGpuFQKV(const GpufQKVConfig& config, se::DeviceMemoryBase in_buffer,
   PrimitiveType input_primitive_type = in_layout.dtype;
   switch (input_primitive_type) {
     case F16:
-      return RunGpuFQKVImpl<half, half>(stream, in_buffer, wei_buffer,
-                                        out1_buffer, out2_buffer, out3_buffer,
-                                        m, n, k, is_b_row_major);
+      return RunGpuFQKVImpl<sycl::half, sycl::half>(
+          stream, GetMatrixDescriptor(in_layout, in_buffer),
+          GetMatrixDescriptor(wei_layout, wei_buffer),
+          GetMatrixDescriptor(out1_layout, out1_buffer),
+          GetMatrixDescriptor(out2_layout, out2_buffer),
+          GetMatrixDescriptor(out2_layout, out3_buffer), m, n, k,
+          is_b_row_major);
     default:
       return Unimplemented("Unimplemented fused QKV");
   }

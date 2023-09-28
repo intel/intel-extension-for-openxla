@@ -12,17 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-
-#pragma once
+#ifndef XLA_SERVICE_GPU_XETLA_EPILOGUE_IMPL_H_
+#define XLA_SERVICE_GPU_XETLA_EPILOGUE_IMPL_H_
 
 #include <sycl/sycl.hpp>
 #include <xetla.hpp>
-
-using namespace sycl;
-using namespace gpu::xetla;
-using namespace gpu::xetla::group;
-using namespace gpu::xetla::kernel;
-using namespace gpu::xetla::subgroup;
 
 namespace gpu {
 namespace xetla {
@@ -63,21 +57,21 @@ struct alpha_beta_op_t {
     static constexpr uint32_t tile_elems = matAcc_t::tile_elems;
     static constexpr uint32_t block_elems = matAcc_t::block_elems;
 
-    using mat_in_tile_desc_t = tile_desc_t<
+    using mat_in_tile_desc_t = subgroup::tile_desc_t<
         tile_size_x,
         tile_size_y,
         block_size_x,
         block_size_y,
         reg_layout::tiled>;
-    using mat_in_tile_t = tile_t<dtype_in, mat_in_tile_desc_t>;
-    using mat_in_payload_t = mem_payload_t<
+    using mat_in_tile_t = subgroup::tile_t<dtype_in, mat_in_tile_desc_t>;
+    using mat_in_payload_t = subgroup::mem_payload_t<
         dtype_in,
         mat_in_tile_desc_t,
-        msg_type_v<mat_in_tile_desc_t, mem_desc_in_t::space>,
+        subgroup::msg_type_v<mat_in_tile_desc_t, mem_desc_in_t::space>,
         mem_desc_in_t::layout,
         mem_desc_in_t::space,
         gpu_arch::Xe>;
-    using mat_in_tile_acc_t = tile_t<dtype_acc, mat_in_tile_desc_t>;
+    using mat_in_tile_acc_t = subgroup::tile_t<dtype_acc, mat_in_tile_desc_t>;
     mem_desc_in_t mem_desc_in(args.base, args.shape, coord);
     mat_in_tile_t mat_in;
     mat_in_payload_t mat_in_payload(mem_desc_in);
@@ -148,21 +142,21 @@ struct res_op_t {
     static constexpr uint32_t tile_elems = matAcc_t::tile_elems;
     static constexpr uint32_t block_elems = matAcc_t::block_elems;
 
-    using mat_in_tile_desc_t = tile_desc_t<
+    using mat_in_tile_desc_t = subgroup::tile_desc_t<
         tile_size_x,
         tile_size_y,
         block_size_x,
         block_size_y,
         reg_layout::tiled>;
-    using mat_in_tile_t = tile_t<dtype_in, mat_in_tile_desc_t>;
-    using mat_in_payload_t = mem_payload_t<
+    using mat_in_tile_t = subgroup::tile_t<dtype_in, mat_in_tile_desc_t>;
+    using mat_in_payload_t = subgroup::mem_payload_t<
         dtype_in,
         mat_in_tile_desc_t,
-        msg_type_v<mat_in_tile_desc_t, mem_desc_in_t::space>,
+        subgroup::msg_type_v<mat_in_tile_desc_t, mem_desc_in_t::space>,
         mem_desc_in_t::layout,
         mem_desc_in_t::space,
         gpu_arch::Xe>;
-    using mat_in_tile_acc_t = tile_t<dtype_acc, mat_in_tile_desc_t>;
+    using mat_in_tile_acc_t = subgroup::tile_t<dtype_acc, mat_in_tile_desc_t>;
     mem_desc_in_t mem_desc_in(args.base, args.shape, coord);
     mat_in_tile_t mat_in;
     mat_in_payload_t mat_in_payload(mem_desc_in);
@@ -234,12 +228,12 @@ struct bias_op_t {
     static constexpr uint32_t block_elems = matAcc_t::block_elems;
 
     using bias_tile_desc_t =
-        tile_desc_t<tile_size_x, 1, block_size_x, 1, reg_layout::tiled>;
-    using bias_t = tile_t<dtype_bias, bias_tile_desc_t>;
-    using bias_payload_t = mem_payload_t<
+        subgroup::tile_desc_t<tile_size_x, 1, block_size_x, 1, reg_layout::tiled>;
+    using bias_t = subgroup::tile_t<dtype_bias, bias_tile_desc_t>;
+    using bias_payload_t = subgroup::mem_payload_t<
         dtype_bias,
         bias_tile_desc_t,
-        msg_type_v<bias_tile_desc_t, mem_desc_bias_t::space>,
+        subgroup::msg_type_v<bias_tile_desc_t, mem_desc_bias_t::space>,
         mem_desc_bias_t::layout,
         mem_desc_bias_t::space,
         gpu_arch::Xe>;
@@ -261,10 +255,13 @@ struct bias_op_t {
 #pragma unroll
         for (int row_i = 0; row_i < block_size_y; row_i++) {
           auto src_reg =
-              args.x * bias.reg.xetla_select<block_size_x, 1>(j * block_size_x);
-          dst_reg.row(row_i) =
-              xetla_cvt<dtype_acc, dtype_bias, block_size_x>(src_reg) +
-              dst_reg.row(row_i);
+            xetla_cvt<dtype_acc, dtype_bias, block_size_x>(bias.reg.xetla_select<block_size_x, 1>(j * block_size_x));
+          dst_reg.row(row_i) = src_reg * args.x + dst_reg.row(row_i);
+          // auto src_reg =
+          //     static_cast<dtype_bias>(args.x) * bias.reg.xetla_select<block_size_x, 1>(j * block_size_x);
+          // dst_reg.row(row_i) =
+          //     xetla_cvt<dtype_acc, dtype_bias, block_size_x>(src_reg) +
+          //     dst_reg.row(row_i);
         }
       }
     }
@@ -312,3 +309,5 @@ struct silu_op_t {
 
 } // namespace xetla
 } // namespace xpu
+
+#endif  // XLA_SERVICE_GPU_XETLA_EPILOGUE_IMPL_H_

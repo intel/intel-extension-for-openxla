@@ -1,4 +1,6 @@
 load("//xla:xla.bzl", "xpu_library")
+load("//xla:xla.bzl", "xetla_library")
+load("//third_party/onednn:build_defs.bzl", "onednn_deps")
 
 package(
     default_visibility = [
@@ -615,7 +617,7 @@ cc_library(
     ],
 )
 
-cc_library(
+xetla_library(
     name = "onednn_matmul_utils",
     srcs = ["onednn_matmul_utils.cc"],
     hdrs = ["onednn_matmul_utils.h"],
@@ -629,6 +631,8 @@ cc_library(
         "@com_google_absl//absl/types:span",
         "@tsl//tsl/framework:numeric_types",
         "@tsl//tsl/platform:statusor",
+        "@tsl//tsl/platform:types",
+        "@xetla//:xetla_header",
         "@xla//xla:shape_util",
         "@xla//xla:status_macros",
         "@xla//xla:statusor",
@@ -642,7 +646,7 @@ cc_library(
         "@xla//xla/service/gpu:ir_emission_utils",
         "@xla//xla/service/gpu:matmul_utils",
         "@xla//xla/stream_executor:stream_executor_headers",
-    ],
+    ]+ onednn_deps(),
 )
 
 xpu_library(

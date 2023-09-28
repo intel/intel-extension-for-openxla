@@ -13,6 +13,5 @@ cc_library(
     deps = [
         "@tsl//tsl/platform:errors",
         "@tsl//tsl/platform:logging",
-        "@tsl//tsl/platform:types",
     ] + onednn_deps(),
 )

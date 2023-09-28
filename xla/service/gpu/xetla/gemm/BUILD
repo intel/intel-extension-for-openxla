@@ -7,7 +7,6 @@ xetla_library(
         "gemm.cc",
     ],
     hdrs = [
-        "XEGEMM.h",
         "gemm.h",
         "hgemm_impl.h",
         "epilogue_impl.h",
@@ -21,5 +20,6 @@ xetla_library(
         "//xla/service/gpu:matrix_descriptor",
         "//xla/stream_executor/sycl:sycl_executor",
         "@xetla//:xetla_header",
+        "@com_google_absl//absl/strings",
     ],
 )
