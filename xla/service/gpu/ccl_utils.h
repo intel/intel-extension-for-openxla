@@ -60,9 +60,31 @@ size_t GetNumLocalParticipants(
     const std::vector<GlobalDeviceId>& participants,
     const std::vector<GlobalDeviceId>* local_devices);  // may be null
 
-StatusOr<const NcclUniqueIdCallback*> GetNcclUniqueIdCallback(
-    const NcclUniqueIdCallback* unique_id_callback,  // may be null
-    bool is_local);
+class CclUniqueIdCallback {
+ public:
+  explicit CclUniqueIdCallback(const std::vector<ReplicaGroup>& replica_groups,
+                               const std::vector<GlobalDeviceId>& participants,
+                               GlobalDeviceId device_id) {
+    if (replica_groups.size() == 1) return;
+    auto it = std::find(participants.begin(), participants.end(), device_id);
+    CHECK(it != participants.end());
+
+    // Unique id is needed if has `replica_groups`. Choose the 1st device id in
+    // same participant as the unique id postfix.
+    replica_id_ = participants[0].value();
+  }
+
+  StatusOr<std::string> operator()(const std::string& run_id) {
+    if (replica_id_ == kMissingId_)
+      return run_id;
+    else
+      return run_id + "." + std::to_string(replica_id_);
+  }
+
+ private:
+  const int64_t kMissingId_ = -1;
+  int64_t replica_id_ = kMissingId_;
+};
 
 // Represents a type that requires mutually exclusive access.
 template <typename T>
@@ -102,11 +124,11 @@ struct CclComm : public Lockable<ccl::communicator*> {
   explicit CclComm(ccl::communicator* comm) : Lockable(comm) {}
 };
 
-StatusOr<CclComm::Lock> AcquireCclComm(
-    RunId run_id, OpId op_id, std::vector<GlobalDeviceId> participants,
-    size_t num_local_participants,
-    const NcclUniqueIdCallback& unique_id_callback, int rank,
-    int64_t stream_id);
+StatusOr<CclComm::Lock> AcquireCclComm(RunId run_id, OpId op_id,
+                                       std::vector<GlobalDeviceId> participants,
+                                       size_t num_local_participants,
+                                       CclUniqueIdCallback& unique_id_callback,
+                                       int rank, int64_t stream_id);
 
 }  // namespace gpu
 }  // namespace xla

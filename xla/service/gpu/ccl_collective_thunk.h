@@ -38,6 +38,10 @@ using ncclComm_t = ccl::communicator*;
 namespace xla {
 namespace gpu {
 
+// Current HW only have 16 ranks in single node at most.
+// TODO(intel): Extend it for new HW in future.
+#define MAX_RANK_SIZE 16
+
 class CclClique;
 
 struct CclCollectiveConfig {

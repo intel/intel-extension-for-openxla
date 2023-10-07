@@ -73,7 +73,7 @@ struct Manager {
       permute_collectives TF_GUARDED_BY(mu);
 };
 
-template <typename T, typename Func, int size>
+template <typename T, typename Func>
 struct AllReduceKernel;
 
 template <typename T, typename Func, typename AccT = T>
@@ -86,70 +86,29 @@ void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
           .template get_info<sycl::info::device::max_work_group_size>();
   auto num_workgroup = (tensor_size + group_size - 1) / group_size;
 
-  if (reduction_size == 2) {
+  if (reduction_size <= MAX_RANK_SIZE) {
     stream->submit([&](sycl::handler& cgh) {
-      auto in0_ptr = static_cast<const T*>(participants[0].send);
-      auto in1_ptr = static_cast<const T*>(participants[1].send);
-      auto out0_ptr = static_cast<T*>(participants[0].recv);
-      auto out1_ptr = static_cast<T*>(participants[1].recv);
+      const T* in_ptr[MAX_RANK_SIZE];
+      T* out_ptr[MAX_RANK_SIZE];
 
-      cgh.parallel_for<AllReduceKernel<T, Func, 2>>(
+      for (int i = 0; i < reduction_size; ++i) {
+        in_ptr[i] = static_cast<const T*>(participants[i].send);
+        out_ptr[i] = static_cast<T*>(participants[i].recv);
+      }
+
+      cgh.parallel_for<AllReduceKernel<T, Func>>(
           sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
                             sycl::range<1>(group_size)),
           [=](sycl::nd_item<1> item) {
             const int index = item.get_global_linear_id();
             if (index >= tensor_size) return;
-            out0_ptr[index] =
-                T(Func()(AccT(in0_ptr[index]), AccT(in1_ptr[index])));
-            out1_ptr[index] = out0_ptr[index];
-          });
-    });
-  } else if (reduction_size == 3) {
-    stream->submit([&](sycl::handler& cgh) {
-      auto in0_ptr = static_cast<const T*>(participants[0].send);
-      auto in1_ptr = static_cast<const T*>(participants[1].send);
-      auto in2_ptr = static_cast<const T*>(participants[2].send);
-      auto out0_ptr = static_cast<T*>(participants[0].recv);
-      auto out1_ptr = static_cast<T*>(participants[1].recv);
-      auto out2_ptr = static_cast<T*>(participants[2].recv);
 
-      cgh.parallel_for<AllReduceKernel<T, Func, 3>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-            out0_ptr[index] =
-                T(Func()(Func()(AccT(in0_ptr[index]), AccT(in1_ptr[index])),
-                         AccT(in2_ptr[index])));
-            out1_ptr[index] = out0_ptr[index];
-            out2_ptr[index] = out0_ptr[index];
-          });
-    });
-  } else if (reduction_size == 4) {
-    stream->submit([&](sycl::handler& cgh) {
-      auto in0_ptr = static_cast<const T*>(participants[0].send);
-      auto in1_ptr = static_cast<const T*>(participants[1].send);
-      auto in2_ptr = static_cast<const T*>(participants[2].send);
-      auto in3_ptr = static_cast<const T*>(participants[3].send);
-      auto out0_ptr = static_cast<T*>(participants[0].recv);
-      auto out1_ptr = static_cast<T*>(participants[1].recv);
-      auto out2_ptr = static_cast<T*>(participants[2].recv);
-      auto out3_ptr = static_cast<T*>(participants[3].recv);
-
-      cgh.parallel_for<AllReduceKernel<T, Func, 4>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-            out0_ptr[index] = T(Func()(
-                Func()(Func()(AccT(in0_ptr[index]), AccT(in1_ptr[index])),
-                       AccT(in2_ptr[index])),
-                AccT(in3_ptr[index])));
-            out1_ptr[index] = out0_ptr[index];
-            out2_ptr[index] = out0_ptr[index];
-            out3_ptr[index] = out0_ptr[index];
+            out_ptr[0][index] = in_ptr[0][index];
+            for (int i = 1; i < reduction_size; ++i)
+              out_ptr[0][index] =
+                  T(Func()(AccT(out_ptr[0][index]), AccT(in_ptr[i][index])));
+            for (int i = 1; i < reduction_size; ++i)
+              out_ptr[i][index] = out_ptr[0][index];
           });
     });
   } else {
@@ -158,51 +117,45 @@ void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
   }
 }
 
-template <typename T, int size>
+template <typename T>
 struct AllGatherKernel;
 
 template <typename T>
 void allgather_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
                      std::vector<Participant>& participants,
                      int reduction_size) {
-  auto group_size =
-      (*stream)
-          .get_device()
-          .template get_info<sycl::info::device::max_work_group_size>();
-  auto num_workgroup = (tensor_size + group_size - 1) / group_size;
+  if (reduction_size <= MAX_RANK_SIZE) {
+    const T* in_ptr[MAX_RANK_SIZE];
+    T* out_ptr[MAX_RANK_SIZE];
 
-  if (reduction_size == 2) {
-    stream->submit([&](sycl::handler& cgh) {
-      auto in0_ptr = static_cast<const T*>(participants[0].send);
-      auto in1_ptr = static_cast<const T*>(participants[1].send);
-      auto out0_ptr = static_cast<T*>(participants[0].recv);
-      auto out1_ptr = static_cast<T*>(participants[1].recv);
+    for (int i = 0; i < reduction_size; ++i) {
+      in_ptr[i] = static_cast<const T*>(participants[i].send);
+      out_ptr[i] = static_cast<T*>(participants[i].recv);
+    }
 
-      cgh.parallel_for<AllGatherKernel<T, 2>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-            out0_ptr[index] = in0_ptr[index];
-            out0_ptr[index + tensor_size] = in1_ptr[index];
-            out1_ptr[index] = in0_ptr[index];
-            out1_ptr[index + tensor_size] = in1_ptr[index];
-          });
-    });
+    for (int i = 0; i < reduction_size; ++i) {
+      stream->memcpy(out_ptr[0] + tensor_size * i, (const void*)in_ptr[i],
+                     tensor_size * sizeof(T));
+    }
+
+    for (int i = 1; i < reduction_size; ++i) {
+      stream->memcpy(out_ptr[i], (void*)out_ptr[0],
+                     reduction_size * tensor_size * sizeof(T));
+    }
   } else {
     LOG(FATAL) << "Reduction size " << reduction_size
                << " is not supported in AllGather.";
   }
 }
 
-template <typename T, int size>
+template <typename T>
 struct AllToAllKernel;
 
 template <typename T>
 void alltoall_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
                     std::vector<AlltoAllParticipant>& participants,
                     int reduction_size) {
+  const int kLimitedRankSize = MAX_RANK_SIZE / 2;
   auto group_size =
       (*stream)
           .get_device()
@@ -210,38 +163,41 @@ void alltoall_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
   auto num_workgroup = (tensor_size + group_size - 1) / group_size;
 
   // Process: send vec -> rev vec
-  // P0: (s0, s1) -> (s0, s2)
-  // p1: (s2, s3) -> (s1, s3)
-  if (reduction_size == 2) {
+  // P0: (a0, a1) -> (a0, b0)
+  // P1: (b0, b1) -> (a1, b1)
+  if (reduction_size <= kLimitedRankSize) {
     stream->submit([&](sycl::handler& cgh) {
-      auto s0_ptr = static_cast<const T*>(participants[0].send[0]);
-      auto s1_ptr = static_cast<const T*>(participants[0].send[1]);
-      auto s2_ptr = static_cast<const T*>(participants[1].send[0]);
-      auto s3_ptr = static_cast<const T*>(participants[1].send[1]);
-      auto r0_ptr = static_cast<T*>(participants[0].recv[0]);
-      auto r1_ptr = static_cast<T*>(participants[0].recv[1]);
-      auto r2_ptr = static_cast<T*>(participants[1].recv[0]);
-      auto r3_ptr = static_cast<T*>(participants[1].recv[1]);
+      const T* send[kLimitedRankSize][kLimitedRankSize];
+      T* recv[kLimitedRankSize][kLimitedRankSize];
 
-      cgh.parallel_for<AllToAllKernel<T, 2>>(
+      for (int i = 0; i < reduction_size; ++i) {
+        for (int j = 0; j < reduction_size; ++j) {
+          send[i][j] = static_cast<const T*>(participants[i].send[j]);
+          recv[i][j] = static_cast<T*>(participants[i].recv[j]);
+        }
+      }
+
+      cgh.parallel_for<AllToAllKernel<T>>(
           sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
                             sycl::range<1>(group_size)),
           [=](sycl::nd_item<1> item) {
             const int index = item.get_global_linear_id();
             if (index >= tensor_size) return;
-            r0_ptr[index] = s0_ptr[index];
-            r1_ptr[index] = s2_ptr[index];
-            r2_ptr[index] = s1_ptr[index];
-            r3_ptr[index] = s3_ptr[index];
+
+            for (int i = 0; i < reduction_size; ++i) {
+              for (int j = 0; j < reduction_size; ++j) {
+                recv[j][i][index] = send[i][j][index];
+              }
+            }
           });
     });
   } else {
     LOG(FATAL) << "Reduction size " << reduction_size
-               << " is not supported in AllGather.";
+               << " is not supported in AllToAll.";
   }
 }
 
-template <typename T, typename Func, int size>
+template <typename T, typename Func>
 struct ReduceScatterKernel;
 
 template <typename T, typename Func>
@@ -255,89 +211,35 @@ void reducescatter_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
   // tensor_size: output tensor size
   auto num_workgroup = (tensor_size + group_size - 1) / group_size;
 
-  if (reduction_size == 2) {
+  if (reduction_size == MAX_RANK_SIZE) {
     stream->submit([&](sycl::handler& cgh) {
-      auto in0_ptr = static_cast<const T*>(participants[0].send);
-      auto in1_ptr = static_cast<const T*>(participants[1].send);
-      auto out0_ptr = static_cast<T*>(participants[0].recv);
-      auto out1_ptr = static_cast<T*>(participants[1].recv);
+      const T* in[MAX_RANK_SIZE];
+      T* out[MAX_RANK_SIZE];
 
-      cgh.parallel_for<ReduceScatterKernel<T, Func, 2>>(
+      for (int i = 0; i < reduction_size; ++i) {
+        in[i] = static_cast<const T*>(participants[i].send);
+        out[i] = static_cast<T*>(participants[i].recv);
+      }
+
+      cgh.parallel_for<ReduceScatterKernel<T, Func>>(
           sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
                             sycl::range<1>(group_size)),
           [=](sycl::nd_item<1> item) {
             const int index = item.get_global_linear_id();
             if (index >= tensor_size) return;
-            out0_ptr[index] = Func()(in0_ptr[index], in1_ptr[index]);
-            out1_ptr[index] = Func()(in0_ptr[index + tensor_size],
-                                     in1_ptr[index + tensor_size]);
-          });
-    });
-  } else if (reduction_size == 3) {
-    stream->submit([&](sycl::handler& cgh) {
-      auto in0_ptr = static_cast<const T*>(participants[0].send);
-      auto in1_ptr = static_cast<const T*>(participants[1].send);
-      auto in2_ptr = static_cast<const T*>(participants[2].send);
-      auto out0_ptr = static_cast<T*>(participants[0].recv);
-      auto out1_ptr = static_cast<T*>(participants[1].recv);
-      auto out2_ptr = static_cast<T*>(participants[2].recv);
-
-      cgh.parallel_for<ReduceScatterKernel<T, Func, 3>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-            out0_ptr[index] =
-                Func()(Func()(in0_ptr[index], in1_ptr[index]), in2_ptr[index]);
-            out1_ptr[index] = Func()(Func()(in0_ptr[index + tensor_size],
-                                            in1_ptr[index + tensor_size]),
-                                     in2_ptr[index + tensor_size]);
-            out2_ptr[index] = Func()(Func()(in0_ptr[index + 2 * tensor_size],
-                                            in1_ptr[index + 2 * tensor_size]),
-                                     in2_ptr[index + 2 * tensor_size]);
-          });
-    });
-  } else if (reduction_size == 4) {
-    stream->submit([&](sycl::handler& cgh) {
-      auto in0_ptr = static_cast<const T*>(participants[0].send);
-      auto in1_ptr = static_cast<const T*>(participants[1].send);
-      auto in2_ptr = static_cast<const T*>(participants[2].send);
-      auto in3_ptr = static_cast<const T*>(participants[3].send);
-      auto out0_ptr = static_cast<T*>(participants[0].recv);
-      auto out1_ptr = static_cast<T*>(participants[1].recv);
-      auto out2_ptr = static_cast<T*>(participants[2].recv);
-      auto out3_ptr = static_cast<T*>(participants[3].recv);
-
-      cgh.parallel_for<ReduceScatterKernel<T, Func, 4>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-            out0_ptr[index] = Func()(
-                Func()(Func()(in0_ptr[index], in1_ptr[index]), in2_ptr[index]),
-                in3_ptr[index]);
-            out1_ptr[index] =
-                Func()(Func()(Func()(in0_ptr[index + tensor_size],
-                                     in1_ptr[index + tensor_size]),
-                              in2_ptr[index + tensor_size]),
-                       in3_ptr[index]);
-            out2_ptr[index] =
-                Func()(Func()(Func()(in0_ptr[index + 2 * tensor_size],
-                                     in1_ptr[index + 2 * tensor_size]),
-                              in2_ptr[index + 2 * tensor_size]),
-                       in3_ptr[index]);
-            out3_ptr[index] =
-                Func()(Func()(Func()(in0_ptr[index + 3 * tensor_size],
-                                     in1_ptr[index + 3 * tensor_size]),
-                              in2_ptr[index + 3 * tensor_size]),
-                       in3_ptr[index]);
+            for (int i = 0; i < reduction_size; ++i) {
+              out[i][index] = Func()(in[0][index + tensor_size * i],
+                                     in[1][index + tensor_size * i]);
+              for (int j = 2; j < reduction_size; ++j) {
+                out[i][index] =
+                    Func()(out[i][index], in[j][index + tensor_size * i]);
+              }
+            }
           });
     });
   } else {
     LOG(FATAL) << "Reduction size " << reduction_size
-               << " is not supported in AllReduce.";
+               << " is not supported in ReduceScatter.";
   }
 }
 
@@ -348,14 +250,8 @@ template <typename T>
 void permute_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
                    std::vector<PermuteParticipant>& participants,
                    int reduction_size) {
-  auto group_size =
-      (*stream)
-          .get_device()
-          .template get_info<sycl::info::device::max_work_group_size>();
-  auto num_workgroup = (tensor_size + group_size - 1) / group_size;
-
-  if (reduction_size == 2) {
-    for (int i = 0; i < 2; i++)
+  if (reduction_size <= MAX_RANK_SIZE) {
+    for (int i = 0; i < reduction_size; ++i)
       if (participants[i].send_id)
         stream->memcpy(participants[i].recv,
                        (const void*)participants[*participants[i].send_id].send,
@@ -363,7 +259,7 @@ void permute_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
 
   } else {
     LOG(FATAL) << "Reduction size " << reduction_size
-               << " is not supported in AllReduce.";
+               << " is not supported in Permute.";
   }
 }
 
@@ -706,7 +602,7 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
-                     << " is not supported in AllReduce.";
+                     << " is not supported in ReduceScatter.";
       } else if (reduction_kind == ReductionKind::PRODUCT) {
         if (dtype == PRED)
           reducescatter_dpcpp<bool, sycl::multiplies<bool>>(
@@ -734,7 +630,7 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
-                     << " is not supported in AllReduce.";
+                     << " is not supported in ReduceScatter.";
       } else if (reduction_kind == ReductionKind::MIN) {
         if (dtype == PRED)
           reducescatter_dpcpp<bool, sycl::minimum<bool>>(stream, element_count,
@@ -754,7 +650,7 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
-                     << " is not supported in AllReduce.";
+                     << " is not supported in ReduceScatter.";
       } else if (reduction_kind == ReductionKind::MAX) {
         if (dtype == PRED)
           reducescatter_dpcpp<bool, sycl::maximum<bool>>(stream, element_count,
@@ -774,10 +670,10 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
-                     << " is not supported in AllReduce.";
+                     << " is not supported in ReduceScatter.";
       } else {
         LOG(FATAL) << "ReductionKind " << static_cast<int>(reduction_kind)
-                   << " is not supported in AllReduce.";
+                   << " is not supported in ReduceScatter.";
       }
 
       streamlist_wait_stream(stream, p);
@@ -834,7 +730,7 @@ void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
       else
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)
-                   << " is not supported in AllToAll.";
+                   << " is not supported in Permute.";
       streamlist_wait_stream(stream, p);
 
       Manager::instance().cv.notify_all();

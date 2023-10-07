@@ -73,10 +73,6 @@ StatusOr<std::string> ToNcclUniqueId(const std::string& id_str) {
   return id_str;
 }
 
-StatusOr<std::string> LocalNcclUniqueIdCallback(const NcclCliqueKey&) {
-  return std::string("");
-}
-
 struct CclCliqueState {
   std::string unique_id;
   int64_t run_id = -1;
@@ -94,8 +90,7 @@ using CclClique = Lockable<CclCliqueState>;
 
 std::shared_ptr<StatusOr<CclClique::Lock>> AcquireCclClique(
     RunId run_id, OpId op_id, NcclCliqueKey clique_key,
-    const NcclUniqueIdCallback& unique_id_callback,
-    size_t num_local_participants) {
+    CclUniqueIdCallback& unique_id_callback, size_t num_local_participants) {
   static auto& cliques = *new ThreadSafeMap<NcclCliqueKey, CclClique>;
 
   auto rendezvous_key = std::make_tuple(run_id, op_id, std::move(clique_key));
@@ -109,9 +104,8 @@ std::shared_ptr<StatusOr<CclClique::Lock>> AcquireCclClique(
         const NcclCliqueKey& clique_key = std::get<2>(rendezvous_key);
         CclClique::Lock clique = cliques[clique_key].Acquire();
         if (clique->run_id < 0) {
-          // TF_ASSIGN_OR_RETURN(std::string id,
-          // unique_id_callback(clique_key));
-          std::string id = run_id.ToString();
+          TF_ASSIGN_OR_RETURN(std::string id,
+                              unique_id_callback(run_id.ToString()));
           TF_ASSIGN_OR_RETURN(clique->unique_id, ToNcclUniqueId(id));
         }
         // If multiple executable are running simultaneously while using
@@ -168,24 +162,11 @@ size_t GetNumLocalParticipants(
   });
 }
 
-StatusOr<const NcclUniqueIdCallback*> GetNcclUniqueIdCallback(
-    const NcclUniqueIdCallback* unique_id_callback, bool is_local) {
-  if (unique_id_callback != nullptr) return unique_id_callback;
-
-  TF_RET_CHECK(is_local || IsGlobalCclConfig())
-      << "If non-local devices are taking part of a collective API on "
-         "GPU, the nccl_unique_id_callback must be provided by the client.";
-
-  static auto* local_callback =
-      new NcclUniqueIdCallback(LocalNcclUniqueIdCallback);
-  return local_callback;
-}
-
-StatusOr<CclComm::Lock> AcquireCclComm(
-    RunId run_id, OpId op_id, std::vector<GlobalDeviceId> participants,
-    size_t num_local_participants,
-    const NcclUniqueIdCallback& unique_id_callback, int rank,
-    int64_t stream_id) {
+StatusOr<CclComm::Lock> AcquireCclComm(RunId run_id, OpId op_id,
+                                       std::vector<GlobalDeviceId> participants,
+                                       size_t num_local_participants,
+                                       CclUniqueIdCallback& unique_id_callback,
+                                       int rank, int64_t stream_id) {
   // Ensure that this group of threads have exclusive access to the clique to
   // prevent threads from different groups locking communicators in the clique.
   NcclCliqueKey clique_key(std::move(participants), stream_id);

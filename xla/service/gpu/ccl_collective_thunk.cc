@@ -124,11 +124,14 @@ StatusOr<CclComm::Lock> LockCclComm(
     CollectiveOpGroupMode group_mode, int64_t op_id, int64_t stream_id) {
   TF_ASSIGN_OR_RETURN(GlobalDeviceId global_device_id,
                       params.GetGlobalDeviceId());
-
   TF_ASSIGN_OR_RETURN(
       std::vector<GlobalDeviceId> participants,
       GetParticipatingDevices(global_device_id, *params.device_assn,
                               replica_groups, group_mode));
+
+  if (participants.size() > MAX_RANK_SIZE)
+    LOG(FATAL) << "Rank size" << participants.size()
+               << "is greater than MAX_RANK_SIZE(" << MAX_RANK_SIZE << ")";
 
   if (IsGlobalCclConfig() &&
       (participants.size() != params.device_assn->replica_count())) {
@@ -152,12 +155,11 @@ StatusOr<CclComm::Lock> LockCclComm(
       participants, params.gpu_global_device_ids ? &local_devices : nullptr);
 
   bool is_local = participants.size() == num_local_participants;
-  TF_ASSIGN_OR_RETURN(
-      const NcclUniqueIdCallback* unique_id_callback,
-      GetNcclUniqueIdCallback(params.nccl_unique_id_callback, is_local));
+  CclUniqueIdCallback unique_id_callback(replica_groups, participants,
+                                         global_device_id);
 
   return AcquireCclComm(params.run_id, OpId(op_id), std::move(participants),
-                        num_local_participants, *unique_id_callback, rank,
+                        num_local_participants, unique_id_callback, rank,
                         stream_id);
 }
 
