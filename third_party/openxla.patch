@@ -308,15 +308,25 @@ index b7064ac25..dcb1efbd8 100644
  
  }  // namespace xla
 diff --git a/xla/service/algebraic_simplifier.h b/xla/service/algebraic_simplifier.h
-index 32be0a59d..a8dbddd3a 100644
+index 32be0a59d..bde8901d2 100644
 --- a/xla/service/algebraic_simplifier.h
 +++ b/xla/service/algebraic_simplifier.h
-@@ -400,7 +400,7 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
+@@ -27,6 +27,7 @@ limitations under the License.
+ #include <vector>
+ 
+ #include "absl/container/inlined_vector.h"
++#include "tsl/util/env_var.h"
+ #include "xla/hlo/ir/dfs_hlo_visitor_with_default.h"
+ #include "xla/hlo/ir/hlo_instruction.h"
+ #include "xla/hlo/ir/hlo_module.h"
+@@ -400,7 +401,9 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
    virtual bool IsValidLayout(const Shape& shape) { return true; }
    // Allow backend targets to determine whether a layout is inefficient.
    virtual bool ShouldStrengthReduceDotToReduce(const HloInstruction* hlo) {
 -    return true;
-+    return false;
++    bool llm_flag = false;
++    tsl::ReadBoolFromEnvVar("LLM", false, &llm_flag);
++    return !llm_flag;
    }
  
   protected:

@@ -655,7 +655,9 @@ Status GpuCompiler::OptimizeHloModule(
     HloPassPipeline pipeline("layout assignment");
     // Layout assignment uses alias analysis, which requires the call graph to
     // be flattened.
-    pipeline.AddPass<DotExpandDims>();
+    bool llm_flag = false;
+    tsl::ReadBoolFromEnvVar("LLM", false, &llm_flag);
+    if (llm_flag) pipeline.AddPass<DotExpandDims>();
     pipeline.AddPass<FlattenCallGraph>();
     ChannelLayoutConstraints layout_constraints;
     pipeline.AddPass<GpuLayoutAssignment>(
