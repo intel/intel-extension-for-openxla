@@ -142,7 +142,22 @@ std::unordered_map<std::string, std::tuple<int, int, int, int, int, int>>
                  {"1024_7168_8192", std::make_tuple(256, 256, 64, 32, 16, 1)},
                  {"1024_8192_2048", std::make_tuple(256, 256, 64, 32, 16, 1)},
                  {"1024_8192_7168", std::make_tuple(256, 256, 32, 64, 32, 1)},
-                 {"1024_256_8192", std::make_tuple(32, 128, 32, 16, 16, 4)}};
+                 {"1024_256_8192", std::make_tuple(32, 128, 32, 16, 16, 4)},
+                 // T5 model shape
+                 {"1_5120_2048", std::make_tuple(128, 128, 16, 32, 64, 1)},
+                 {"1_2048_2048", std::make_tuple(16, 64, 16, 16, 16, 8)},
+                 {"1_2048_5120", std::make_tuple(16, 64, 16, 16, 16, 8)},
+                 {"1_6144_2048", std::make_tuple(128, 128, 16, 32, 64, 1)},
+                 {"1_2048_2048", std::make_tuple(32, 64, 32, 16, 16, 8)},
+                 {"32_98304_2048", std::make_tuple(256, 256, 32, 64, 16, 1)},
+                 {"64_1_32", std::make_tuple(8, 256, 8, 16, 16, 2)},
+                 {"1_32_64", std::make_tuple(8, 256, 8, 16, 16, 2)},
+                 {"1_32128_2048", std::make_tuple(128, 256, 64, 16, 16, 1)},
+                 {"32_5120_2048", std::make_tuple(128, 128, 16, 32, 64, 1)},
+                 {"32_24576_32", std::make_tuple(32, 512, 32, 16, 16, 1)},
+                 {"32_6144_2048", std::make_tuple(128, 128, 16, 32, 64, 1)},
+                 {"32_2048_5120", std::make_tuple(16, 64, 16, 16, 16, 8)},
+                 {"32_2048_2048", std::make_tuple(16, 64, 16, 16, 16, 8)}};
 
 std::tuple<int, int, int, int, int, int> selectXetlaGemmConfig(int m, int n,
                                                                int k) {
@@ -150,9 +165,19 @@ std::tuple<int, int, int, int, int, int> selectXetlaGemmConfig(int m, int n,
       std::to_string(m) + "_" + std::to_string(n) + "_" + std::to_string(k);
   if (configMap.find(mnk) != configMap.end()) {
     return configMap[mnk];
-  } else {
-    return std::make_tuple(256, 256, 32, 64, 16, 1);
   }
+  // TODO: optimize auto-tuning algorithm
+  if (n == 4096 && m <= 128) {
+    return std::make_tuple(128, 64, 16, 16, 64, 1);
+  } else if (m >= 64) {
+    if (m <= 512 && n <= 5120) {
+      return std::make_tuple(128, 128, 32, 32, 32, 2);
+    } else {
+      return std::make_tuple(256, 256, 32, 64, 16, 1);
+    }
+  }
+  // default config
+  return std::make_tuple(256, 256, 32, 64, 16, 1);
 }
 
 std::tuple<int, int, int, int, int, int> selectXetlaQKVGemmConfig(int m, int n,
