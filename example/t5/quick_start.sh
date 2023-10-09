@@ -17,7 +17,6 @@ export T5X_DIR=`pwd`
 export T5X_WORKSPACE_DIR=${T5X_DIR}/workspace
 LOG_DIR=${T5X_DIR}/logs
 export PYTHONPATH=${T5X_DIR}
-#export TFDS_DATA_DIR=/nfs2/yuqingding/datasets/ThePile
 export TFDS_DATA_DIR=$2
 MODEL_SIZE=$1
 MODEL_DIR=$3
@@ -39,10 +38,6 @@ if [ ! -n "$8" ];then
    mkdir -p ${PROFILE_DIR}
 fi
 
-#export ZE_AFFINITY_MASK=0.0
-#export XETLA_GEMM=1
-#export VECTORIZE=1
-#export ONEDNN_VERBOSE=1
 export PTI_ENABLE_COLLECTION=0
 
 

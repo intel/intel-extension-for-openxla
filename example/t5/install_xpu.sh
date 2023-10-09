@@ -12,9 +12,6 @@ pip uninstall tensorflow-metadata numba cudf -y
 pip uninstall tensorflow -y
 pip install tensorflow==2.12.0
 
-# otherwise tensorflow in dataset reader will occupy all XPU memory and cause JAX OOM.
-pip uninstall intel-extension-for-tensorflow -y
-pip uninstall intel-extension-for-tensorflow-lib -y
 conda install libstdcxx-ng==12.2.0 -c conda-forge -y
 pip install jax==0.4.13 jaxlib==0.4.13
 
@@ -26,7 +23,5 @@ pip install flax==0.6.11
 pip install orbax-checkpoint==0.3.2
 pip install zstandard==0.21.0
 pip install jsonlines==3.1.0
-
-pip install jax[cuda]==0.4.13 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 popd

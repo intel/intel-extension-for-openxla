@@ -10,8 +10,7 @@ DROPOUT_RATE = 0.0
 import t5.data.mixtures
 import t5x.contrib.gpu.scripts_gpu.seqio_tasks
 MIXTURE_OR_TASK_NAME = "wmt_t2t_ende_v003"
-TASK_FEATURE_LENGTHS = {"inputs": 1024, "targets": 1}
-#seqio.SentencePieceVocabulary.sentencepiece_model_file = "/home/sdp/yuqingding/intel/llm/t5x/t5x/contrib/gpu/scripts_gpu/dyq/sentencepiece.model"
+TASK_FEATURE_LENGTHS = {"inputs": 1024, "targets": 128}
 
 
 partitioning.PjitPartitioner:
