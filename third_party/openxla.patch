@@ -61,10 +61,10 @@ index bbf8f587a..ab0df933f 100644
 +   if (failed(reader.parseVarInt(version)))
 diff --git a/third_party/tsl/third_party/llvm/spirv.patch b/third_party/tsl/third_party/llvm/spirv.patch
 new file mode 100644
-index 000000000..1ee88dd1e
+index 000000000..5b8db357e
 --- /dev/null
 +++ b/third_party/tsl/third_party/llvm/spirv.patch
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,76 @@
 +diff --git a/llvm/lib/Passes/PassBuilderPipelines.cpp b/llvm/lib/Passes/PassBuilderPipelines.cpp
 +index 34d3b9d7467e..bd26295c6527 100644
 +--- a/llvm/lib/Passes/PassBuilderPipelines.cpp
@@ -141,24 +141,6 @@ index 000000000..1ee88dd1e
 +   // LoopSink pass sinks instructions hoisted by LICM, which serves as a
 +   // canonicalization pass that enables other optimizations. As a result,
 +   // LoopSink pass needs to be a very late IR pass to avoid undoing LICM
-+diff --git a/llvm/include/llvm/Analysis/TargetTransformInfoImpl.h b/llvm/include/llvm/Analysis/TargetTransformInfoImpl.h
-+index 64ac5701c03e..f1370512db8f 100644
-+--- a/llvm/include/llvm/Analysis/TargetTransformInfoImpl.h
-++++ b/llvm/include/llvm/Analysis/TargetTransformInfoImpl.h
-+@@ -454,7 +454,11 @@ public:
-+     return ElementCount::get(0, IsScalable);
-+   }
-+ 
-+-  unsigned getMaximumVF(unsigned ElemWidth, unsigned Opcode) const { return 0; }
-++  unsigned getMaximumVF(unsigned ElemWidth, unsigned Opcode) const {
-++    if (Opcode == Instruction::Load || Opcode == Instruction::Store)
-++        return 32 * 4 / ElemWidth;
-++    return (ElemWidth == 16) ? 2 : 1;
-++  }
-+   unsigned getStoreMinimumVF(unsigned VF, Type *, Type *) const { return VF; }
-+ 
-+   bool shouldConsiderAddressTypePromotion(
-\ No newline at end of file
 diff --git a/third_party/tsl/third_party/llvm/workspace.bzl b/third_party/tsl/third_party/llvm/workspace.bzl
 index 0d5a44fe7..d1468201f 100644
 --- a/third_party/tsl/third_party/llvm/workspace.bzl

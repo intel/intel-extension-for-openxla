@@ -135,9 +135,10 @@ const llvm::Module* GetModule(llvm::Any IR) {
   return nullptr;
 }
 
-auto DumpCallbackForModule(std::string module_identifier) {
+auto DumpCallbackForModule(std::string module_identifier,
+                           std::string outputs_dir) {
   int i = 0;
-  return [module_identifier, i](llvm::StringRef pass, llvm::Any ir) mutable {
+  return [=](llvm::StringRef pass, llvm::Any ir) mutable {
     const llvm::Module* module = GetModule(ir);
     if (!module) {
       return;
@@ -145,10 +146,8 @@ auto DumpCallbackForModule(std::string module_identifier) {
 
     const std::string basename = ReplaceFilenameExtension(
         absl::string_view(tsl::io::Basename(module_identifier)),
-        absl::StrFormat("pass-%02d.before.%s.ll", i++,
+        absl::StrFormat("pass-%03d.before.%s.ll", i++,
                         absl::string_view(pass.str())));
-    std::string outputs_dir;
-    tsl::io::GetTestUndeclaredOutputsDir(&outputs_dir);
     DumpModule(tsl::io::JoinPath(outputs_dir, basename), module);
   };
 }
@@ -162,10 +161,10 @@ void RunOptimizationPipeline(llvm::Module* module,
   llvm::PipelineTuningOptions PTO;
   PTO.LoopUnrolling = 1;
   PTO.LoopInterleaving = 1;
-  // (Tengfei09): disable loop vectorization pass to prevent 
+  // Disable loop vectorization pass to prevent
   // emiting unsupported llvm.vector.reduce intrinsics
   PTO.LoopVectorization = 0;
-  PTO.SLPVectorization = 1;
+  PTO.SLPVectorization = 0;
   PTO.MergeFunctions = 0;
   PTO.CallGraphProfile = 1;
 
@@ -201,8 +200,18 @@ void RunOptimizationPipeline(llvm::Module* module,
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
   if (hlo_module_config.debug_options().xla_gpu_dump_llvmir()) {
-    PIC.registerBeforeNonSkippedPassCallback(
-        DumpCallbackForModule(module->getModuleIdentifier()));
+    std::string outputs_dir;
+    if (!tsl::io::GetTestUndeclaredOutputsDir(&outputs_dir)) {
+      outputs_dir = hlo_module_config.debug_options().xla_dump_to();
+    }
+    if (!outputs_dir.empty()) {
+      PIC.registerBeforeNonSkippedPassCallback(
+          DumpCallbackForModule(module->getModuleIdentifier(), outputs_dir));
+    } else {
+      LOG(ERROR) << "--xla_gpu_dump_llvmir is set, but neither the environment "
+                 << "variable TEST_UNDECLARED_OUTPUTS_DIR nor the flag "
+                 << "--xla_dump_to is set, so the llvm dumps are disabled.";
+    }
   }
 
   llvm::ModulePassManager MPM;
@@ -226,6 +235,52 @@ void FeedLLVMWithFlags(const std::vector<std::string>& cl_opts) {
     fake_argv.push_back(cl_opt.c_str());
   }
   llvm::cl::ParseCommandLineOptions(fake_argv.size(), &fake_argv[0]);
+}
+
+// Returns the TargetMachine, given a triple.
+std::unique_ptr<llvm::TargetMachine> GetTargetMachine(
+    llvm::Triple triple, absl::string_view cpu_name,
+    const HloModuleConfig& hlo_module_config, absl::string_view feature_str) {
+  std::string error;
+  const llvm::Target* target =
+      llvm::TargetRegistry::lookupTarget("", triple, error);
+  if (target == nullptr) {
+    return nullptr;
+  }
+
+  llvm::TargetOptions target_options =
+      llvm::codegen::InitTargetOptionsFromCodeGenFlags(llvm::Triple());
+
+  // Set the verbose assembly options.
+  target_options.MCOptions.AsmVerbose = false;
+
+  // The selection of codegen optimization level is copied from function
+  // GetCodeGenOptLevel in //third_party/llvm/llvm/tools/opt/opt.cpp.
+  llvm::CodeGenOpt::Level codegen_opt_level;
+  switch (hlo_module_config.debug_options().xla_backend_optimization_level()) {
+    case 1:
+      codegen_opt_level = llvm::CodeGenOpt::Less;
+      break;
+    case 2:
+      codegen_opt_level = llvm::CodeGenOpt::Default;
+      break;
+    case 3:
+      codegen_opt_level = llvm::CodeGenOpt::Aggressive;
+      break;
+    default:
+      codegen_opt_level = llvm::CodeGenOpt::None;
+  }
+  return absl::WrapUnique(target->createTargetMachine(
+      triple.str(), llvm_ir::AsStringRef(cpu_name),
+      llvm_ir::AsStringRef(feature_str), target_options,
+      llvm::codegen::getExplicitRelocModel(),
+      llvm::codegen::getExplicitCodeModel(), codegen_opt_level));
+}
+
+std::unique_ptr<llvm::TargetMachine> SPIRGetTargetMachine(
+    llvm::Triple target_triple, const HloModuleConfig& hlo_module_config) {
+  // Actually no Target Machine for spir triple.
+  return GetTargetMachine(target_triple, "cpu", hlo_module_config, "fs");
 }
 
 using TargetModuleLinker = std::function<Status(
@@ -333,8 +388,7 @@ StatusOr<std::string> CompileToSpir(llvm::Module* module,
   static absl::once_flag backend_init_flag;
   absl::call_once(backend_init_flag, SPIRBackendInit, hlo_module_config);
 
-  std::string spir;
-  {
+  std::string spir;  {
     // itex::profiler::TraceMe activity(
     //     [&] { return absl::StrCat("Compiling IR:", module->getName().str());
     //     }, itex::profiler::TraceMeLevel::kInfo);
@@ -350,14 +404,16 @@ StatusOr<std::string> CompileToSpir(llvm::Module* module,
 
     // No SPIR target machine?
     llvm::Triple default_target_triple("spir64-unknown-unknown");
+    std::unique_ptr<llvm::TargetMachine> target_machine =
+        SPIRGetTargetMachine(default_target_triple, hlo_module_config);
 
     bool reuse = true;
     tsl::ReadBoolFromEnvVar("TF_LLVM_OPT", true, &reuse);
     if (reuse) {
       // Link with libdevice, and optimize the LLVM module.
-      TF_RETURN_IF_ERROR(LinkAndOptimizeModule(module, hlo_module_config,
-                                               default_target_triple, nullptr,
-                                               kDefaultInlineThreshold));
+      TF_RETURN_IF_ERROR(LinkAndOptimizeModule(
+          module, hlo_module_config, default_target_triple,
+          target_machine.get(), kDefaultInlineThreshold));
     }
 
     DumpToFileInDir(hlo_module_config.debug_options(), "module_opt.ll",
