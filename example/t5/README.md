@@ -13,7 +13,7 @@ Flan-T5 XXL   | [t5_1_1_xxl.gin](https://github.com/google-research/t5x/blob/mai
 please follow the officical [guidelines](https://cloud.google.com/storage/docs/gsutil_install#deb) to install gsutil firsty.
 
 ```
-gsutil -m cp -r "gs://t5-data/pretrained_models/t5x/flan_t5_xxl/checkpoint_1114000" .
+gsutil -m cp -r "gs://t5-data/pretrained_models/t5x/flan_t5_xl/checkpoint_1114000" .
 ```
 
 #### 2. Download Vocabulary

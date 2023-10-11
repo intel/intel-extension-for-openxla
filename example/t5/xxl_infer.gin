@@ -14,11 +14,11 @@ import t5x.contrib.gpu.scripts_gpu.seqio_tasks
 MIXTURE_OR_TASK_NAME = "wmt_t2t_ende_v003"
 #TASK_FEATURE_LENGTHS = {"inputs": 1024, "targets": 1}
 TASK_FEATURE_LENGTHS = {"inputs": 1024, "targets": 1}
-seqio.SentencePieceVocabulary.sentencepiece_model_file = "/home/sdp/yuqingding/intel/llm/t5x/t5x/contrib/gpu/scripts_gpu/dyq/sentencepiece.model"
+seqio.SentencePieceVocabulary.sentencepiece_model_file = "sentencepiece.model"
 
 #FEATURE_LENGTHS = {"inputs": 1024, "targets": 1}
 #TF_EXAMPLE_FILE_TYPE='tfrecord'
-#TF_EXAMPLE_FILE_PATHS=['/home/yuqingding/intel/llm/t5x/t5x/contrib/gpu/scripts_gpu/dyq/dataset/*train.tfrecord*']
+#TF_EXAMPLE_FILE_PATHS=['/dataset/*train.tfrecord*']
 #create_task_from_tfexample_file.inputs_key='question'
 
 
