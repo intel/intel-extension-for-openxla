@@ -550,22 +550,18 @@ tsl::Status GpuExecutor::BlockHostUntilDone(Stream* stream) {
 }
 
 blas::BlasSupport* GpuExecutor::CreateBlas() {
-  LOG(ERROR) << "CreateBlas is not supported on SYCL platform";
   return nullptr;
 }
 
 dnn::DnnSupport* GpuExecutor::CreateDnn() {
-  LOG(ERROR) << "CreateDnn is not supported on SYCL platform";
   return nullptr;
 }
 
 fft::FftSupport* GpuExecutor::CreateFft() {
-  LOG(ERROR) << "CreateFft is not supported on SYCL platform";
   return nullptr;
 }
 
 rng::RngSupport* GpuExecutor::CreateRng() {
-  LOG(ERROR) << "CreateRng is not supported on SYCL platform";
   return nullptr;
 }
 
