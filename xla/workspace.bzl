@@ -6,8 +6,8 @@ def workspace(path_prefix = "", tf_repo_name = ""):
 
     new_git_repository(
         name = "onednn_gpu",
-        # rls-v3.2
-        commit = "f88241a",
+        # master
+        commit = "602810e",
         remote = "https://github.com/oneapi-src/oneDNN.git",
         build_file = "//third_party/onednn:onednn_gpu.BUILD",
         verbose = True,
