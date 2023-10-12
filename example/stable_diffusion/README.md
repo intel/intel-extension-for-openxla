@@ -20,10 +20,10 @@ pip install transformers==4.27.4 diffusers==0.16.1 datasets==2.12.0
 ## Run
 
 ### 1. Environmental Variables
-If you want to run this model on single GPU tile, please set the below environmental varible.
-```
-export ZE_AFFINITY_MASK=0.0
-```
+
+| **ENV** | **Description** | **PVC Platform** | **ATSM/DG2 Platform** | 
+| :---: | :---: | :---: |:---: |
+| ZE_AFFINITY_MASK | Run this model on single GPU tile |export ZE_AFFINITY_MASK=0.0 | export ZE_AFFINITY_MASK=0.0 | 
 
 ### 2. Inference Command
 

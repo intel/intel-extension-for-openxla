@@ -31,6 +31,14 @@ numactl -N 0 -m 0 python jax_gptj.py --accuracy-only --dtype "float16"
 
 ## Performance Example
 
+To fully utilize the hardware capabilities and achieve the best performance, you may consider setting the below ENV variables to enable our customized optimization strategies.
+
+| **ENV** | **Description** | **PVC Platform** | **ATSM/DG2 Platform** | 
+| :---: | :---: | :---: |:---: |
+| ZE_AFFINITY_MASK | Run this model on single GPU tile |export ZE_AFFINITY_MASK=0.0 | export ZE_AFFINITY_MASK=0.0 |
+| XETLA_GEMM | Call the [XETLA](https://github.com/intel/xetla) library to run GEMMs, instead of using oneDNN.|export XETLA_GEMM=1 | NA | 
+| LLM | enable our customized optimization strategies for large language models (LLM) |export LLM=1 | export LLM=1 | 
+
 ### Greedy Search
 
 ```bash
