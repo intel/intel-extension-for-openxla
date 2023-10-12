@@ -78,6 +78,7 @@ else:
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 input_ids = tokenizer([prompt], return_tensors="np").input_ids
+input_ids = np.tile(input_ids, (args.batch_size, 1))
 print("---- Prompt size:", input_ids.shape, flush=True)
 
 max_new_tokens = args.max_new_tokens
@@ -94,7 +95,6 @@ if not args.accuracy_only:
     total_time = 0.0
     num_iter = args.num_iter
     num_warmup = args.num_warmup
-    prompt = [prompt] * args.batch_size
     for i in range(num_iter):
         tic = time.time()
         gen_tokens = run_model(input_ids)
