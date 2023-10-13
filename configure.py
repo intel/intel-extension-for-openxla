@@ -266,6 +266,7 @@ def setup_python(environ_cp):
 
   # Get PYTHON_LIB_PATH
   python_lib_path = environ_cp.get('PYTHON_LIB_PATH')
+  checked_python_lib_path = python_lib_path
   if not python_lib_path:
     python_lib_paths = get_python_path(environ_cp, checked_python_bin_path)
     if environ_cp.get('USE_DEFAULT_PYTHON_LIB_PATH') == '1':
