@@ -673,7 +673,7 @@ xpu_library(
     ],
 )
 
-cc_library(
+xpu_library(
     name = "ccl_collective_thunks",
     srcs = [
         "ccl_all_gather_thunk.cc",
