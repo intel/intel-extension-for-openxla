@@ -42,12 +42,12 @@ To fully utilize the hardware capabilities and achieve the best performance, you
 
 ```bash
 export ZE_AFFINITY_MASK=0.0
-numactl -N 0 -m 0 python jax_gptj.py --greedy
+python jax_gptj.py --greedy
 ```
 
 ### Beam Search = 4
 
 ```bash
 export ZE_AFFINITY_MASK=0.0
-numactl -N 0 -m 0 python jax_gptj.py --input-tokens 1024 --max-new-tokens 128 --num-iter 100 --num-warmup 10
+python jax_gptj.py --input-tokens 1024 --max-new-tokens 128 --num-iter 100 --num-warmup 10
 ```
