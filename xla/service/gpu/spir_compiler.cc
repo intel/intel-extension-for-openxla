@@ -308,7 +308,6 @@ SPIRCompiler::CompileTargetBinary(const HloModuleConfig& module_config,
         spir,
         spir::CompileToSpir(selected_module, module_config, libdevice_dir));
   }
-  DumpToFileInDir(module_config.debug_options(), "module.spv", spir);
 
   std::vector<uint8_t> spir_bin(spir.begin(), spir.end());
   return std::pair<std::string, std::vector<uint8_t>>("", std::move(spir_bin));

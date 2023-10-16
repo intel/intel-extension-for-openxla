@@ -388,10 +388,8 @@ StatusOr<std::string> CompileToSpir(llvm::Module* module,
   static absl::once_flag backend_init_flag;
   absl::call_once(backend_init_flag, SPIRBackendInit, hlo_module_config);
 
-  std::string spir;  {
-    // itex::profiler::TraceMe activity(
-    //     [&] { return absl::StrCat("Compiling IR:", module->getName().str());
-    //     }, itex::profiler::TraceMeLevel::kInfo);
+  std::string spir;
+  {
     XLA_SCOPED_LOGGING_TIMER("Compile module " + module->getName().str());
 
     // If the module has no functions or globals, there's nothing to compile.

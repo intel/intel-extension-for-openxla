@@ -297,19 +297,9 @@ SYCLError_t SYCLCreateStream(sycl::device* device_handle,
   return StreamPool::createStream(device_handle, stream_p);
 }
 
-SYCLError_t SYCLGetDefaultStream(sycl::device* device_handle,
-                                 sycl::queue** stream) {
-  return StreamPool::getDefaultStream(device_handle, stream);
-}
-
 SYCLError_t SYCLDestroyStream(sycl::device* device_handle,
                               sycl::queue* stream_handle) {
   return StreamPool::destroyStream(device_handle, stream_handle);
-}
-
-SYCLError_t SYCLGetStreamPool(sycl::device* device_handle,
-                              std::vector<sycl::queue*>* streams) {
-  return StreamPool::getStreams(device_handle, streams);
 }
 
 SYCLError_t SYCLCtxSynchronize(sycl::device* device_handle) {
@@ -466,6 +456,15 @@ void* SYCLMallocHost(sycl::device* device, size_t ByteCount) {
 
   // Always use default 0 stream to allocate mem
   auto ptr = aligned_alloc_host(/*alignment=*/64, ByteCount, *stream);
+  return static_cast<void*>(ptr);
+}
+
+void* SYCLMallocShared(sycl::device* device, size_t ByteCount) {
+  sycl::queue* stream;
+  StreamPool::getDefaultStream(device, &stream);
+
+  // Always use default 0 stream to allocate mem
+  auto ptr = aligned_alloc_shared(/*alignment=*/64, ByteCount, *stream);
   return static_cast<void*>(ptr);
 }
 

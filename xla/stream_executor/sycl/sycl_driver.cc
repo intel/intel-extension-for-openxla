@@ -343,18 +343,27 @@ class GpuContext {
 /* static */ void GpuDriver::DeviceDeallocate(GpuContext* context,
                                               void* location) {
   SYCLFree(context->device(), location);
+  VLOG(2) << "deallocated device memory at " << location << " for context "
+          << context->context();
 }
 
 /* static */ void* GpuDriver::UnifiedMemoryAllocate(GpuContext* context,
                                                     uint64_t bytes) {
-  auto ptr = aligned_alloc_shared(64, bytes, *(context->device()),
-                                  *(context->context()));
+  if (bytes == 0) {
+    return nullptr;
+  }
+
+  void* ptr = SYCLMallocShared(context->device(), bytes);
+  VLOG(2) << "allocated " << ptr << " for context " << context->context()
+          << " of " << bytes << " bytes in unified memory";
   return ptr;
 }
 
 /* static */ void GpuDriver::UnifiedMemoryDeallocate(GpuContext* context,
                                                      void* location) {
-  sycl::free(location, *(context->context()));
+  SYCLFree(context->device(), location);
+  VLOG(2) << "deallocated unified memory at " << location << " for context "
+          << context->context();
 }
 
 /* static */ void* GpuDriver::HostAllocate(GpuContext* context,
@@ -371,7 +380,9 @@ class GpuContext {
 
 /* static */ void GpuDriver::HostDeallocate(GpuContext* context,
                                             void* location) {
-  sycl::free(location, *(context->context()));
+  SYCLFree(context->device(), location);
+  VLOG(2) << "deallocated host memory at " << location << " for context "
+          << context->context();
 }
 
 /* static */ int GpuDriver::GetGpuStreamPriority(
@@ -463,7 +474,7 @@ class GpuContext {
                                                          const void* host_src,
                                                          uint64_t size) {
   RETURN_IF_SYCL_RES_ERROR(
-      SYCLMemcpyDtoH(gpu_dst, host_src, size, context->device()),
+      SYCLMemcpyHtoD(gpu_dst, host_src, size, context->device()),
       absl::StrFormat(
           "failed to synchronous memcpy from host to device: GPU dst: %p;"
           " host src: %p; size: %u=0x%x",

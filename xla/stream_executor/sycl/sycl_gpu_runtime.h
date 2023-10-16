@@ -41,7 +41,7 @@ enum SYCLError_t {
 
 inline bool IsMultipleStreamEnabled() {
   bool is_multiple_stream_enabled = false;
-  const char* env = std::getenv("ITEX_ENABLE_MULTIPLE_STREAM");
+  const char* env = std::getenv("XLA_ENABLE_MULTIPLE_STREAM");
   if (env == nullptr) {
     return is_multiple_stream_enabled;
   }
@@ -66,13 +66,7 @@ SYCLError_t SYCLGetDevice(sycl::device** device, int device_ordinal);
 
 SYCLError_t SYCLCreateStream(sycl::device* device_handle, sycl::queue** stream);
 
-SYCLError_t SYCLGetDefaultStream(sycl::device* device_handle,
-                                 sycl::queue** stream);
-
 SYCLError_t SYCLDestroyStream(sycl::device* device_handle, sycl::queue* stream);
-
-SYCLError_t SYCLGetStreamPool(sycl::device* device_handle,
-                              std::vector<sycl::queue*>* streams);
 
 SYCLError_t SYCLCtxSynchronize(sycl::device* device_handle);
 
@@ -109,6 +103,8 @@ SYCLError_t SYCLMemsetD32Async(void* dstDevice, unsigned int ui, size_t N,
 void* SYCLMalloc(sycl::device* device, size_t ByteCount);
 
 void* SYCLMallocHost(sycl::device* device, size_t ByteCount);
+
+void* SYCLMallocShared(sycl::device* device, size_t ByteCount);
 
 void SYCLFree(sycl::device* device, void* ptr);
 #endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_GPU_RUNTIME_H_

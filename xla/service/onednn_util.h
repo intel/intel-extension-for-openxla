@@ -20,6 +20,7 @@ limitations under the License.
 #include <string>
 #include <utility>
 #include <vector>
+
 #include "dnnl.hpp"       // NOLINT(build/include_subdir)
 #include "dnnl_sycl.hpp"  // NOLINT(build/include_subdir)
 #include "tsl/util/env_var.h"
@@ -51,8 +52,8 @@ static dnnl::engine& FindOrCreateEngine(se::gpu::GpuStreamHandle stream) {
 
 inline dnnl::fpmath_mode GetFP32MathMode() {
   std::string fp32_math_mode = "fp32";
-  TF_CHECK_OK(tsl::ReadStringFromEnvVar("ITEX_FP32_MATH_MODE", "fp32",
-                                        &fp32_math_mode));
+  TF_CHECK_OK(
+      tsl::ReadStringFromEnvVar("XLA_FP32_MATH_MODE", "fp32", &fp32_math_mode));
   fp32_math_mode = tsl::str_util::Lowercase(fp32_math_mode);
   if (fp32_math_mode == "fp32") {
     return dnnl::fpmath_mode::strict;
@@ -64,7 +65,7 @@ inline dnnl::fpmath_mode GetFP32MathMode() {
     LOG(FATAL) << "Did not support BF32 math mode on GPU ";
   }
   LOG(FATAL)
-      << "Invalid ITEX_FP32_MATH_MODE, should be FP32, TF32 or BF32, but got "
+      << "Invalid XLA_FP32_MATH_MODE, should be FP32, TF32 or BF32, but got "
       << fp32_math_mode;
 }
 

@@ -16,7 +16,7 @@ def tf_copts(android_optimization_level_override = "-O2", is_external = False):
         [
             "-Wno-sign-compare",
             "-Wno-unknown-pragmas",
-            # "-fno-exceptions", # TODO(itex): disable it first as we need expection in SE's dpcpp backend
+            # "-fno-exceptions", # TODO: disable it first as we need expection in SE's dpcpp backend
             "-ftemplate-depth=900",
             "-msse3",
             "-pthread",

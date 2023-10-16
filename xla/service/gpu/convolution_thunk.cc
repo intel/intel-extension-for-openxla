@@ -219,7 +219,7 @@ Status CreateOneDnnPrimitive(
   // It is group-conv if filter_in != src_in
   // G = src_in/filter_in
   // O = filter_out/G
-  // TODO(ITEX): depthwise-conv
+  // TODO: depthwise-conv
   int filter_ic =
       filter_shape.dimensions(dnums.kernel_input_feature_dimension());
   int filter_oc =
@@ -571,7 +571,7 @@ Status CreateOneDnnPrimitive(
           {DNNL_ARG_SCRATCHPAD, onednn_primitive->scratchpad_memory});
 
     } else if (conv_descriptor.kind == CudnnConvKind::kBackwardInput) {
-      // TODO(ITEX): handle post_ops_attr.
+      // TODO: handle post_ops_attr.
       ConvFwdPd fwd_pd = ConvFwdPd(
           onednn_primitive->engine, dnnl::prop_kind::forward,
           dnnl::algorithm::convolution_direct, src_md, filter_md_prefer, dst_md,
@@ -628,7 +628,7 @@ Status CreateOneDnnPrimitive(
           dnnl::convolution_backward_data(bwd_input_pd);
 
     } else if (conv_descriptor.kind == CudnnConvKind::kBackwardFilter) {
-      // TODO(ITEX): handle post_ops_attr.
+      // TODO: handle post_ops_attr.
       if (input_type == F16)
         return InternalError("FP16 Conv BackwardFilter is not supported");
       ConvFwdPd fwd_pd = ConvFwdPd(
