@@ -676,6 +676,8 @@ def set_dpcpp_toolkit_path(environ_cp):
 
   write_action_env_to_bazelrc('DPCPP_TOOLKIT_PATH',
                               dpcpp_toolkit_path)
+  write_action_env_to_bazelrc('SYCL_PATH',
+                              "/".join(dpcpp_toolkit_path.split("/")[:-3]))
   lib_path = '%s/lib:%s/compiler/lib/intel64_lin' %(
       dpcpp_toolkit_path,
       dpcpp_toolkit_path,
