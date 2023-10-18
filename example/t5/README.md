@@ -45,7 +45,7 @@ To fully utilize the hardware capabilities and achieve the best performance, you
 
 | **ENV** | **Description** | **PVC Platform** | **ATSM/DG2 Platform** | 
 | :---: | :---: | :---: |:---: |
-| ZE_AFFINITY_MASK | Run this model on single GPU tile |export ZE_AFFINITY_MASK=0.0 | export ZE_AFFINITY_MASK=0.0 |
+| ZE_AFFINITY_MASK | Run this model on single GPU tile |export ZE_AFFINITY_MASK=0 | export ZE_AFFINITY_MASK=0 |
 | XETLA_GEMM | Call the [XETLA](https://github.com/intel/xetla) library to run GEMMs, instead of using oneDNN.|export XETLA_GEMM=1 | NA | 
 | LLM | Enable our customized optimization strategies for large language models (LLM) |export LLM=1 | export LLM=1 |
 | XLA_FLAGS | Cutomerlize xla debug options | export XLA_FLAGS="--xla_disable_hlo_passes=dot-merger" | export XLA_FLAGS="--xla_disable_hlo_passes=dot-merger" |

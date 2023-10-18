@@ -1,6 +1,6 @@
 #! /bin/bash
 # A script for single-node pile pretraining
-export ZE_AFFINITY_MASK=0.0
+#export ZE_AFFINITY_MASK=0.0
 set -x
 
 if [ ! -n "$1" ];then
@@ -53,11 +53,11 @@ NUM_GPUS=1      # Number of GPUs (1, 2, 4, 8)
 BSIZE_PER_GPU=1 # Batch size per GPU (varies with model size)
 T5_NAME=flan-t5-$MODEL_SIZE
 GIN_FILE="${T5X_DIR}/../xl_infer.gin"
-MODEL_PATH=${MODEL_DIR}/pretrained_models/t5x/flan_t5_xl/checkpoint_1138000
+MODEL_PATH=${MODEL_DIR}/checkpoint_1138000
 
 if [ ${MODEL_SIZE} == "xxl" ];then
   GIN_FILE="${T5X_DIR}/../xxl_infer.gin"
-  MODEL_PATH=${MODEL_DIR}/pretrained_models/t5x/flan_t5_xxl/checkpoint_1114000
+  MODEL_PATH=${MODEL_DIR}/checkpoint_1114000
 fi
 
 echo $MODEL_PATH
