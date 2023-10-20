@@ -289,7 +289,8 @@ void streamlist_wait_stream(se::gpu::GpuStreamHandle stream,
 void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                     int element_count, PrimitiveType dtype,
                     ReductionKind reduction_kind,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm,
+                    int current_call, int max_call) {
   std::vector<Participant> p;
   {
     tsl::mutex_lock l(Manager::instance().mu);
@@ -316,7 +317,7 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                 });
 
       se::gpu::GpuStreamHandle stream = p[0].stream;
-      stream_wait_streamlist(stream, p);
+      if (current_call == 0) stream_wait_streamlist(stream, p);
 
       if (reduction_kind == ReductionKind::SUM) {
         if (dtype == PRED)
@@ -434,7 +435,7 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                    << " is not supported in AllReduce.";
       }
 
-      streamlist_wait_stream(stream, p);
+      if (current_call == (max_call - 1)) streamlist_wait_stream(stream, p);
       Manager::instance().cv.notify_all();
     }
   }
@@ -442,7 +443,8 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
 
 void sycl_allgather(const void* send_buffer, void* recv_buffer,
                     int element_count, PrimitiveType dtype,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm,
+                    int current_call, int max_call) {
   std::vector<Participant> p;
   {
     tsl::mutex_lock l(Manager::instance().mu);
@@ -469,7 +471,7 @@ void sycl_allgather(const void* send_buffer, void* recv_buffer,
                 });
 
       se::gpu::GpuStreamHandle stream = p[0].stream;
-      stream_wait_streamlist(stream, p);
+      if (current_call == 0) stream_wait_streamlist(stream, p);
       if (dtype == PRED)
         allgather_dpcpp<bool>(stream, element_count, p, comm->nranks);
       else if (dtype == F32)
@@ -484,8 +486,7 @@ void sycl_allgather(const void* send_buffer, void* recv_buffer,
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)
                    << " is not supported in AllGather.";
-      streamlist_wait_stream(stream, p);
-
+      if (current_call == (max_call - 1)) streamlist_wait_stream(stream, p);
       Manager::instance().cv.notify_all();
     }
   }
@@ -546,7 +547,8 @@ void sycl_alltoall(std::vector<const void*> send_buffers,
 void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                          int element_count, PrimitiveType dtype,
                          ReductionKind reduction_kind,
-                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm,
+                         int current_call, int max_call) {
   std::vector<Participant> p;
   {
     tsl::mutex_lock l(Manager::instance().mu);
@@ -573,7 +575,7 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                 });
 
       se::gpu::GpuStreamHandle stream = p[0].stream;
-      stream_wait_streamlist(stream, p);
+      if (current_call == 0) stream_wait_streamlist(stream, p);
 
       if (reduction_kind == ReductionKind::SUM) {
         if (dtype == PRED)
@@ -676,7 +678,7 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                    << " is not supported in ReduceScatter.";
       }
 
-      streamlist_wait_stream(stream, p);
+      if (current_call == (max_call - 1)) streamlist_wait_stream(stream, p);
       Manager::instance().cv.notify_all();
     }
   }

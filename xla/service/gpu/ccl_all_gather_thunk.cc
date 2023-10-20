@@ -64,8 +64,8 @@ Status RunAllGather(std::vector<DeviceBufferPair>& buffers, se::Stream& stream,
   VLOG(3) << "Performing all-gather from device ordinal: " << device_ordinal;
 
   se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(&stream);
-
-  for (size_t i = 0; i < buffers.size(); ++i) {
+  int buffer_size = buffers.size();
+  for (size_t i = 0; i < buffer_size; ++i) {
     DeviceBufferPair& buffer = buffers[i];
     const void* send_buffer = buffer.source_buffer.opaque();
     void* recv_buffer = buffer.destination_buffer.opaque();
@@ -81,7 +81,7 @@ Status RunAllGather(std::vector<DeviceBufferPair>& buffers, se::Stream& stream,
         gpu_stream);
 
     sycl_allgather(send_buffer, recv_buffer, element_count, element_type,
-                   gpu_stream, comm);
+                   gpu_stream, comm, i, buffer_size);
   }
 
   VLOG(3) << "Done performing all-gather for ordinal: " << device_ordinal;

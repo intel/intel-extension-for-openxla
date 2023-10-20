@@ -28,11 +28,13 @@ namespace gpu {
 void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                     int element_count, PrimitiveType dtype,
                     ReductionKind reduction_kind,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
+                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm,
+                    int current_call, int max_call);
 
 void sycl_allgather(const void* send_buffer, void* recv_buffer,
                     int element_count, PrimitiveType dtype,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
+                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm,
+                    int current_call, int max_call);
 
 void sycl_alltoall(std::vector<const void*> send_buffer,
                    std::vector<void*> recv_buffer, int element_count,
@@ -42,7 +44,8 @@ void sycl_alltoall(std::vector<const void*> send_buffer,
 void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                          int element_count, PrimitiveType dtype,
                          ReductionKind reduction_kind,
-                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
+                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm,
+                         int current_call, int max_call);
 
 void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
                              int element_count, PrimitiveType dtype,
