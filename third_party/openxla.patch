@@ -128,10 +128,10 @@ index 000000000..7fb456fe9
 +  main()
 diff --git a/third_party/tsl/third_party/gpus/find_sycl_config.py b/third_party/tsl/third_party/gpus/find_sycl_config.py
 new file mode 100644
-index 000000000..99113cdef
+index 000000000..16a1b7ce2
 --- /dev/null
 +++ b/third_party/tsl/third_party/gpus/find_sycl_config.py
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,125 @@
 +# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 +#
 +# Licensed under the Apache License, Version 2.0 (the "License");
@@ -205,6 +205,7 @@ index 000000000..99113cdef
 +  def sycl_version_numbers(path):
 +    possible_version_files = [
 +        "compiler/latest/linux/include/sycl/version.hpp",
++        "compiler/latest/include/sycl/version.hpp",
 +    ]
 +    version_file = None
 +    for f in possible_version_files:
@@ -512,10 +513,10 @@ index 000000000..51c0955d2
 +#     native.cc_library(copts = sycl_default_copts() + copts, **kwargs)
 diff --git a/third_party/tsl/third_party/gpus/sycl_configure.bzl b/third_party/tsl/third_party/gpus/sycl_configure.bzl
 new file mode 100644
-index 000000000..025688985
+index 000000000..320b3d303
 --- /dev/null
 +++ b/third_party/tsl/third_party/gpus/sycl_configure.bzl
-@@ -0,0 +1,843 @@
+@@ -0,0 +1,682 @@
 +"""Repository rule for SYCL autoconfiguration.
 +
 +`sycl_configure` depends on the following environment variables:
@@ -550,7 +551,6 @@ index 000000000..025688985
 +_GCC_HOST_COMPILER_PATH = "GCC_HOST_COMPILER_PATH"
 +_GCC_HOST_COMPILER_PREFIX = "GCC_HOST_COMPILER_PREFIX"
 +_SYCL_TOOLKIT_PATH = "SYCL_PATH"
-+_TF_SYCL_AMDGPU_TARGETS = "TF_SYCL_AMDGPU_TARGETS"
 +_TF_SYCL_CONFIG_REPO = "TF_SYCL_CONFIG_REPO"
 +
 +_DEFAULT_SYCL_TOOLKIT_PATH = "/opt/sycl"
@@ -692,37 +692,11 @@ index 000000000..025688985
 +    """
 +    inc_dirs = []
 +
-+    # Add HSA headers (needs to match $HSA_PATH)
-+    inc_dirs.append(sycl_config.sycl_toolkit_path + "/hsa/include")
-+
-+    # Add HIP headers (needs to match $HIP_PATH)
-+    inc_dirs.append(sycl_config.sycl_toolkit_path + "/hip/include")
-+    if int(sycl_config.sycl_version_number) >= 50200:
-+        inc_dirs.append(sycl_config.sycl_toolkit_path + "/include")
-+        inc_dirs.append(sycl_config.sycl_toolkit_path + "/include/hip")
-+        inc_dirs.append(sycl_config.sycl_toolkit_path + "/include/rocprim")
-+        inc_dirs.append(sycl_config.sycl_toolkit_path + "/include/rocsolver")
-+        inc_dirs.append(sycl_config.sycl_toolkit_path + "/include/rocblas")
-+
-+    # Add HIP-Clang headers (realpath relative to compiler binary)
-+    sycl_toolkit_path = realpath(repository_ctx, sycl_config.sycl_toolkit_path, bash_bin)
-+    inc_dirs.append(sycl_toolkit_path + "/llvm/lib/clang/8.0/include")
-+    inc_dirs.append(sycl_toolkit_path + "/llvm/lib/clang/9.0.0/include")
-+    inc_dirs.append(sycl_toolkit_path + "/llvm/lib/clang/10.0.0/include")
-+    inc_dirs.append(sycl_toolkit_path + "/llvm/lib/clang/11.0.0/include")
-+    inc_dirs.append(sycl_toolkit_path + "/llvm/lib/clang/12.0.0/include")
-+    inc_dirs.append(sycl_toolkit_path + "/llvm/lib/clang/13.0.0/include")
-+    inc_dirs.append(sycl_toolkit_path + "/llvm/lib/clang/14.0.0/include")
-+    inc_dirs.append(sycl_toolkit_path + "/llvm/lib/clang/15.0.0/include")
-+    inc_dirs.append(sycl_toolkit_path + "/llvm/lib/clang/16.0.0/include")
-+    inc_dirs.append(sycl_toolkit_path + "/llvm/lib/clang/17.0.0/include")
-+
-+    # Support hcc based off clang 10.0.0 (for SYCL 3.3)
-+    inc_dirs.append(sycl_toolkit_path + "/hcc/compiler/lib/clang/10.0.0/include/")
-+    inc_dirs.append(sycl_toolkit_path + "/hcc/lib/clang/10.0.0/include")
-+
-+    # Add hcc headers
-+    inc_dirs.append(sycl_toolkit_path + "/hcc/include")
++    sycl_toolkit_path = sycl_config.sycl_toolkit_path + "/compiler/latest/linux"
++    mkl_path = sycl_config.sycl_toolkit_path + "/mkl/latest"
++    inc_dirs.append(sycl_toolkit_path + "/include")
++    inc_dirs.append(mkl_path + "/include")
++    inc_dirs.append(sycl_toolkit_path + "/lib/clang/17/include")
 +
 +    return inc_dirs
 +
@@ -734,22 +708,6 @@ index 000000000..025688985
 +            return False
 +        return True
 +    return False
-+
-+def _amdgpu_targets(repository_ctx, sycl_toolkit_path, bash_bin):
-+    """Returns a list of strings representing AMDGPU targets."""
-+    amdgpu_targets_str = get_host_environ(repository_ctx, _TF_SYCL_AMDGPU_TARGETS)
-+    if not amdgpu_targets_str:
-+        cmd = "%s/bin/sycl_agent_enumerator" % sycl_toolkit_path
-+        result = execute(repository_ctx, [bash_bin, "-c", cmd])
-+        targets = [target for target in result.stdout.strip().split("\n") if target != "gfx000"]
-+        targets = {x: None for x in targets}
-+        targets = list(targets.keys())
-+        amdgpu_targets_str = ",".join(targets)
-+    amdgpu_targets = amdgpu_targets_str.split(",")
-+    for amdgpu_target in amdgpu_targets:
-+        if amdgpu_target[:3] != "gfx":
-+            auto_configure_fail("Invalid AMDGPU target: %s" % amdgpu_target)
-+    return amdgpu_targets
 +
 +def _hipcc_env(repository_ctx):
 +    """Returns the environment variable string for hipcc.
@@ -808,11 +766,8 @@ index 000000000..025688985
 +def _sycl_lib_paths(repository_ctx, lib, basedir):
 +    file_name = _lib_name(lib, version = "", static = False)
 +    return [
-+        # repository_ctx.path("%s/lib64/%s" % (basedir, file_name)),
-+        # repository_ctx.path("%s/lib64/stubs/%s" % (basedir, file_name)),
-+        # repository_ctx.path("%s/lib/x86_64-linux-gnu/%s" % (basedir, file_name)),
 +        repository_ctx.path("%s/lib/%s" % (basedir, file_name)),
-+        # repository_ctx.path("%s/%s" % (basedir, file_name)),
++        repository_ctx.path("%s/lib/intel64/%s" % (basedir, file_name)),
 +    ]
 +
 +def _batch_files_exist(repository_ctx, libs_paths, bash_bin):
@@ -855,20 +810,13 @@ index 000000000..025688985
 +    libs_paths = [
 +        (name, _sycl_lib_paths(repository_ctx, name, path))
 +        for name, path in [
-+            ("sycl", sycl_config.sycl_toolkit_path + "/compiler/latest/linux/"),
-+            # ("rocblas", sycl_config.sycl_toolkit_path),
-+            # (hipfft_or_rocfft, sycl_config.sycl_toolkit_path),
-+            # ("hiprand", sycl_config.sycl_toolkit_path),
-+            # ("MIOpen", miopen_path),
-+            # ("rccl", rccl_path),
-+            # ("hipsparse", sycl_config.sycl_toolkit_path),
-+            # ("roctracer64", sycl_config.sycl_toolkit_path + "/roctracer"),
-+            # ("rocsolver", sycl_config.sycl_toolkit_path),
++            # ("sycl", sycl_config.sycl_toolkit_path + "/compiler/latest/linux/"),
++            ("mkl_sycl", sycl_config.sycl_toolkit_path + "/mkl/latest/"),
++            ("mkl_intel_ilp64", sycl_config.sycl_toolkit_path + "/mkl/latest/"),
++            ("mkl_sequential", sycl_config.sycl_toolkit_path + "/mkl/latest/"),
++            ("mkl_core", sycl_config.sycl_toolkit_path + "/mkl/latest/"),
 +        ]
 +    ]
-+    # if int(sycl_config.sycl_version_number) >= 40500:
-+    #     libs_paths.append(("hipsolver", _sycl_lib_paths(repository_ctx, "hipsolver", sycl_config.sycl_toolkit_path)))
-+    #     libs_paths.append(("hipblas", _sycl_lib_paths(repository_ctx, "hipblas", sycl_config.sycl_toolkit_path)))
 +    return _select_sycl_lib_paths(repository_ctx, libs_paths, bash_bin)
 +
 +def _exec_find_sycl_config(repository_ctx, script_path):
@@ -921,14 +869,9 @@ index 000000000..025688985
 +    config = find_sycl_config(repository_ctx, find_sycl_config_script)
 +    sycl_toolkit_path = config["sycl_toolkit_path"]
 +    sycl_version_number = config["sycl_version_number"]
-+    # miopen_version_number = config["miopen_version_number"]
-+    # hipruntime_version_number = config["hipruntime_version_number"]
 +    return struct(
-+        # amdgpu_targets = _amdgpu_targets(repository_ctx, sycl_toolkit_path, bash_bin),
 +        sycl_toolkit_path = sycl_toolkit_path,
 +        sycl_version_number = sycl_version_number,
-+        # miopen_version_number = miopen_version_number,
-+        # hipruntime_version_number = hipruntime_version_number,
 +    )
 +
 +def _tpl_path(repository_ctx, labelname):
@@ -984,7 +927,7 @@ index 000000000..025688985
 +        repository_ctx,
 +        "sycl:BUILD",
 +        {
-+            "%{hip_lib}": _lib_name("hip"),
++            "%{sycl_lib}": _lib_name("sycl"),
 +            "%{rocblas_lib}": _lib_name("rocblas"),
 +            "%{hipblas_lib}": _lib_name("hipblas"),
 +            "%{miopen_lib}": _lib_name("miopen"),
@@ -1061,9 +1004,6 @@ index 000000000..025688985
 +    tpl_paths = {labelname: _tpl_path(repository_ctx, labelname) for labelname in [
 +        "sycl:build_defs.bzl",
 +        "sycl:BUILD",
-+        # "crosstool:BUILD.sycl",
-+        # "crosstool:hipcc_cc_toolchain_config.bzl",
-+        # "crosstool:clang/bin/crosstool_wrapper_driver_sycl",
 +        # "sycl:sycl_config.h",
 +    ]}
 +
@@ -1075,10 +1015,6 @@ index 000000000..025688985
 +    # For SYCL 4.1 and above use hipfft, older SYCL versions use rocfft
 +    sycl_version_number = int(sycl_config.sycl_version_number)
 +    # hipfft_or_rocfft = "rocfft" if sycl_version_number < 40100 else "hipfft"
-+
-+    # # For SYCL 5.2 and above, find MIOpen and RCCL in the main sycl lib path
-+    # miopen_path = sycl_config.sycl_toolkit_path + "/miopen" if sycl_version_number < 50200 else sycl_config.sycl_toolkit_path
-+    # rccl_path = sycl_config.sycl_toolkit_path + "/rccl" if sycl_version_number < 50200 else sycl_config.sycl_toolkit_path
 +
 +    # Copy header and library files to execroot.
 +    # sycl_toolkit_path
@@ -1092,37 +1028,6 @@ index 000000000..025688985
 +            exceptions = ["gtest", "gmock"],
 +        ),
 +    ]
-+
-+    # # explicitly copy (into the local_config_sycl repo) the $SYCL_PATH/hiprand/include and
-+    # # $SYCL_PATH/rocrand/include dirs, only once the softlink to them in $SYCL_PATH/include
-+    # # dir has been removed. This removal will happen in a near-future SYCL release.
-+    # hiprand_include = ""
-+    # hiprand_include_softlink = sycl_config.sycl_toolkit_path + "/include/hiprand"
-+    # softlink_exists = files_exist(repository_ctx, [hiprand_include_softlink], bash_bin)
-+    # if not softlink_exists[0]:
-+    #     hiprand_include = '":hiprand-include",\n'
-+    #     copy_rules.append(
-+    #         make_copy_dir_rule(
-+    #             repository_ctx,
-+    #             name = "hiprand-include",
-+    #             src_dir = sycl_toolkit_path + "/hiprand/include",
-+    #             out_dir = "sycl/include/hiprand",
-+    #         ),
-+    #     )
-+
-+    # rocrand_include = ""
-+    # rocrand_include_softlink = sycl_config.sycl_toolkit_path + "/include/rocrand"
-+    # softlink_exists = files_exist(repository_ctx, [rocrand_include_softlink], bash_bin)
-+    # if not softlink_exists[0]:
-+    #     rocrand_include = '":rocrand-include",\n'
-+    #     copy_rules.append(
-+    #         make_copy_dir_rule(
-+    #             repository_ctx,
-+    #             name = "rocrand-include",
-+    #             src_dir = sycl_toolkit_path + "/rocrand/include",
-+    #             out_dir = "sycl/include/rocrand",
-+    #         ),
-+    #     )
 +
 +    sycl_libs = _find_libs(repository_ctx, sycl_config, bash_bin)
 +    sycl_lib_srcs = []
@@ -1167,7 +1072,7 @@ index 000000000..025688985
 +    )
 +
 +    repository_dict = {
-+        "%{sycl_lib}": sycl_libs["sycl"].file_name,
++        # "%{sycl_lib}": sycl_libs["sycl"].file_name,
 +        # "%{rocblas_lib}": sycl_libs["rocblas"].file_name,
 +        # "%{hipfft_or_rocfft}": hipfft_or_rocfft,
 +        # "%{hipfft_or_rocfft_lib}": sycl_libs[hipfft_or_rocfft].file_name,
@@ -1180,9 +1085,6 @@ index 000000000..025688985
 +        "%{copy_rules}": "\n".join(copy_rules),
 +        "%{sycl_headers}": ('":sycl-include",\n'),
 +    }
-+    # if sycl_version_number >= 40500:
-+    #     repository_dict["%{hipsolver_lib}"] = sycl_libs["hipsolver"].file_name
-+    #     repository_dict["%{hipblas_lib}"] = sycl_libs["hipblas"].file_name
 +
 +    repository_ctx.template(
 +        "sycl/BUILD",
@@ -1225,52 +1127,6 @@ index 000000000..025688985
 +
 +    verify_build_defines(sycl_defines)
 +
-+    # # Only expand template variables in the BUILD file
-+    # repository_ctx.template(
-+    #     "crosstool/BUILD",
-+    #     tpl_paths["crosstool:BUILD.sycl"],
-+    #     sycl_defines,
-+    # )
-+
-+    # # No templating of cc_toolchain_config - use attributes and templatize the
-+    # # BUILD file.
-+    # repository_ctx.template(
-+    #     "crosstool/cc_toolchain_config.bzl",
-+    #     tpl_paths["crosstool:hipcc_cc_toolchain_config.bzl"],
-+    # )
-+
-+    # repository_ctx.template(
-+    #     "crosstool/clang/bin/crosstool_wrapper_driver_is_not_gcc",
-+    #     tpl_paths["crosstool:clang/bin/crosstool_wrapper_driver_sycl"],
-+    #     {
-+    #         "%{cpu_compiler}": str(cc),
-+    #         "%{hipcc_path}": sycl_config.sycl_toolkit_path + "/hip/bin/hipcc",
-+    #         "%{hipcc_env}": _hipcc_env(repository_ctx),
-+    #         "%{rocr_runtime_path}": sycl_config.sycl_toolkit_path + "/lib",
-+    #         "%{rocr_runtime_library}": "hsa-runtime64",
-+    #         "%{hip_runtime_path}": sycl_config.sycl_toolkit_path + "/hip/lib",
-+    #         "%{hip_runtime_library}": "amdhip64",
-+    #         "%{crosstool_verbose}": _crosstool_verbose(repository_ctx),
-+    #         "%{gcc_host_compiler_path}": str(cc),
-+    #     },
-+    # )
-+
-+    # # Set up sycl_config.h, which is used by
-+    # # tensorflow/compiler/xla/stream_executor/dso_loader.cc.
-+    # repository_ctx.template(
-+    #     "sycl/sycl/sycl_config.h",
-+    #     tpl_paths["sycl:sycl_config.h"],
-+    #     {
-+    #         # "%{sycl_amdgpu_targets}": ",".join(
-+    #         #     ["\"%s\"" % c for c in sycl_config.amdgpu_targets],
-+    #         # ),
-+    #         "%{sycl_toolkit_path}": sycl_config.sycl_toolkit_path,
-+    #         "%{sycl_version_number}": sycl_config.sycl_version_number,
-+    #         # "%{miopen_version_number}": sycl_config.miopen_version_number,
-+    #         # "%{hipruntime_version_number}": sycl_config.hipruntime_version_number,
-+    #     },
-+    # )
-+
 +def _create_remote_sycl_repository(repository_ctx, remote_config_repo):
 +    """Creates pointers to a remotely configured repo set up to build with SYCL."""
 +    _tpl(
@@ -1299,21 +1155,6 @@ index 000000000..025688985
 +        config_repo_label(remote_config_repo, "sycl:sycl/sycl_config.h"),
 +        {},
 +    )
-+    repository_ctx.template(
-+        "crosstool/BUILD",
-+        config_repo_label(remote_config_repo, "crosstool:BUILD"),
-+        {},
-+    )
-+    repository_ctx.template(
-+        "crosstool/cc_toolchain_config.bzl",
-+        config_repo_label(remote_config_repo, "crosstool:cc_toolchain_config.bzl"),
-+        {},
-+    )
-+    repository_ctx.template(
-+        "crosstool/clang/bin/crosstool_wrapper_driver_is_not_gcc",
-+        config_repo_label(remote_config_repo, "crosstool:clang/bin/crosstool_wrapper_driver_is_not_gcc"),
-+        {},
-+    )
 +
 +def _sycl_autoconf_impl(repository_ctx):
 +    """Implementation of the sycl_autoconf repository rule."""
@@ -1332,7 +1173,6 @@ index 000000000..025688985
 +    _GCC_HOST_COMPILER_PREFIX,
 +    "TF_NEED_SYCL",
 +    _SYCL_TOOLKIT_PATH,
-+    _TF_SYCL_AMDGPU_TARGETS,
 +]
 +
 +remote_sycl_configure = repository_rule(
