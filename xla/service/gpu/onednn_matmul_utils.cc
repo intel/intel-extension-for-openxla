@@ -146,13 +146,13 @@ struct OneDnnMatMulParams {
 };
 
 template <typename InputT>
-StatusOr<bool> RunXetlaGemm(se::gpu::GpuStreamHandle handle,
-                            const MatrixDescriptor& lhs,
-                            const MatrixDescriptor& rhs,
-                            const MatrixDescriptor& c,
-                            const MatrixDescriptor& out,
-                            se::DeviceMemoryBase bias,
-                            se::cuda::BlasLt::Epilogue epilogue, float beta) {
+std::enable_if_t<std::is_same_v<InputT, ::gpu::xetla::bf16> ||
+                     std::is_same_v<InputT, sycl::half>,
+                 StatusOr<bool>>
+RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
+             const MatrixDescriptor& rhs, const MatrixDescriptor& c,
+             const MatrixDescriptor& out, se::DeviceMemoryBase bias,
+             se::cuda::BlasLt::Epilogue epilogue, float beta) {
   void* bias_data = const_cast<void*>(bias.opaque());
   void* c_data = const_cast<void*>(c.data.opaque());
   switch (epilogue) {
@@ -240,6 +240,15 @@ StatusOr<bool> RunXetlaGemm(se::gpu::GpuStreamHandle handle,
     default:
       return InternalError("Unsupported Activation mode");
   }
+}
+
+template <typename InputT>
+std::enable_if_t<std::is_same_v<InputT, float>, StatusOr<bool>> RunXetlaGemm(
+    se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
+    const MatrixDescriptor& rhs, const MatrixDescriptor& c,
+    const MatrixDescriptor& out, se::DeviceMemoryBase bias,
+    se::cuda::BlasLt::Epilogue epilogue, float beta) {
+  return InternalError("Unsupported Datatype in XeTLA");
 }
 
 std::unique_ptr<OneDnnMatMulParams> CreateMatMulParams(
