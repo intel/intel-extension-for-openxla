@@ -646,10 +646,10 @@ xetla_library(
         "@xla//xla/service/gpu:ir_emission_utils",
         "@xla//xla/service/gpu:matmul_utils",
         "@xla//xla/stream_executor:stream_executor_headers",
-    ]+ onednn_deps(),
+    ] + onednn_deps(),
 )
 
-xpu_library(
+cc_library(
     name = "ccl_utils",
     srcs = ["ccl_utils.cc"],
     hdrs = ["ccl_utils.h"],

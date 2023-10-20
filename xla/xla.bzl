@@ -45,16 +45,6 @@ def xpu_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
         **kwargs
     )
 
-def xpu_binary(name, srcs = [], deps = [], *argc, **kwargs):
-    kwargs["copts"] = kwargs.get("copts", []) + if_dpcpp(["-dpcpp_compile"])
-    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_dpcpp(["-link_stage"])
-    native.cc_binary(
-        name = name,
-        srcs = srcs,
-        deps = deps,
-        **kwargs
-    )
-
 def _get_transitive_headers(hdrs, deps):
     return depset(
         hdrs,
