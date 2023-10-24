@@ -19,8 +19,8 @@ build --config=gpu
 # build:cpu -c opt
 
 # This config option is used for GPU backend.
-build:gpu --crosstool_top=@local_config_dpcpp//crosstool_dpcpp:toolchain
-build:gpu --define=using_dpcpp=true --define=using_xetla=true
+build:gpu --crosstool_top=@local_config_sycl//crosstool:toolchain
+build:gpu --define=using_sycl=true
 build:gpu --define=device=gpu
 build:gpu --config=onednn_v3
 build:gpu --repo_env TF_NEED_SYCL=1

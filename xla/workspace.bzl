@@ -1,8 +1,8 @@
-load("//third_party/build_option:dpcpp_configure.bzl", "dpcpp_configure")
+load("//third_party/gpus:sycl_configure.bzl", "sycl_configure")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
 def workspace(path_prefix = "", tf_repo_name = ""):
-    dpcpp_configure(name = "local_config_dpcpp")
+    sycl_configure(name = "local_config_sycl")
 
     new_git_repository(
         name = "onednn_gpu",

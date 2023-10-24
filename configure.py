@@ -35,7 +35,7 @@ except ImportError:
 # pylint: enable=g-import-not-at-top
 
 
-_DEFAULT_DPCPP_TOOLKIT_PATH = '/opt/intel/oneapi/compiler/latest/linux'
+_DEFAULT_SYCL_TOOLKIT_PATH = '/opt/intel/oneapi/compiler/latest/linux'
 _DEFAULT_MKL_PATH='/opt/intel/oneapi/mkl/latest'
 _DEFAULT_AOT_CONFIG = ''
 _DEFAULT_GCC_TOOLCHAIN_PATH = ''
@@ -650,8 +650,8 @@ def reformat_version_sequence(version_str, sequence_count):
   return '.'.join(v[:sequence_count])
 
 
-def set_dpcpp_toolkit_path(environ_cp):
-  """Set DPCPP_TOOLKIT_PATH."""
+def set_sycl_toolkit_path(environ_cp):
+  """Set SYCL_TOOLKIT_PATH."""
 
   def toolkit_exists(toolkit_path):
     """Check if a dpc++ toolkit path is valid."""
@@ -664,22 +664,22 @@ def set_dpcpp_toolkit_path(environ_cp):
             (sycl_rt_lib_path_full))
     return exists
 
-  dpcpp_toolkit_path = prompt_loop_or_load_from_env(
+  sycl_toolkit_path = prompt_loop_or_load_from_env(
       environ_cp,
-      var_name='DPCPP_TOOLKIT_PATH',
-      var_default=_DEFAULT_DPCPP_TOOLKIT_PATH,
+      var_name='SYCL_TOOLKIT_PATH',
+      var_default=_DEFAULT_SYCL_TOOLKIT_PATH,
       ask_for_var=(
           'Please specify the location where DPC++ is installed.'),
       check_success=toolkit_exists,
       error_msg='Invalid DPC++ compiler path. libsycl.so cannot be found.',
       suppress_default_error=True)
 
-  write_action_env_to_bazelrc('DPCPP_TOOLKIT_PATH',
-                              dpcpp_toolkit_path)
-  write_action_env_to_bazelrc('SYCL_PATH', dpcpp_toolkit_path.split("compiler")[0])
+  write_action_env_to_bazelrc('SYCL_TOOLKIT_PATH',
+                              sycl_toolkit_path)
+  write_action_env_to_bazelrc('SYCL_PATH', sycl_toolkit_path.split("compiler")[0])
   lib_path = '%s/lib:%s/compiler/lib/intel64_lin' %(
-      dpcpp_toolkit_path,
-      dpcpp_toolkit_path,
+      sycl_toolkit_path,
+      sycl_toolkit_path,
   )
 
   ld_lib_path = lib_path
@@ -730,7 +730,7 @@ def system_specific_test_config(env):
   write_to_bazelrc(
       'test --test_tag_filters=-benchmark-test,-no_oss,-oss_serial')
   write_to_bazelrc('test --build_tag_filters=-benchmark-test,-no_oss')
-  if env.get('TF_NEED_DPCPP', None) == '1':
+  if env.get('TF_NEED_SYCL', None) == '1':
     write_to_bazelrc('test --test_tag_filters=-no_gpu')
     write_to_bazelrc('test --build_tag_filters=-no_gpu')
     write_to_bazelrc('test --test_env=LD_LIBRARY_PATH')
@@ -813,9 +813,9 @@ def main():
   setup_python(environ_cp)
   create_build_configuration(environ_cp)
 
-  set_action_env_var(environ_cp, 'TF_NEED_DPCPP', 'GPU', True)
-  if environ_cp.get('TF_NEED_DPCPP') == '1':
-    set_dpcpp_toolkit_path(environ_cp)
+  set_action_env_var(environ_cp, 'TF_NEED_SYCL', 'GPU', True)
+  if environ_cp.get('TF_NEED_SYCL') == '1':
+    set_sycl_toolkit_path(environ_cp)
     set_action_env_var(environ_cp, 'TF_NEED_MKL', 'MKL', False)
     if environ_cp.get('TF_NEED_MKL') == '1':
       set_mkl_path(environ_cp)
