@@ -1,4 +1,8 @@
 load("//xla:xla.bzl", "xpu_library")
+load(
+    "@local_config_sycl//sycl:build_defs.bzl",
+    "if_sycl_is_configured",
+)
 
 package(
     default_visibility = [
@@ -57,7 +61,9 @@ cc_library(
         "@xla//xla/stream_executor/gpu:gpu_driver_header",
         "@xla//xla/stream_executor/platform",
         "@xla//xla/stream_executor/platform:dso_loader",
-    ],
+    ] + if_sycl_is_configured([
+        "@local_config_sycl//sycl:mkl",
+    ]),
 )
 
 cc_library(

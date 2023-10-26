@@ -5,10 +5,6 @@ load("//third_party:version_check.bzl", "check_bazel_version_at_least")
 
 check_bazel_version_at_least("5.3.0")
 
-load("//xla:workspace.bzl", "workspace")
-
-workspace()
-
 # To update XLA to a new revision,
 # a) update URL and strip_prefix to the new git commit hash
 # b) get the sha256 hash of the commit by running:
@@ -63,3 +59,7 @@ load(
 )
 
 bazel_toolchains_repositories()
+
+load("//xla:workspace.bzl", "workspace")
+
+workspace()

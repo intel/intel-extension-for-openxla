@@ -176,11 +176,11 @@ def _impl(ctx):
                 ],
                 flag_groups = [
                     flag_group(
-                        flags = ctx.attr.host_unfiltered_compile_flags,
+                        flags = ctx.attr.unfiltered_compile_flags,
                     ),
                 ],
             ),
-        ] if ctx.attr.host_unfiltered_compile_flags else []),
+        ] if ctx.attr.unfiltered_compile_flags else []),
     )
 
     determinism_feature = feature(
@@ -601,7 +601,7 @@ def _impl(ctx):
                         # ref: https://github.com/intel/llvm/blob/sycl/clang/docs/UsersManual.rst#controlling-floating-point-behavior
                         "-fno-finite-math-only",
                         "-fno-approx-func",
-                        "-DITEX_USE_MKL=%{TF_NEED_MKL}",
+                        "-DITEX_USE_MKL=1",
                         "-DITEX_ENABLE_DOUBLE=1",
                         "-DDNNL_USE_DPCPP_USM=1",
                         "-DDNNL_WITH_LEVEL_ZERO=1",
@@ -724,7 +724,7 @@ cc_toolchain_config = rule(
         "host_compiler_path": attr.string(),
         "host_compiler_prefix": attr.string(),
         "host_compiler_warnings": attr.string_list(),
-        "host_unfiltered_compile_flags": attr.string_list(),
+        "unfiltered_compile_flags": attr.string_list(),
         "linker_bin_path": attr.string(),
     },
     provides = [CcToolchainConfigInfo],

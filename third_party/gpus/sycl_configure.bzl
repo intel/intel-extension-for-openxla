@@ -7,6 +7,27 @@
   * PYTHON_LIB_PATH: The path to the python lib
 """
 
+load(
+    "@xla//third_party/tsl/third_party/gpus:cuda_configure.bzl",
+    "make_copy_dir_rule",
+    "make_copy_files_rule",
+    "to_list_of_strings",
+)
+load(
+    "@xla//third_party/tsl/third_party/remote_config:common.bzl",
+    "config_repo_label",
+    "err_out",
+    "execute",
+    "files_exist",
+    "get_bash_bin",
+    "get_cpu_value",
+    "get_host_environ",
+    "get_python_bin",
+    "raw_exec",
+    "realpath",
+    "which",
+)
+
 _HOST_CXX_COMPILER = "HOST_CXX_COMPILER"
 
 _HOST_C_COMPILER = "HOST_C_COMPILER"
@@ -15,32 +36,50 @@ _SYCL_TOOLKIT_PATH = "SYCL_TOOLKIT_PATH"
 
 _SYCL_COMPILER_VERSION = "SYCL_COMPILER_VERSION"
 
-_ONEAPI_MKL_PATH = "ONEAPI_MKL_PATH"
-
-_TF_NEED_MKL = "TF_NEED_MKL"
-
-_AOT_CONFIG = "AOT_CONFIG"
-
 _PYTHON_LIB_PATH = "PYTHON_LIB_PATH"
 
 _PYTHON_LIB_DIR = "PYTHON_LIB_DIR"
 
 _PYTHON_BIN_PATH = "PYTHON_BIN_PATH"
 
+def _mkl_path(sycl_config):
+    return sycl_config.sycl_basekit_path + "/mkl/" + sycl_config.sycl_basekit_version_number
+
+def _sycl_header_path(repository_ctx, sycl_config, bash_bin):
+    sycl_header_path = sycl_config.sycl_basekit_path + "/compiler/" + sycl_config.sycl_basekit_version_number
+    include_dir = sycl_header_path + "/include"
+    if not files_exist(repository_ctx, [include_dir], bash_bin)[0]:
+        sycl_header_path = sycl_header_path + "/linux"
+        include_dir = sycl_header_path + "/include"
+        if not files_exist(repository_ctx, [include_dir], bash_bin)[0]:
+            auto_configure_fail("Cannot find sycl headers in {}".format(include_dir))
+    return sycl_header_path
+
+def _sycl_include_path(repository_ctx, sycl_config, bash_bin):
+    """Generates the cxx_builtin_include_directory entries for sycl inc dirs.
+
+    Args:
+      repository_ctx: The repository context.
+      sycl_config: The path to the gcc host compiler.
+
+    Returns:
+      A string containing the Starlark string for each of the gcc
+      host compiler include directories, which can be added to the CROSSTOOL
+      file.
+    """
+    inc_dirs = []
+
+    inc_dirs.append(_mkl_path(sycl_config) + "/include")
+    inc_dirs.append(_sycl_header_path(repository_ctx, sycl_config, bash_bin) + "/include")
+    inc_dirs.append(_sycl_header_path(repository_ctx, sycl_config, bash_bin) + "/lib/clang/17/include")
+
+    return inc_dirs
+
 def _enable_sycl(repository_ctx):
     if "TF_NEED_SYCL" in repository_ctx.os.environ:
         enable_sycl = repository_ctx.os.environ["TF_NEED_SYCL"].strip()
         return enable_sycl == "1"
     return False
-
-def _enable_mkl(repository_ctx):
-    if _TF_NEED_MKL in repository_ctx.os.environ:
-        enable_mkl = repository_ctx.os.environ[_TF_NEED_MKL].strip()
-        return enable_mkl == "1"
-    return False
-
-def _enable_sycl_build(repository_ctx):
-    return _SYCL_TOOLKIT_PATH in repository_ctx.os.environ
 
 def auto_configure_fail(msg):
     """Output failure message when auto configuration fails."""
@@ -72,18 +111,15 @@ def find_cc(repository_ctx):
         fail("Cannot find C++ compiler, please correct your path.")
     return cc
 
-def find_sycl_root(repository_ctx):
-    """Find DPC++ compiler."""
-    sycl_name = ""
-    if _SYCL_TOOLKIT_PATH in repository_ctx.os.environ:
-        sycl_name = str(repository_ctx.path(repository_ctx.os.environ[_SYCL_TOOLKIT_PATH].strip()).realpath)
+def find_sycl_root(repository_ctx, sycl_config):
+    sycl_name = str(repository_ctx.path(sycl_config.sycl_toolkit_path.strip()).realpath)
     if sycl_name.startswith("/"):
         return sycl_name
     fail("Cannot find DPC++ compiler, please correct your path")
 
-def find_sycl_include_path(repository_ctx):
+def find_sycl_include_path(repository_ctx, sycl_config):
     """Find DPC++ compiler."""
-    base_path = find_sycl_root(repository_ctx)
+    base_path = find_sycl_root(repository_ctx, sycl_config)
     bin_path = repository_ctx.path(base_path + "/" + "bin" + "/" + "icpx")
     icpx_extra = ""
     if not bin_path.exists:
@@ -104,12 +140,12 @@ def find_sycl_include_path(repository_ctx):
             include_dirs.append(str(repository_ctx.path(l.strip()).realpath))
     return include_dirs
 
-def get_sycl_version(repository_ctx):
+def get_sycl_version(repository_ctx, sycl_config):
     """Get DPC++ compiler version yyyymmdd"""
     default_version = "00000000"
     macro = "__INTEL_LLVM_COMPILER"
     version_file = "include/sycl/CL/sycl/version.hpp"
-    base_path = find_sycl_root(repository_ctx)
+    base_path = find_sycl_root(repository_ctx, sycl_config)
     intel_llvm_macro = "00000000"
     compiler_bin_path = base_path + "/bin/icpx"
     compiler_macros = repository_ctx.execute([compiler_bin_path, "-dM", "-E", "-xc++", "/dev/null"])
@@ -133,60 +169,147 @@ def get_sycl_version(repository_ctx):
                 default_version = l_list[-1]
     return default_version
 
-def find_mkl_path(repository_ctx):
-    """Find MKL Path."""
-    mkl_path = ""
-    if _ONEAPI_MKL_PATH in repository_ctx.os.environ:
-        mkl_path = repository_ctx.os.environ[_ONEAPI_MKL_PATH].strip()
-    if mkl_path.startswith("/"):
-        return mkl_path
-    fail("Cannot find OneAPI MKL, please correct your path")
-
-def find_aot_config(repository_ctx):
-    """Find AOT config."""
-    device_tmp = " -Xs \'-device {}\'"
-    if _AOT_CONFIG in repository_ctx.os.environ:
-        devices = repository_ctx.os.environ[_AOT_CONFIG].strip()
-        device_list = []
-        if devices:
-            device_list = devices.split(",")
-        else:
-            return ""
-        if device_list:
-            # check for security purpose only here
-            for d in device_list:
-                if len(d) > 20:
-                    fail("Invalid AOT target: {}".format(d))
-            device_tmp = device_tmp.format(devices)
-    return device_tmp
-
 def find_python_lib(repository_ctx):
     """Returns python path."""
     if _PYTHON_LIB_PATH in repository_ctx.os.environ:
         return repository_ctx.os.environ[_PYTHON_LIB_PATH].strip()
     fail("Environment variable PYTHON_LIB_PATH was not specified re-run ./configure")
 
-def _check_lib(repository_ctx, toolkit_path, lib):
-    """Checks if lib exists under sycl_toolkit_path or fail if it doesn't.
+def _lib_name(lib, version = "", static = False):
+    """Constructs the name of a library on Linux.
+
+    Args:
+      lib: The name of the library, such as "hip"
+      version: The version of the library.
+      static: True the library is static or False if it is a shared object.
+
+    Returns:
+      The platform-specific name of the library.
+    """
+    if static:
+        return "lib%s.a" % lib
+    else:
+        if version:
+            version = ".%s" % version
+        return "lib%s.so%s" % (lib, version)
+
+def _sycl_lib_paths(repository_ctx, lib, basedir):
+    file_name = _lib_name(lib, version = "", static = False)
+    return [
+        repository_ctx.path("%s/lib/%s" % (basedir, file_name)),
+        repository_ctx.path("%s/lib/intel64/%s" % (basedir, file_name)),
+    ]
+
+def _batch_files_exist(repository_ctx, libs_paths, bash_bin):
+    all_paths = []
+    for _, lib_paths in libs_paths:
+        for lib_path in lib_paths:
+            all_paths.append(lib_path)
+    return files_exist(repository_ctx, all_paths, bash_bin)
+
+def _select_sycl_lib_paths(repository_ctx, libs_paths, bash_bin):
+    test_results = _batch_files_exist(repository_ctx, libs_paths, bash_bin)
+
+    libs = {}
+    i = 0
+    for name, lib_paths in libs_paths:
+        selected_path = None
+        for path in lib_paths:
+            if test_results[i] and selected_path == None:
+                # For each lib select the first path that exists.
+                selected_path = path
+            i = i + 1
+        if selected_path == None:
+            auto_configure_fail("Cannot find sycl library %s" % name)
+
+        libs[name] = struct(file_name = selected_path.basename, path = realpath(repository_ctx, selected_path, bash_bin))
+
+    return libs
+
+def _find_libs(repository_ctx, sycl_config, bash_bin):
+    """Returns the SYCL libraries on the system.
 
     Args:
       repository_ctx: The repository context.
-      toolkit_path: The toolkit directory containing the libraries.
-      ib: The library to look for under toolkit_path.
-    """
-    lib_path = toolkit_path + "/" + lib
-    if not repository_ctx.path(lib_path).exists:
-        auto_configure_fail("Cannot find %s" % lib_path)
+      sycl_config: The SYCL config as returned by _get_sycl_config
+      bash_bin: the path to the bash interpreter
 
-def _check_dir(repository_ctx, directory):
-    """Checks whether the directory exists and fail if it does not.
+    Returns:
+      Map of library names to structs of filename and path
+    """
+    mkl_path = _mkl_path(sycl_config)
+    libs_paths = [
+        (name, _sycl_lib_paths(repository_ctx, name, path))
+        for name, path in [
+            # ("sycl", sycl_config.sycl_basekit_path + "/compiler/latest/linux/"),
+            ("mkl_intel_ilp64", mkl_path),
+            ("mkl_sequential", mkl_path),
+            ("mkl_core", mkl_path),
+        ]
+    ]
+    if sycl_config.sycl_basekit_version_number < "2024":
+        libs_paths.append(("mkl_sycl", _sycl_lib_paths(repository_ctx, "mkl_sycl", mkl_path)))
+    else:
+        libs_paths.append(("mkl_sycl_blas", _sycl_lib_paths(repository_ctx, "mkl_sycl_blas", mkl_path)))
+        libs_paths.append(("mkl_sycl_lapack", _sycl_lib_paths(repository_ctx, "mkl_sycl_lapack", mkl_path)))
+        libs_paths.append(("mkl_sycl_sparse", _sycl_lib_paths(repository_ctx, "mkl_sycl_sparse", mkl_path)))
+        libs_paths.append(("mkl_sycl_dft", _sycl_lib_paths(repository_ctx, "mkl_sycl_dft", mkl_path)))
+        libs_paths.append(("mkl_sycl_vm", _sycl_lib_paths(repository_ctx, "mkl_sycl_vm", mkl_path)))
+        libs_paths.append(("mkl_sycl_rng", _sycl_lib_paths(repository_ctx, "mkl_sycl_rng", mkl_path)))
+        libs_paths.append(("mkl_sycl_stats", _sycl_lib_paths(repository_ctx, "mkl_sycl_stats", mkl_path)))
+        libs_paths.append(("mkl_sycl_data_fitting", _sycl_lib_paths(repository_ctx, "mkl_sycl_data_fitting", mkl_path)))
+    return _select_sycl_lib_paths(repository_ctx, libs_paths, bash_bin)
+
+def _exec_find_sycl_config(repository_ctx, script_path):
+    python_bin = get_python_bin(repository_ctx)
+
+    # If used with remote execution then repository_ctx.execute() can't
+    # access files from the source tree. A trick is to read the contents
+    # of the file in Starlark and embed them as part of the command. In
+    # this case the trick is not sufficient as the find_cuda_config.py
+    # script has more than 8192 characters. 8192 is the command length
+    # limit of cmd.exe on Windows. Thus we additionally need to compress
+    # the contents locally and decompress them as part of the execute().
+    compressed_contents = repository_ctx.read(script_path)
+    decompress_and_execute_cmd = (
+        "from zlib import decompress;" +
+        "from base64 import b64decode;" +
+        "from os import system;" +
+        "script = decompress(b64decode('%s'));" % compressed_contents.rstrip('\n') +
+        "f = open('script.py', 'wb');" +
+        "f.write(script);" +
+        "f.close();" +
+        "system('\"%s\" script.py');" % (python_bin)
+    )
+    return execute(repository_ctx, [python_bin, "-c", decompress_and_execute_cmd])
+
+def find_sycl_config(repository_ctx, script_path):
+    """Returns SYCL config dictionary from running find_sycl_config.py"""
+    exec_result = _exec_find_sycl_config(repository_ctx, script_path)
+    if exec_result.return_code:
+        auto_configure_fail("Failed to run find_sycl_config.py: %s" % err_out(exec_result))
+
+    # Parse the dict from stdout.
+    return dict([tuple(x.split(": ")) for x in exec_result.stdout.splitlines()])
+
+def _get_sycl_config(repository_ctx, bash_bin, find_sycl_config_script):
+    """Detects and returns information about the SYCL installation on the system.
 
     Args:
       repository_ctx: The repository context.
-      directory: The directory to check the existence of.
+      bash_bin: the path to the path interpreter
     """
-    if not repository_ctx.path(directory).exists:
-        auto_configure_fail("Cannot find dir: %s" % directory)
+    config = find_sycl_config(repository_ctx, find_sycl_config_script)
+    sycl_basekit_path = config["sycl_basekit_path"]
+    sycl_toolkit_path = config["sycl_toolkit_path"]
+    sycl_version_number = config["sycl_version_number"]
+    sycl_basekit_version_number = config["sycl_basekit_version_number"]
+    return struct(
+        sycl_basekit_path = sycl_basekit_path,
+        sycl_toolkit_path = sycl_toolkit_path,
+        sycl_version_number = sycl_version_number,
+        sycl_basekit_version_number = sycl_basekit_version_number,
+    )
 
 def _tpl_path(repository_ctx, labelname):
     return repository_ctx.path(Label("//third_party/gpus/%s.tpl" % labelname))
@@ -309,137 +432,186 @@ def _create_dummy_repository(repository_ctx):
         {
             "%{sycl_is_configured}": "False",
             "%{sycl_build_is_configured}": "False",
-            "%{mkl_is_configured}": "False",
         },
     )
 
-def _sycl_autoconf_imp(repository_ctx):
-    """Implementation of the sycl_autoconf rule."""
+def _create_local_sycl_repository(repository_ctx):
     builtin_include_dirs = ""
     unfiltered_cxx_flags = ""
     linker_flags = ""
 
     sycl_defines = {}
+    tpl_paths = {labelname: _tpl_path(repository_ctx, labelname) for labelname in [
+        "sycl:build_defs.bzl",
+        "sycl:BUILD",
+        "crosstool:BUILD.sycl",
+        "crosstool:sycl_cc_toolchain_config.bzl",
+        "crosstool/bin:crosstool_wrapper_driver",
+    ]}
 
+    find_sycl_config_script = repository_ctx.path(Label("//third_party/gpus:find_sycl_config.py.gz.base64"))
+
+    bash_bin = get_bash_bin(repository_ctx)
+    sycl_config = _get_sycl_config(repository_ctx, bash_bin, find_sycl_config_script)
+
+    # Copy header and library files to execroot.
+    copy_rules = [
+        # make_copy_dir_rule(
+        #     repository_ctx,
+        #     name = "sycl-include",
+        #     src_dir = _sycl_header_path(repository_ctx, sycl_config, bash_bin) + "/include",
+        #     out_dir = "sycl/include",
+        #     exceptions = ["gtest", "gmock"],
+        # ),
+    ]
+    copy_rules.append(make_copy_dir_rule(
+        repository_ctx,
+        name = "mkl-include",
+        src_dir = _mkl_path(sycl_config) + "/include",
+        out_dir = "sycl/include",
+        exceptions = ["gtest", "gmock"],
+    ))
+
+    sycl_libs = _find_libs(repository_ctx, sycl_config, bash_bin)
+    sycl_lib_srcs = []
+    sycl_lib_outs = []
+    for lib in sycl_libs.values():
+        sycl_lib_srcs.append(lib.path)
+        sycl_lib_outs.append("sycl/lib/" + lib.file_name)
+    copy_rules.append(make_copy_files_rule(
+        repository_ctx,
+        name = "sycl-lib",
+        srcs = sycl_lib_srcs,
+        outs = sycl_lib_outs,
+    ))
+
+    # Set up BUILD file for sycl/
+    repository_ctx.template(
+        "sycl/build_defs.bzl",
+        tpl_paths["sycl:build_defs.bzl"],
+        {
+            "%{sycl_is_configured}": "True",
+            "%{sycl_build_is_configured}": "True",
+        },
+    )
+
+    if sycl_config.sycl_basekit_version_number < "2024":
+        mkl_sycl_libs = '"{}"'.format(
+            "sycl/lib/" + sycl_libs["mkl_sycl"].file_name)
+    else:
+        mkl_sycl_libs = '"{}",\n"{}",\n"{}",\n"{}",\n"{}",\n"{}",\n"{}",\n"{}",\n'.format(
+            "sycl/lib/" + sycl_libs["mkl_sycl_blas"].file_name,
+            "sycl/lib/" + sycl_libs["mkl_sycl_lapack"].file_name,
+            "sycl/lib/" + sycl_libs["mkl_sycl_sparse"].file_name,
+            "sycl/lib/" + sycl_libs["mkl_sycl_dft"].file_name,
+            "sycl/lib/" + sycl_libs["mkl_sycl_vm"].file_name,
+            "sycl/lib/" + sycl_libs["mkl_sycl_rng"].file_name,
+            "sycl/lib/" + sycl_libs["mkl_sycl_stats"].file_name,
+            "sycl/lib/" + sycl_libs["mkl_sycl_data_fitting"].file_name,
+        )
+    repository_dict = {
+        "%{mkl_intel_ilp64_lib}": sycl_libs["mkl_intel_ilp64"].file_name,
+        "%{mkl_sequential_lib}": sycl_libs["mkl_sequential"].file_name,
+        "%{mkl_core_lib}": sycl_libs["mkl_core"].file_name,
+        "%{mkl_sycl_libs}": mkl_sycl_libs,
+        "%{copy_rules}": "\n".join(copy_rules),
+        "%{sycl_headers}": ('":mkl-include",\n'),
+    }
+    repository_ctx.template(
+        "sycl/BUILD",
+        tpl_paths["sycl:BUILD"],
+        repository_dict,
+    )
+
+    additional_cxxflags = []
+    additional_linker_flags = []
+    builtin_includes = []
+    builtin_includes += _sycl_include_path(repository_ctx, sycl_config, bash_bin)
+
+    pwd = repository_ctx.os.environ["PWD"]
+    additional_inc = []
+    if repository_ctx.os.environ.get("CPATH") != None:
+        for p in repository_ctx.os.environ["CPATH"].strip().split(":"):
+            if p != "":
+                additional_inc += [_normalize_include_path(repository_ctx, p)]
+    if len(additional_inc) > 0:
+        additional_inc = ",".join(additional_inc)
+    else:
+        additional_inc = "\"\""
+
+    if repository_ctx.os.environ.get("TMPDIR") != None:
+        sycl_defines["%{TMP_DIRECTORY}"] = repository_ctx.os.environ.get("TMPDIR")
+    else:
+        tmp_suffix = repository_ctx.execute(["cat", "/proc/sys/kernel/random/uuid"]).stdout.rstrip()
+        tmp_dir = "/tmp/" + tmp_suffix
+        sycl_defines["%{TMP_DIRECTORY}"] = tmp_dir
+
+    sycl_defines["%{cxx_builtin_include_directories}"] = str(builtin_includes)
+    sycl_defines["%{sycl_builtin_include_directories}"] = str(builtin_includes)
+    sycl_defines["%{extra_no_canonical_prefixes_flags}"] = "\"-fno-canonical-system-headers\""
+    sycl_defines["%{unfiltered_compile_flags}"] = to_list_of_strings([
+        "-DMKL_ILP64",
+    ])
+    sycl_defines["%{host_compiler}"] = "gcc"
+    sycl_defines["%{HOST_COMPILER_PATH}"] = "/usr/bin/gcc"
+    sycl_defines["%{host_compiler_prefix}"] = "/usr/bin"
+    sycl_defines["%{sycl_compiler_root}"] = str(sycl_config.sycl_toolkit_path)
+    sycl_defines["%{linker_bin_path}"] = "/usr/bin"
+    sycl_defines["%{SYCL_ROOT_DIR}"] = str(sycl_config.sycl_toolkit_path)
+    sycl_defines["%{additional_include_directories}"] = additional_inc
+    sycl_defines["%{SYCL_COMPILER_VERSION}"] = str(get_sycl_version(repository_ctx, sycl_config))
+    sycl_defines["%{PYTHON_LIB_PATH}"] = repository_ctx.os.environ[_PYTHON_LIB_PATH]
+    sycl_defines["%{basekit_path}"] = str(sycl_config.sycl_basekit_path)
+    sycl_defines["%{basekit_version}"] = str(sycl_config.sycl_basekit_version_number)
+
+    sycl_internal_inc_dirs = find_sycl_include_path(repository_ctx, sycl_config)
+    sycl_internal_inc = "\", \"".join(sycl_internal_inc_dirs)
+    sycl_internal_isystem_inc = []
+    for d in sycl_internal_inc_dirs:
+        sycl_internal_isystem_inc.append("-isystem\", \"" + d)
+
+    if len(sycl_internal_inc_dirs) > 0:
+        sycl_defines["%{SYCL_ISYSTEM_INC}"] = "\"]), \n\tflag_group(flags=[ \"".join(sycl_internal_isystem_inc)
+        sycl_defines["%{SYCL_INTERNAL_INC}"] = sycl_internal_inc
+    else:
+        sycl_defines["%{SYCL_ISYSTEM_INC}"] = ""
+        sycl_defines["%{SYCL_INTERNAL_INC}"] = ""
+
+    unfiltered_cxx_flags = "" if additional_cxxflags == [] else "unfiltered_cxx_flag: "
+    unfiltered_cxx_flags += "\n  unfiltered_cxx_flag: ".join(additional_cxxflags)
+
+    sycl_defines["%{unfiltered_compile_flags}"] = unfiltered_cxx_flags
+
+    linker_flags = "" if additional_linker_flags == [] else "linker_flag: "
+    linker_flags += "\n  linker_flag: ".join(additional_linker_flags)
+
+    # Only expand template variables in the BUILD file
+    repository_ctx.template(
+        "crosstool/BUILD",
+        tpl_paths["crosstool:BUILD.sycl"],
+        sycl_defines,
+    )
+
+    # No templating of cc_toolchain_config - use attributes and templatize the
+    # BUILD file.
+    repository_ctx.template(
+        "crosstool/cc_toolchain_config.bzl",
+        tpl_paths["crosstool:sycl_cc_toolchain_config.bzl"],
+        sycl_defines,
+    )
+
+    repository_ctx.template(
+        "crosstool/bin/crosstool_wrapper_driver",
+        tpl_paths["crosstool/bin:crosstool_wrapper_driver"],
+        sycl_defines,
+    )
+
+def _sycl_autoconf_imp(repository_ctx):
+    """Implementation of the sycl_autoconf rule."""
     if not _enable_sycl(repository_ctx):
         _create_dummy_repository(repository_ctx)
     else:
-        tpl_paths = {labelname: _tpl_path(repository_ctx, labelname) for labelname in [
-            # "rocm:build_defs.bzl",
-            # "rocm:BUILD",
-            "crosstool:BUILD.sycl",
-            "crosstool:sycl_cc_toolchain_config.bzl",
-            "crosstool/bin:crosstool_wrapper_driver",
-            # "rocm:rocm_config.h",
-        ]}
-
-        # copy template files
-        _tpl(repository_ctx, "sycl:build_defs.bzl")
-        _tpl(repository_ctx, "sycl:BUILD")
-
-        additional_cxxflags = []
-        additional_linker_flags = []
-        builtin_includes = []
-
-        builtin_includes += [find_sycl_root(repository_ctx) + "/include"]
-        builtin_includes += [find_sycl_root(repository_ctx) + "/lib/clang/12.0.0/include"]
-        builtin_includes += [find_sycl_root(repository_ctx) + "/lib/clang/13.0.0/include"]
-
-        pwd = repository_ctx.os.environ["PWD"]
-        additional_inc = []
-        if repository_ctx.os.environ.get("CPATH") != None:
-            for p in repository_ctx.os.environ["CPATH"].strip().split(":"):
-                if p != "":
-                    additional_inc += [_normalize_include_path(repository_ctx, p)]
-        if len(additional_inc) > 0:
-            additional_inc = ",".join(additional_inc)
-        else:
-            additional_inc = "\"\""
-
-        if _enable_mkl(repository_ctx) and repository_ctx.os.environ.get("ONEAPI_MKL_PATH") != None:
-            sycl_defines["%{ONEAPI_MKL_PATH}"] = str(find_mkl_path(repository_ctx))
-            builtin_includes += [find_mkl_path(repository_ctx) + "/include"]
-        else:
-            sycl_defines["%{ONEAPI_MKL_PATH}"] = ""
-        if repository_ctx.os.environ.get("TMPDIR") != None:
-            sycl_defines["%{TMP_DIRECTORY}"] = repository_ctx.os.environ.get("TMPDIR")
-        else:
-            tmp_suffix = repository_ctx.execute(["cat", "/proc/sys/kernel/random/uuid"]).stdout.rstrip()
-            tmp_dir = "/tmp/" + tmp_suffix
-            sycl_defines["%{TMP_DIRECTORY}"] = tmp_dir
-
-        sycl_defines["%{cxx_builtin_include_directories}"] = str(builtin_includes)
-        sycl_defines["%{sycl_builtin_include_directories}"] = str(builtin_includes)
-        sycl_defines["%{extra_no_canonical_prefixes_flags}"] = "\"-fno-canonical-system-headers\""
-        sycl_defines["%{unfiltered_compile_flags}"] = ""
-        sycl_defines["%{host_compiler}"] = "gcc"
-        sycl_defines["%{HOST_COMPILER_PATH}"] = "/usr/bin/gcc"
-        sycl_defines["%{host_compiler_prefix}"] = "/usr/bin"
-        sycl_defines["%{sycl_compiler_root}"] = str(find_sycl_root(repository_ctx))
-        sycl_defines["%{linker_bin_path}"] = "/usr/bin"
-        sycl_defines["%{SYCL_ROOT_DIR}"] = str(find_sycl_root(repository_ctx))
-        sycl_defines["%{AOT_DEVICES}"] = str(find_aot_config(repository_ctx))
-        sycl_defines["%{TF_NEED_MKL}"] = repository_ctx.os.environ[_TF_NEED_MKL].strip()
-        sycl_defines["%{additional_include_directories}"] = additional_inc
-        sycl_defines["%{SYCL_COMPILER_VERSION}"] = str(get_sycl_version(repository_ctx))
-        sycl_defines["%{PYTHON_LIB_PATH}"] = repository_ctx.os.environ[_PYTHON_LIB_PATH]
-
-        sycl_internal_inc_dirs = find_sycl_include_path(repository_ctx)
-        sycl_internal_inc = "\", \"".join(sycl_internal_inc_dirs)
-        sycl_internal_isystem_inc = []
-        for d in sycl_internal_inc_dirs:
-            sycl_internal_isystem_inc.append("-isystem\", \"" + d)
-
-        if len(sycl_internal_inc_dirs) > 0:
-            sycl_defines["%{SYCL_ISYSTEM_INC}"] = "\"]), \n\tflag_group(flags=[ \"".join(sycl_internal_isystem_inc)
-            sycl_defines["%{SYCL_INTERNAL_INC}"] = sycl_internal_inc
-        else:
-            sycl_defines["%{SYCL_ISYSTEM_INC}"] = ""
-            sycl_defines["%{SYCL_INTERNAL_INC}"] = ""
-
-        unfiltered_cxx_flags = "" if additional_cxxflags == [] else "unfiltered_cxx_flag: "
-        unfiltered_cxx_flags += "\n  unfiltered_cxx_flag: ".join(additional_cxxflags)
-
-        sycl_defines["%{unfiltered_compile_flags}"] = unfiltered_cxx_flags
-
-        linker_flags = "" if additional_linker_flags == [] else "linker_flag: "
-        linker_flags += "\n  linker_flag: ".join(additional_linker_flags)
-
-        # Only expand template variables in the BUILD file
-        repository_ctx.template(
-            "crosstool/BUILD",
-            tpl_paths["crosstool:BUILD.sycl"],
-            sycl_defines,
-        )
-
-        # No templating of cc_toolchain_config - use attributes and templatize the
-        # BUILD file.
-        repository_ctx.template(
-            "crosstool/cc_toolchain_config.bzl",
-            tpl_paths["crosstool:sycl_cc_toolchain_config.bzl"],
-            sycl_defines,
-        )
-
-        repository_ctx.template(
-            "crosstool/bin/crosstool_wrapper_driver",
-            tpl_paths["crosstool/bin:crosstool_wrapper_driver"],
-            sycl_defines,
-        )
-
-        if _enable_sycl_build(repository_ctx):
-            sycl_build_defines = {}
-            sycl_build_defines["%{sycl_is_configured}"] = "True"
-            sycl_build_defines["%{sycl_build_is_configured}"] = "True"
-            if _enable_mkl(repository_ctx):
-                sycl_build_defines["%{mkl_is_configured}"] = "True"
-            sycl_root = find_sycl_root(repository_ctx)
-            _check_dir(repository_ctx, sycl_root)
-
-            _tpl(
-                repository_ctx,
-                "sycl:build_defs.bzl",
-                sycl_build_defines,
-            )
+        _create_local_sycl_repository(repository_ctx)
 
 sycl_configure = repository_rule(
     local = True,

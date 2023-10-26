@@ -1,6 +1,10 @@
 load("//xla:xla.bzl", "xpu_library")
 load("//xla:xla.bzl", "xetla_library")
 load("//third_party/onednn:build_defs.bzl", "onednn_deps")
+load(
+    "@local_config_sycl//sycl:build_defs.bzl",
+    "if_sycl_is_configured",
+)
 
 package(
     default_visibility = [
@@ -887,7 +891,9 @@ cc_library(
     deps = [
         "@tsl//tsl/framework:numeric_types",
         "@tsl//tsl/platform:logging",
-    ],
+    ] + if_sycl_is_configured([
+        "@local_config_sycl//sycl:sycl_headers",
+    ]),
 )
 
 cc_library(

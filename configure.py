@@ -36,7 +36,6 @@ except ImportError:
 
 
 _DEFAULT_SYCL_TOOLKIT_PATH = '/opt/intel/oneapi/compiler/latest/linux'
-_DEFAULT_MKL_PATH='/opt/intel/oneapi/mkl/latest'
 _DEFAULT_AOT_CONFIG = ''
 _DEFAULT_GCC_TOOLCHAIN_PATH = ''
 _DEFAULT_GCC_TOOLCHAIN_TARGET = ''
@@ -676,7 +675,6 @@ def set_sycl_toolkit_path(environ_cp):
 
   write_action_env_to_bazelrc('SYCL_TOOLKIT_PATH',
                               sycl_toolkit_path)
-  write_action_env_to_bazelrc('SYCL_PATH', sycl_toolkit_path.split("compiler")[0])
   lib_path = '%s/lib:%s/compiler/lib/intel64_lin' %(
       sycl_toolkit_path,
       sycl_toolkit_path,
@@ -691,36 +689,10 @@ def set_sycl_toolkit_path(environ_cp):
   if library_path is not None and len(library_path) > 0:
     lib_path += ':' + library_path
 
-  mkl_path = os.getenv('ONEAPI_MKL_PATH')
-  if mkl_path is not None and len(mkl_path) > 0:
-    mkl_lib = '%s/lib/intel64' % (mkl_path)
-    lib_path += ':' + mkl_lib
   write_action_env_to_bazelrc('LD_LIBRARY_PATH',
                               ld_lib_path)
   write_action_env_to_bazelrc('LIBRARY_PATH',
                               lib_path)
-
-def set_mkl_path(environ_cp):
-  """Set MKL Path."""
-  def valid_mkl_path(mkl_home):
-    exists = (
-        os.path.exists(os.path.join(mkl_home, 'include')) and
-        (os.path.exists(os.path.join(mkl_home, 'lib'))))
-    if not exists:
-      print(
-          'Invalid path to the MKL Toolkit. %s or %s cannot be found'
-          % (os.path.join(mkl_home, 'include'),
-             os.path.exists(os.path.join(mkl_home, 'lib'))))
-    return exists
-  mkl_path = prompt_loop_or_load_from_env(
-      environ_cp,
-      var_name='ONEAPI_MKL_PATH',
-      var_default=_DEFAULT_MKL_PATH,
-      ask_for_var='Please specify the MKL toolkit folder.',
-      check_success=valid_mkl_path,
-      error_msg='Invalid path to the MKL Toolkit.',
-      suppress_default_error=True)
-  write_action_env_to_bazelrc('ONEAPI_MKL_PATH', mkl_path)
 
 
 def system_specific_test_config(env):
@@ -816,9 +788,6 @@ def main():
   set_action_env_var(environ_cp, 'TF_NEED_SYCL', 'GPU', True)
   if environ_cp.get('TF_NEED_SYCL') == '1':
     set_sycl_toolkit_path(environ_cp)
-    set_action_env_var(environ_cp, 'TF_NEED_MKL', 'MKL', False)
-    if environ_cp.get('TF_NEED_MKL') == '1':
-      set_mkl_path(environ_cp)
   else:
     print('CPU is not supported.')
     sys.exit(1)

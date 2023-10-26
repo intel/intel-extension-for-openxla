@@ -52,7 +52,7 @@ cc_toolchain_config(
     host_compiler_path = "%{host_compiler_path}",
     sycl_compiler_root = "%{sycl_compiler_root}",
     host_compiler_prefix = "%{host_compiler_prefix}",
-    host_unfiltered_compile_flags = ["%{unfiltered_compile_flags}"],
+    unfiltered_compile_flags = ["%{unfiltered_compile_flags}"],
     linker_bin_path = "%{linker_bin_path}",
 )
 

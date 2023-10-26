@@ -43,6 +43,8 @@ if not os.path.exists(SYCL_PATH):
 
 HOST_COMPILER_PATH = "%{HOST_COMPILER_PATH}"
 SYCL_COMPILER_VERSION = "%{SYCL_COMPILER_VERSION}"
+basekit_path = "%{basekit_path}"
+basekit_version = "%{basekit_version}"
 
 def system(cmd):
   """Invokes cmd with os.system()"""
@@ -56,7 +58,7 @@ def system(cmd):
 def call_compiler(argv, link = False, sycl = True, xetla = False):
   flags = argv
 
-# common flags
+  # common flags
   common_flags = ['-fPIC']
   sycl_device_only_flags = ['-fsycl']
   sycl_device_only_flags.append('-fno-sycl-unnamed-lambda')
@@ -79,7 +81,7 @@ def call_compiler(argv, link = False, sycl = True, xetla = False):
   else:
     compile_flags.append("-std=c++17")   
 
-# link flags
+  # link flags
   link_flags = ['-fPIC']
   link_flags.append('-lsycl')
   link_flags.append("-fsycl")
@@ -95,15 +97,15 @@ def call_compiler(argv, link = False, sycl = True, xetla = False):
   link_flags.append("-lze_loader")
   link_flags.append("-lOpenCL")
 
-# oneMKL config
-  if '%{ONEAPI_MKL_PATH}':
-    common_flags.append('-DMKL_ILP64')
-    common_flags.append('-isystem %{ONEAPI_MKL_PATH}/include')
-    link_flags.append("-L%{ONEAPI_MKL_PATH}/lib/intel64")
-    link_flags.append("-lmkl_sycl")
-    link_flags.append("-lmkl_intel_ilp64")
-    link_flags.append("-lmkl_sequential")
-    link_flags.append("-lmkl_core")
+  # oneMKL config
+  # mkl_path = basekit_path + "/mkl/" + basekit_version
+  # common_flags.append('-DMKL_ILP64')
+  # common_flags.append('-isystem {}/include'.format(mkl_path))
+  # link_flags.append("-L{}/lib/intel64".format(mkl_path))
+  # link_flags.append("-lmkl_sycl")
+  # link_flags.append("-lmkl_intel_ilp64")
+  # link_flags.append("-lmkl_sequential")
+  # link_flags.append("-lmkl_core")
 
   flags += common_flags
   if link:
