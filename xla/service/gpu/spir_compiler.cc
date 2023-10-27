@@ -162,7 +162,8 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
     mha_fusion_pipeline.AddPass<HloDCE>();
     mha_fusion_pipeline.AddPass<FusedMHARewriter>();
     mha_fusion_pipeline.AddPass<HloDCE>();
-
+    mha_fusion_pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true,
+                           /*only_fusion_computations*/ false);
     TF_RETURN_IF_ERROR(mha_fusion_pipeline.Run(hlo_module).status());
   }
 
