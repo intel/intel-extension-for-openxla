@@ -211,7 +211,7 @@ void reducescatter_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
   // tensor_size: output tensor size
   auto num_workgroup = (tensor_size + group_size - 1) / group_size;
 
-  if (reduction_size == MAX_RANK_SIZE) {
+  if (reduction_size <= MAX_RANK_SIZE) {
     stream->submit([&](sycl::handler& cgh) {
       const T* in[MAX_RANK_SIZE];
       T* out[MAX_RANK_SIZE];
