@@ -3,5 +3,5 @@ jax>=0.4.13
 jaxlib>=0.4.13
 flax>=0.3.5
 optax>=0.0.8
-transformers==4.27.4
+transformers==4.30.0
 evaluate>=0.4.1
