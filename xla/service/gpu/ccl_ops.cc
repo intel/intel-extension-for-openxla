@@ -86,13 +86,13 @@ void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
           .template get_info<sycl::info::device::max_work_group_size>();
   auto num_workgroup = (tensor_size + group_size - 1) / group_size;
 
-  #define IN(i) in##i##_ptr
-  #define OUT(i) out##i##_ptr
-  #define IN_PTR(i) auto IN(i) = static_cast<const T*>(participants[i].send)
-  #define OUT_PTR(i) auto OUT(i) = static_cast<T*>(participants[i].recv)
-  #define ADD_DPCPP(i, j) OUT(i)[index] = \
-      T(Func()(AccT(OUT(i)[index]), AccT(IN(j)[index])))
-  #define COPY_OUT_DPCPP(i, j) OUT(i)[index] = OUT(j)[index]
+#define IN(i) in##i##_ptr
+#define OUT(i) out##i##_ptr
+#define IN_PTR(i) auto IN(i) = static_cast<const T*>(participants[i].send)
+#define OUT_PTR(i) auto OUT(i) = static_cast<T*>(participants[i].recv)
+#define ADD_DPCPP(i, j) \
+  OUT(i)[index] = T(Func()(AccT(OUT(i)[index]), AccT(IN(j)[index])))
+#define COPY_OUT_DPCPP(i, j) OUT(i)[index] = OUT(j)[index]
 
   if (reduction_size == 2) {
     stream->submit([&](sycl::handler& cgh) {
@@ -104,24 +104,8 @@ void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
           [=](sycl::nd_item<1> item) {
             const int index = item.get_global_linear_id();
             if (index >= tensor_size) return;
-
             ADD_DPCPP(0, 1);
             COPY_OUT_DPCPP(1, 0);
-          });
-    });
-  } else if (reduction_size == 3) {
-    stream->submit([&](sycl::handler& cgh) {
-      IN_PTR(0); IN_PTR(1); IN_PTR(2); OUT_PTR(0); OUT_PTR(1); OUT_PTR(2);
-
-      cgh.parallel_for<AllReduceKernel<T, Func, 3>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-
-            ADD_DPCPP(0, 1); ADD_DPCPP(0, 2);
-            COPY_OUT_DPCPP(1, 0); COPY_OUT_DPCPP(2, 0);
           });
     });
   } else if (reduction_size == 4) {
@@ -139,6 +123,25 @@ void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
             COPY_OUT_DPCPP(1, 0); COPY_OUT_DPCPP(2, 0); COPY_OUT_DPCPP(3, 0);
           });
     });
+  } else if (reduction_size == 6) {
+    stream->submit([&](sycl::handler& cgh) {
+      IN_PTR(0); IN_PTR(1); IN_PTR(2); IN_PTR(3);
+      IN_PTR(4); IN_PTR(5);
+      OUT_PTR(0); OUT_PTR(1); OUT_PTR(2); OUT_PTR(3);
+      OUT_PTR(4); OUT_PTR(5);
+
+      cgh.parallel_for<AllReduceKernel<T, Func, 6>>(
+          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
+                            sycl::range<1>(group_size)),
+          [=](sycl::nd_item<1> item) {
+            const int index = item.get_global_linear_id();
+            if (index >= tensor_size) return;
+            ADD_DPCPP(0, 1); ADD_DPCPP(0, 2); ADD_DPCPP(0, 3);
+            ADD_DPCPP(0, 4); ADD_DPCPP(0, 5);
+            COPY_OUT_DPCPP(1, 0); COPY_OUT_DPCPP(2, 0); COPY_OUT_DPCPP(3, 0);
+            COPY_OUT_DPCPP(4, 0); COPY_OUT_DPCPP(5, 0);
+          });
+    });
   } else if (reduction_size == 8) {
     stream->submit([&](sycl::handler& cgh) {
       IN_PTR(0); IN_PTR(1); IN_PTR(2); IN_PTR(3);
@@ -154,10 +157,57 @@ void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
             if (index >= tensor_size) return;
             ADD_DPCPP(0, 1); ADD_DPCPP(0, 2); ADD_DPCPP(0, 3);
             ADD_DPCPP(0, 4); ADD_DPCPP(0, 5); ADD_DPCPP(0, 6); ADD_DPCPP(0, 7);
-
             COPY_OUT_DPCPP(1, 0); COPY_OUT_DPCPP(2, 0); COPY_OUT_DPCPP(3, 0);
             COPY_OUT_DPCPP(4, 0); COPY_OUT_DPCPP(5, 0); COPY_OUT_DPCPP(6, 0);
             COPY_OUT_DPCPP(7, 0);
+          });
+    });
+  } else if (reduction_size == 10) {
+    stream->submit([&](sycl::handler& cgh) {
+      IN_PTR(0); IN_PTR(1); IN_PTR(2); IN_PTR(3);
+      IN_PTR(4); IN_PTR(5); IN_PTR(6); IN_PTR(7);
+      IN_PTR(8); IN_PTR(9);
+      OUT_PTR(0); OUT_PTR(1); OUT_PTR(2); OUT_PTR(3);
+      OUT_PTR(4); OUT_PTR(5); OUT_PTR(6); OUT_PTR(7);
+      OUT_PTR(8); OUT_PTR(9);;
+
+      cgh.parallel_for<AllReduceKernel<T, Func, 10>>(
+          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
+                            sycl::range<1>(group_size)),
+          [=](sycl::nd_item<1> item) {
+            const int index = item.get_global_linear_id();
+            if (index >= tensor_size) return;
+            ADD_DPCPP(0, 1); ADD_DPCPP(0, 2); ADD_DPCPP(0, 3);
+            ADD_DPCPP(0, 4); ADD_DPCPP(0, 5); ADD_DPCPP(0, 6);
+            ADD_DPCPP(0, 7); ADD_DPCPP(0, 8); ADD_DPCPP(0, 9);
+            COPY_OUT_DPCPP(1, 0); COPY_OUT_DPCPP(2, 0); COPY_OUT_DPCPP(3, 0);
+            COPY_OUT_DPCPP(4, 0); COPY_OUT_DPCPP(5, 0); COPY_OUT_DPCPP(6, 0);
+            COPY_OUT_DPCPP(7, 0); COPY_OUT_DPCPP(8, 0); COPY_OUT_DPCPP(9, 0);
+          });
+    });
+  } else if (reduction_size == 12) {
+    stream->submit([&](sycl::handler& cgh) {
+      IN_PTR(0); IN_PTR(1); IN_PTR(2); IN_PTR(3);
+      IN_PTR(4); IN_PTR(5); IN_PTR(6); IN_PTR(7);
+      IN_PTR(8); IN_PTR(9); IN_PTR(10); IN_PTR(11);
+      OUT_PTR(0); OUT_PTR(1); OUT_PTR(2); OUT_PTR(3);
+      OUT_PTR(4); OUT_PTR(5); OUT_PTR(6); OUT_PTR(7);
+      OUT_PTR(8); OUT_PTR(9); OUT_PTR(10); OUT_PTR(11);
+
+      cgh.parallel_for<AllReduceKernel<T, Func, 12>>(
+          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
+                            sycl::range<1>(group_size)),
+          [=](sycl::nd_item<1> item) {
+            const int index = item.get_global_linear_id();
+            if (index >= tensor_size) return;
+            ADD_DPCPP(0, 1); ADD_DPCPP(0, 2); ADD_DPCPP(0, 3);
+            ADD_DPCPP(0, 4); ADD_DPCPP(0, 5); ADD_DPCPP(0, 6);
+            ADD_DPCPP(0, 7); ADD_DPCPP(0, 8); ADD_DPCPP(0, 9);
+            ADD_DPCPP(0, 10); ADD_DPCPP(0, 11);
+            COPY_OUT_DPCPP(1, 0); COPY_OUT_DPCPP(2, 0); COPY_OUT_DPCPP(3, 0);
+            COPY_OUT_DPCPP(4, 0); COPY_OUT_DPCPP(5, 0); COPY_OUT_DPCPP(6, 0);
+            COPY_OUT_DPCPP(7, 0); COPY_OUT_DPCPP(8, 0); COPY_OUT_DPCPP(9, 0);
+            COPY_OUT_DPCPP(10, 0); COPY_OUT_DPCPP(11, 0);
           });
     });
   } else {
