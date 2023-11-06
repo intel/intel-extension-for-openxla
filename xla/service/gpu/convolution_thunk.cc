@@ -80,12 +80,10 @@ Status CreateOneDnnPrimitive(
     OneDnnConvPrimitive* onednn_primitive,  // NOLINT
     const GpuConvDescriptor& conv_descriptor,
     absl::Span<const se::DeviceMemoryBase> operand_buffers,
-    se::DeviceMemoryBase result_buffer, const Thunk::ExecuteParams& params) {
+    se::DeviceMemoryBase result_buffer, const Thunk::ExecuteParams& params,
+    se::ScratchAllocator* scratch_allocator) {
   sycl::queue* dpcpp_stream = se::gpu::AsGpuStreamValue(params.stream);
   auto& buffer_allocations = *params.buffer_allocations;
-  se::OwningScratchAllocator<> scratch_allocator(
-      buffer_allocations.device_ordinal(),
-      buffer_allocations.memory_allocator());
   onednn_primitive->engine = FindOrCreateEngine(dpcpp_stream);
   onednn_primitive->stream =
       dnnl::sycl_interop::make_stream(onednn_primitive->engine, *dpcpp_stream);
@@ -535,7 +533,7 @@ Status CreateOneDnnPrimitive(
       size_t scratchpad_size = fwd_pd.scratchpad_desc().get_size();
       void* workspace;
       TF_RETURN_IF_ERROR(
-          AllocateWorkspace(&workspace, &scratch_allocator, scratchpad_size));
+          AllocateWorkspace(&workspace, scratch_allocator, scratchpad_size));
       onednn_primitive->scratchpad_memory = dnnl::memory(
           fwd_pd.scratchpad_desc(), onednn_primitive->engine, workspace);
 
@@ -545,7 +543,7 @@ Status CreateOneDnnPrimitive(
         size_t reorder_filter_data_size = fwd_pd.weights_desc().get_size();
         void* reorder_filter;
         TF_RETURN_IF_ERROR(AllocateWorkspace(
-            &reorder_filter, &scratch_allocator, reorder_filter_data_size));
+            &reorder_filter, scratch_allocator, reorder_filter_data_size));
 
         onednn_primitive->internal_filter_memory = dnnl::memory(
             fwd_pd.weights_desc(), onednn_primitive->engine, reorder_filter);
@@ -587,7 +585,7 @@ Status CreateOneDnnPrimitive(
       size_t scratchpad_size = bwd_input_pd.scratchpad_desc().get_size();
       void* workspace;
       TF_RETURN_IF_ERROR(
-          AllocateWorkspace(&workspace, &scratch_allocator, scratchpad_size));
+          AllocateWorkspace(&workspace, scratch_allocator, scratchpad_size));
       onednn_primitive->scratchpad_memory = dnnl::memory(
           bwd_input_pd.scratchpad_desc(), onednn_primitive->engine, workspace);
 
@@ -597,7 +595,7 @@ Status CreateOneDnnPrimitive(
             bwd_input_pd.weights_desc().get_size();
         void* reorder_filter;
         TF_RETURN_IF_ERROR(AllocateWorkspace(
-            &reorder_filter, &scratch_allocator, reorder_filter_data_size));
+            &reorder_filter, scratch_allocator, reorder_filter_data_size));
 
         onednn_primitive->internal_filter_memory =
             dnnl::memory(bwd_input_pd.weights_desc(), onednn_primitive->engine,
@@ -646,7 +644,7 @@ Status CreateOneDnnPrimitive(
       size_t scratchpad_size = bwd_filter_pd.scratchpad_desc().get_size();
       void* workspace;
       TF_RETURN_IF_ERROR(
-          AllocateWorkspace(&workspace, &scratch_allocator, scratchpad_size));
+          AllocateWorkspace(&workspace, scratch_allocator, scratchpad_size));
       onednn_primitive->scratchpad_memory = dnnl::memory(
           bwd_filter_pd.scratchpad_desc(), onednn_primitive->engine, workspace);
 
@@ -657,7 +655,7 @@ Status CreateOneDnnPrimitive(
         size_t reorder_filter_data_size =
             bwd_filter_pd.diff_weights_desc().get_size();
         void* prefer_filter;
-        TF_RETURN_IF_ERROR(AllocateWorkspace(&prefer_filter, &scratch_allocator,
+        TF_RETURN_IF_ERROR(AllocateWorkspace(&prefer_filter, scratch_allocator,
                                              reorder_filter_data_size));
 
         onednn_primitive->internal_filter_memory =
@@ -700,11 +698,12 @@ Status CreateOneDnnPrimitive(
 StatusOr<OneDnnConvPrimitive> ConvolutionThunk::GetOrCreateOneDnnConvPrimitive(
     se::Stream* stream,
     const std::vector<se::DeviceMemoryBase>& operand_se_buffers,
-    const se::DeviceMemoryBase& result_buffer, const ExecuteParams& params) {
+    const se::DeviceMemoryBase& result_buffer, const ExecuteParams& params,
+    se::ScratchAllocator* scratch_allocator) {
   OneDnnConvPrimitive primitive;
   auto status = CreateOneDnnPrimitive(&primitive, descriptor_,
                                       absl::MakeSpan(operand_se_buffers),
-                                      result_buffer, params);
+                                      result_buffer, params, scratch_allocator);
   if (TF_PREDICT_FALSE(!status.ok())) {
     return status;
   }
@@ -736,9 +735,12 @@ Status ConvolutionThunk::ExecuteOnStream(const ExecuteParams& params) {
       buffer_allocations.GetDeviceAddress(scratch_buffer_);
 
   auto stream = params.stream;
+  se::OwningScratchAllocator<2> scratch_allocator(
+      buffer_allocations.device_ordinal(),
+      buffer_allocations.memory_allocator());
   TF_ASSIGN_OR_RETURN(auto conv_primitive,
                       GetOrCreateOneDnnConvPrimitive(stream, operand_se_buffers,
-                                                     result_buffer, params));
+                                                     result_buffer, params, &scratch_allocator));
 
   TF_RETURN_IF_ERROR(RunGpuConv(conv_primitive, descriptor_,
                                 absl::MakeSpan(operand_se_buffers),

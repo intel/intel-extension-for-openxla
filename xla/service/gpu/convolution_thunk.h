@@ -66,10 +66,12 @@ class ConvolutionThunk : public Thunk {
       onednn_primitives_;
   StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
       se::Stream*, const std::vector<se::DeviceMemoryBase>& operand_se_buffers,
-      const se::DeviceMemoryBase& result_buffer, const ExecuteParams& params);
+      const se::DeviceMemoryBase& result_buffer, const ExecuteParams& params,
+      se::ScratchAllocator* scratch_allocator);
 };
 
 }  // namespace gpu
 }  // namespace xla
 
 #endif  // XLA_SERVICE_GPU_CONVOLUTION_THUNK_H_
+
