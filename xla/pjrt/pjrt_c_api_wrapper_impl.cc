@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "xla/pjrt/xpu_pjrt_client.h"
+#include "xla/pjrt/pjrt_c_api_wrapper_impl.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -34,12 +34,10 @@ limitations under the License.
 #include "xla/literal.h"
 #include "xla/pjrt/c/pjrt_c_api.h"
 #include "xla/pjrt/c/pjrt_c_api_helpers.h"
-#include "xla/pjrt/c/pjrt_c_api_tpu.h"
 #include "xla/pjrt/mlir_to_hlo.h"
 #include "xla/pjrt/pjrt_client.h"
 #include "xla/pjrt/pjrt_executable.h"
 #include "xla/pjrt/pjrt_future.h"
-#include "xla/pjrt/se_xpu_pjrt_client.h"
 #include "xla/service/hlo.pb.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
@@ -1565,40 +1563,3 @@ PJRT_LoadedExecutable::PJRT_LoadedExecutable(
     : executable(std::move(executable)), client(client) {
   pjrt::PopulatePjrtExecutableAddressableDevices(this);
 }
-
-namespace pjrt {
-
-PJRT_Error* PJRT_Client_Create(PJRT_Client_Create_Args* args) {
-  PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
-      "PJRT_Client_Create_Args", PJRT_Client_Create_Args_STRUCT_SIZE,
-      args->struct_size));
-
-  // TODO(b/261916900) initializing allocator_config is important as should be
-  // passed through the args later.
-  xla::GpuAllocatorConfig allocator_config;
-  PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
-      "PJRT_Client_Create_Args", PJRT_Client_Create_Args_STRUCT_SIZE,
-      args->struct_size));
-
-  PJRT_ASSIGN_OR_RETURN(
-      std::unique_ptr<xla::PjRtClient> client,
-      xla::GetStreamExecutorXpuClient(
-          /*asynchronous=*/false, allocator_config,
-          /*node_id=*/0, /*num_nodes*/ 1,
-          /*allowed_devices*/ std::nullopt, /*platform_name*/ "SYCL"));
-  args->client = pjrt::CreateWrapperClient(std::move(client));
-  return nullptr;
-}
-
-PJRT_Error* PJRT_DeviceTopology_Create(
-    PJRT_TopologyDescription_Create_Args* args) {
-  return new PJRT_Error{tsl::errors::Unimplemented(
-      "Topology not supported for XPU compilation.")};
-}
-
-}  // namespace pjrt
-
-constexpr PJRT_Api pjrt_api = pjrt::CreatePjrtApi(
-    pjrt::PJRT_Client_Create, pjrt::PJRT_DeviceTopology_Create);
-
-const PJRT_Api* GetPjrtApi() { return &pjrt_api; }

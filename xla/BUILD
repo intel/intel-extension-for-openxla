@@ -3,7 +3,7 @@ cc_binary(
     linkshared = True,
     visibility = ["//visibility:public"],
     deps = [
-            "//xla/pjrt:xpu_pjrt_client",
-            "//xla/python:py_client_gpu",
-        ],
+        "//xla/pjrt:pjrt_c_api_xpu",
+        "//xla/python:py_client_gpu",
+    ],
 )
