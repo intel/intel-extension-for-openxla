@@ -14,14 +14,15 @@ workspace()
 # b) get the sha256 hash of the commit by running:
 #    curl -L https://github.com/openxla/xla/archive/<git hash>.tar.gz | sha256sum
 #    and update the sha256 with the result.
+
 http_archive(
     name = "xla",
     patch_args = ["-p1"],
     patches = ["//third_party:openxla.patch"],
-    sha256 = "4ec16aff3862c5a243db956ce558d7a62eb79f5e20747b0e80802a3b0d12e419",
-    strip_prefix = "xla-12de6ec958419b57be248d0acd2d9f757e71748c",
+    sha256 = "637acdfce5a406bd929bca052863be8200afbaac0daecbc547e9aff1967d7c00",
+    strip_prefix = "xla-a5a30f7b34b69b7cada6deb4b39f77788e28369c",
     urls = [
-        "https://github.com/openxla/xla/archive/12de6ec958419b57be248d0acd2d9f757e71748c.tar.gz",
+        "https://github.com/openxla/xla/archive/a5a30f7b34b69b7cada6deb4b39f77788e28369c.tar.gz",
     ],
 )
 

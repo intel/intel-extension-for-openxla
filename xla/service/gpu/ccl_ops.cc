@@ -370,9 +370,9 @@ void permute_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
 template <class T>
 void stream_wait_streamlist(se::gpu::GpuStreamHandle stream,
                             const std::vector<T>& p) {
-  std::vector<ITEX_GPUEvent> event_list;
+  std::vector<sycl::event> event_list;
   for (int i = 1; i < p.size(); i++) {
-    ITEX_GPUEvent event = p[i].stream->ext_oneapi_submit_barrier();
+    sycl::event event = p[i].stream->ext_oneapi_submit_barrier();
     event_list.push_back(event);
   }
   stream->ext_oneapi_submit_barrier(event_list);
@@ -381,9 +381,9 @@ void stream_wait_streamlist(se::gpu::GpuStreamHandle stream,
 template <class T>
 void streamlist_wait_stream(se::gpu::GpuStreamHandle stream,
                             const std::vector<T>& p) {
-  ITEX_GPUEvent event = stream->ext_oneapi_submit_barrier();
+  sycl::event event = stream->ext_oneapi_submit_barrier();
 
-  const std::vector<ITEX_GPUEvent> event_list{event};
+  const std::vector<sycl::event> event_list{event};
   for (int i = 1; i < p.size(); i++) {
     p[i].stream->ext_oneapi_submit_barrier(event_list);
   }

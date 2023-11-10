@@ -83,7 +83,7 @@ class ConvBfloat16Support : public FloatSupport {
 };
 
 Status SPIRCompiler::OptimizeHloConvolutionCanonicalization(
-    HloModule* hlo_module, GpuVersion gpu_version,
+    HloModule* hlo_module, se::GpuComputeCapability gpu_version,
     se::DeviceMemoryAllocator* device_allocator) {
   // Convert convolutions into CustomCalls to onednn, then canonicalize them
   // (GpuConvPaddingLegalization). Also expand cuSolver calls.
@@ -154,8 +154,8 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
   bool use_mha = true;
   TF_CHECK_OK(tsl::ReadBoolFromEnvVar("MHA", true, &use_mha));
   if (use_mha) {
-    auto cuda_compute_capability =
-        std::get<se::CudaComputeCapability>(gpu_target_config.gpu_version);
+    auto cuda_compute_capability = std::get<se::CudaComputeCapability>(
+        gpu_target_config.gpu_device_info.gpu_compute_capability());
     HloPassPipeline mha_fusion_pipeline("multi-headed attention fusion");
     // Rewrite Multi-Headed Attention modules to Fused MHA custom-calls.
     mha_fusion_pipeline.AddPass<RedundantConvertMover>();
@@ -170,14 +170,13 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
   bool use_qkv = false;
   TF_CHECK_OK(tsl::ReadBoolFromEnvVar("OPENXLA_ENABLE_QKV", false, &use_qkv));
   if (use_qkv) {
-    const GpuDeviceInfo& gpu_device_info = gpu_target_config.gpu_device_info;
+    auto cuda_compute_capability = std::get<se::CudaComputeCapability>(
+        gpu_target_config.gpu_device_info.gpu_compute_capability());
 
-    auto cuda_compute_capability =
-        std::get<se::CudaComputeCapability>(gpu_target_config.gpu_version);
     HloPassPipeline qkv_fusion_pipeline("QKV BatchedGemm fusion");
     // Rewrite 3 gemm modules to Fused QKV custom-calls.
-    qkv_fusion_pipeline.AddPass<FusedQKVRewriter>(gpu_device_info,
-                                                  cuda_compute_capability);
+    qkv_fusion_pipeline.AddPass<FusedQKVRewriter>(
+        gpu_target_config.gpu_device_info, cuda_compute_capability);
     AlgebraicSimplifierOptions algebraic_simplifier_options({}, {});
     qkv_fusion_pipeline.AddPass<HloDCE>();
 
@@ -275,22 +274,18 @@ std::unique_ptr<llvm::Module> MaybeLoadLLVMFromFile(const HloModule* module,
 }  // namespace
 
 SPIRCompiler::SPIRCompiler()
-    : GpuCompiler(stream_executor::gpu::kSyclPlatformId, spir::TargetTriple(),
+    : GpuCompiler(stream_executor::sycl::kSyclPlatformId, spir::TargetTriple(),
                   spir::DataLayout()) {}
 
 HloDataflowAnalysis::CanShareBuffer SPIRCompiler::GetCanShareBuffer() {
   return &CanShareBufferHint;
 }
 
-GpuVersion SPIRCompiler::GetGpuVersion(se::StreamExecutor* stream_exec) {
-  se::CudaComputeCapability version(100, 100);
-  return version;
-}
-
 StatusOr<std::pair<std::string, std::vector<uint8_t>>>
 SPIRCompiler::CompileTargetBinary(const HloModuleConfig& module_config,
                                   llvm::Module* llvm_module,
-                                  GpuVersion gpu_version, bool relocatable,
+                                  se::GpuComputeCapability gpu_version,
+                                  bool relocatable,
                                   const HloModule* debug_module) {
   std::string libdevice_dir;
   VLOG(2) << "Libdevice dir = " << libdevice_dir << "\n";

@@ -11,7 +11,6 @@ cc_library(
     name = "onednn_util",
     hdrs = ["onednn_util.h"],
     deps = [
-        "//xla/stream_executor/sycl:sycl_types_header",
         "@tsl//tsl/platform:errors",
         "@tsl//tsl/platform:logging",
         "@tsl//tsl/platform:types",

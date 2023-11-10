@@ -21,7 +21,7 @@ limitations under the License.
 #include "xla/service/custom_call_status_internal.h"
 #include "xla/service/gpu/buffer_allocations.h"
 #include "xla/service/gpu/thunk.h"
-#include "xla/stream_executor/sycl/sycl_types.h"
+#include "xla/stream_executor/gpu/gpu_types.h"
 
 namespace xla {
 namespace gpu {

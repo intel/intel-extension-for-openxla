@@ -20,15 +20,16 @@ limitations under the License.
 
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
 #include "xla/service/buffer_assignment.h"
-#include "xla/service/gpu/gpu_device_info.h"
 #include "xla/service/gpu/gpu_executable.h"
 #include "xla/service/name_uniquer.h"
+#include "xla/stream_executor/device_description.h"
 
 namespace xla {
 namespace gpu {
@@ -40,16 +41,13 @@ class IrEmitterContext {
  public:
   IrEmitterContext(const HloModule* hlo_module,
                    const BufferAssignment* buffer_assignment,
-                   std::string platform_name, GpuDeviceInfo gpu_device_info,
-                   se::CudaComputeCapability cuda_compute_capability,
-                   se::RocmComputeCapability rocm_compute_capability,
+                   std::string platform_name,
+                   const se::DeviceDescription& gpu_device_info,
                    mlir::MLIRContext* mlir_context, llvm::Module* llvm_module)
       : hlo_module_(hlo_module),
         buffer_assignment_(buffer_assignment),
         platform_name_(std::move(platform_name)),
         gpu_device_info_(gpu_device_info),
-        cuda_compute_capability_(cuda_compute_capability),
-        rocm_compute_capability_(rocm_compute_capability),
         mlir_context_(mlir_context),
         llvm_module_(llvm_module) {}
   // Disallow copy and assign.
@@ -62,12 +60,18 @@ class IrEmitterContext {
     return *buffer_assignment_;
   }
   absl::string_view platform_name() const { return platform_name_; }
-  GpuDeviceInfo gpu_device_info() const { return gpu_device_info_; }
+  const se::DeviceDescription& gpu_device_info() const {
+    return gpu_device_info_;
+  }
   se::CudaComputeCapability cuda_compute_capability() const {
-    return cuda_compute_capability_;
+    auto* cc = std::get_if<se::CudaComputeCapability>(
+        &gpu_device_info_.gpu_compute_capability());
+    return cc != nullptr ? *cc : se::CudaComputeCapability();
   }
   se::RocmComputeCapability rocm_compute_capability() const {
-    return rocm_compute_capability_;
+    auto* cc = std::get_if<se::RocmComputeCapability>(
+        &gpu_device_info_.gpu_compute_capability());
+    return cc != nullptr ? *cc : se::RocmComputeCapability();
   }
   mlir::MLIRContext* mlir_context() { return mlir_context_; }
   llvm::Module* llvm_module() { return llvm_module_; }
@@ -93,14 +97,16 @@ class IrEmitterContext {
                      absl::string_view symbol_name, int allocation_idx,
                      llvm::ArrayRef<uint8_t> content, llvm::IRBuilder<>* b);
 
+  const DebugOptions& debug_options() const {
+    return hlo_module_->config().debug_options();
+  }
+
  private:
   const HloModule* hlo_module_;
   const BufferAssignment* buffer_assignment_;
   absl::Span<const BufferAllocation> allocations_;
   std::string platform_name_;
-  GpuDeviceInfo gpu_device_info_;
-  se::CudaComputeCapability cuda_compute_capability_;
-  se::RocmComputeCapability rocm_compute_capability_;
+  const se::DeviceDescription& gpu_device_info_;
   mlir::MLIRContext* mlir_context_;
   llvm::Module* llvm_module_;
   NameUniquer name_uniquer_;

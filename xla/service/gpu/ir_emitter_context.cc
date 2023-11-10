@@ -58,6 +58,7 @@ void IrEmitterContext::emit_constant(int64_t num_elements,
 
     // SYCL: always set info.content.
     info.content = content;
+
     std::vector<uint8_t> padded(kMinConstAllocationInBytes, 0);
     absl::c_copy(content, padded.begin());
     return llvm::ConstantDataArray::get<uint8_t>(
@@ -73,6 +74,7 @@ void IrEmitterContext::emit_constant(int64_t num_elements,
   //
   // We may have to be more clever here in the future if we notice that we're
   // keeping around too many globals because of their linkage.
+
   llvm::GlobalVariable* global_for_const = new llvm::GlobalVariable(
       global_type, /*isConstant=*/should_emit_initializer,
       llvm::GlobalValue::ExternalLinkage,
@@ -82,25 +84,6 @@ void IrEmitterContext::emit_constant(int64_t num_elements,
       /*isExternallyInitialized=*/false);
   global_for_const->setAlignment(llvm::Align(kConstantBufferAlignBytes));
 
-  // SYCL: Add spirv.Decorations for global variable. See document about the
-  // annotation:
-  // https://github.com/intel/llvm/blob/sycl/sycl/doc/design/spirv-extensions/SPV_INTEL_global_variable_decorations.asciidoc
-  llvm::LLVMContext& context = llvm_module_->getContext();
-  llvm::SmallVector<llvm::Metadata*, 4> MDs;
-  std::vector<llvm::Metadata*> OPs;
-
-  auto* KindMD = llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
-      llvm::Type::getInt32Ty(context), /*IDecHostAccessINTEL*/ 6147));
-  OPs.push_back(KindMD);
-  auto* const AccModeMD = llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
-      llvm::Type::getInt32Ty(context), /*AccessMode*/ 2));
-  auto* const NameMD = llvm::MDString::get(context, symbol_name);
-  OPs.push_back(AccModeMD);
-  OPs.push_back(NameMD);
-  MDs.push_back(llvm::MDNode::get(context, OPs));
-
-  llvm::MDNode* MDList = llvm::MDNode::get(context, MDs);
-  global_for_const->setMetadata("spirv.Decorations", MDList);
   llvm_module_->insertGlobalVariable(global_for_const);
 
   info.symbol_name.assign(symbol_name);

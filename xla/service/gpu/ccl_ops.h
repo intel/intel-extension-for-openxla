@@ -18,7 +18,7 @@ limitations under the License.
 
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/gpu/ccl_collective_thunk.h"
-#include "xla/stream_executor/sycl/sycl_types.h"
+#include "xla/stream_executor/gpu/gpu_types.h"
 
 #if !ITEX_USE_CCL
 

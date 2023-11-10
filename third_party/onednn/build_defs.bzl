@@ -32,9 +32,7 @@ def onednn_deps():
     """
     return select({
         "//third_party/onednn:onednn_v3_and_gpu": ["@onednn_gpu//:onednn_gpu"],
-        "//third_party/onednn:onednn_v2_and_gpu": ["@onednn_gpu_v2//:onednn_gpu"],
-        "//third_party/onednn:onednn_v3_and_cpu": ["@onednn_cpu//:onednn_cpu"],
-        "//conditions:default": ["@onednn_cpu_v2//:onednn_cpu"],
+        "//conditions:default": ["@onednn_gpu//:onednn_gpu"],
     })
 
 def if_llga_debug(if_true, if_false = []):

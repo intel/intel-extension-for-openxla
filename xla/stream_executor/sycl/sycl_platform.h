@@ -33,9 +33,14 @@ limitations under the License.
 #include "xla/stream_executor/trace_listener.h"
 
 namespace stream_executor {
-namespace gpu {
-
+namespace sycl {
+// Opaque and unique identifier for the CUDA platform plugin.
+// This is needed so that plugins can refer to/identify this platform without
+// instantiating a CudaPlatform object.
 extern const Platform::Id kSyclPlatformId;
+}  // namespace sycl
+
+namespace gpu {
 // Cuda-specific platform plugin, registered as a singleton value via module
 // initializer.
 class SyclPlatform : public Platform {
@@ -67,18 +72,11 @@ class SyclPlatform : public Platform {
 
   tsl::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) override;
 
-  tsl::StatusOr<StreamExecutor*> ExecutorForDeviceWithPluginConfig(
-      int ordinal, const PluginConfig& config) override;
-
   tsl::StatusOr<StreamExecutor*> GetExecutor(
       const StreamExecutorConfig& config) override;
 
   tsl::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
       const StreamExecutorConfig& config) override;
-
-  void RegisterTraceListener(std::unique_ptr<TraceListener> listener) override;
-
-  void UnregisterTraceListener(TraceListener* listener) override;
 
  private:
   // Determines the number of NUMA nodes and the assignment of executor to each.

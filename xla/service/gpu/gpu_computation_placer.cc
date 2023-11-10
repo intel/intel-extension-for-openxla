@@ -24,7 +24,7 @@ static std::unique_ptr<xla::ComputationPlacer> CreateSYCLComputationPlacer() {
 
 static bool InitModule() {
   xla::ComputationPlacer::RegisterComputationPlacer(
-      stream_executor::gpu::kSyclPlatformId, &CreateSYCLComputationPlacer);
+      stream_executor::sycl::kSyclPlatformId, &CreateSYCLComputationPlacer);
   return true;
 }
 static bool module_initialized = InitModule();

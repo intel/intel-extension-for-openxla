@@ -364,9 +364,8 @@ auto OptionalBitcast(Pattern pattern) {
 // when the output of the GEMM is requested in FP8 format.
 class GemmRewriterVisitor : public DfsHloRewriteVisitor {
  public:
-  explicit GemmRewriterVisitor(
-      se::CudaComputeCapability cuda_compute_capability)
-      : cuda_compute_capability_(cuda_compute_capability) {}
+  explicit GemmRewriterVisitor(se::GpuComputeCapability gpu_version)
+      : gpu_version_(gpu_version) {}
 
   Status HandleDot(HloInstruction* instr) override {
     if (!IsMatrixMultiplication(*instr)) {
@@ -631,12 +630,16 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
                                     bool b_mult_scale,
                                     std::vector<HloInstruction*> a_unary_ops,
                                     std::vector<HloInstruction*> b_unary_ops) {
-    // FP8 GEMM kernels are only available on Hopper and newer architectures.
-    if (!cuda_compute_capability_.IsAtLeast(
-            se::CudaComputeCapability::HOPPER)) {
-      VLOG(1) << "FP8 Custom Calls require Hopper or newer architecture.";
+    auto cuda_compute_capability_ =
+        std::get<se::CudaComputeCapability>(gpu_version_);
+    // FP8 GEMM kernels are only available on Ada, Hopper, and later
+    // architectures.
+    if (!cuda_compute_capability_.IsAtLeast(8, 9)) {
+      VLOG(1)
+          << "FP8 Custom Calls require Ada, Hopper, or later architectures.";
       return false;
     }
+
 #if CUDA_VERSION < 11080
     // FP8 GEMM kernels are only available with CUDA 11.8 and above
     VLOG(1) << "FP8 Custom Calls require CUDA 11.8 or newer.";
@@ -1239,7 +1242,7 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
   }
 
  private:
-  se::CudaComputeCapability cuda_compute_capability_;
+  se::GpuComputeCapability gpu_version_;
 
   // Choose cublas or cublasLt for the target of the custom call that instr will
   // be rewritten into.
@@ -1459,12 +1462,17 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
       return true;
     }
 
-    if (cuda_compute_capability_.IsAtLeast(se::CudaComputeCapability::AMPERE)) {
-      // cuBlasLt has an implementation for complex data with compute type
-      // 32F_FAST_32TF that uses tensor cores and that is free from the
-      // restriction. This implementation only works on Ampere
-      // architecture though (where TF32 was introduced).
-      return true;
+    if (std::holds_alternative<se::CudaComputeCapability>(gpu_version_)) {
+      auto cuda_compute_capability_ =
+          std::get<se::CudaComputeCapability>(gpu_version_);
+      if (cuda_compute_capability_.IsAtLeast(
+              se::CudaComputeCapability::AMPERE)) {
+        // cuBlasLt has an implementation for complex data with compute type
+        // 32F_FAST_32TF that uses tensor cores and that is free from the
+        // restriction. This implementation only works on Ampere
+        // architecture though (where TF32 was introduced).
+        return true;
+      }
     }
 
     // Get the rhs non-contracting dimensions as they will eventually be at the
@@ -1530,18 +1538,17 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
   }
 };
 
-StatusOr<bool> RunOnComputation(
-    HloComputation* computation,
-    se::CudaComputeCapability cuda_compute_capability) {
-  GemmRewriterVisitor visitor(cuda_compute_capability);
+StatusOr<bool> RunOnComputation(HloComputation* computation,
+                                se::GpuComputeCapability gpu_version) {
+  GemmRewriterVisitor visitor(gpu_version);
   TF_RETURN_IF_ERROR(computation->Accept(&visitor));
   return visitor.changed();
 }
 
 }  // anonymous namespace
 
-GemmRewriter::GemmRewriter(se::CudaComputeCapability cuda_compute_capability)
-    : cuda_compute_capability_(cuda_compute_capability) {}
+GemmRewriter::GemmRewriter(se::GpuComputeCapability gpu_version)
+    : gpu_version_(gpu_version) {}
 
 StatusOr<bool> GemmRewriter::Run(
     HloModule* module,
@@ -1549,8 +1556,8 @@ StatusOr<bool> GemmRewriter::Run(
   bool changed = false;
   for (HloComputation* computation :
        module->MakeNonfusionComputations(execution_threads)) {
-    TF_ASSIGN_OR_RETURN(
-        bool result, RunOnComputation(computation, cuda_compute_capability_));
+    TF_ASSIGN_OR_RETURN(bool result,
+                        RunOnComputation(computation, gpu_version_));
     changed |= result;
   }
   return changed;

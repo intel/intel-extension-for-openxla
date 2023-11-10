@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "xla/service/gpu/gpu_conv_runner.h"
+#include "xla/service/gpu/xpu_conv_runner.h"
 
 #include <string>
 
@@ -100,6 +100,8 @@ Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
                             std::to_string(__LINE__);
     std::cout << error_msg << std::endl;
   }
+
+  return tsl::OkStatus();
 }
 
 }  // namespace gpu

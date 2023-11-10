@@ -51,7 +51,7 @@ namespace gpu {
 //
 class FusedQKVRewriter : public HloModulePass {
  public:
-  explicit FusedQKVRewriter(const GpuDeviceInfo& d,
+  explicit FusedQKVRewriter(const se::DeviceDescription& d,
                             se::CudaComputeCapability cuda_compute_capability)
       : device_info_(d), cuda_compute_capability_(cuda_compute_capability) {}
 
@@ -68,7 +68,7 @@ class FusedQKVRewriter : public HloModulePass {
   // The reachability map of current computation.
   std::unique_ptr<HloReachabilityMap> reachability_;
 
-  const GpuDeviceInfo device_info_;
+  const se::DeviceDescription device_info_;
 
   bool FuseQKVSiblings(HloComputation* computation, HloInstruction* parent,
                        FusionInfoCache* fusion_info_cache);

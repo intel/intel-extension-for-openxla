@@ -196,14 +196,14 @@ Status GpuTransferManager::ReadDynamicShapes(se::Stream* stream,
 
 static std::unique_ptr<xla::TransferManager> CreateSYCLTransferManager() {
   return std::make_unique<xla::gpu::GpuTransferManager>(
-      /*id=*/stream_executor::gpu::kSyclPlatformId,
+      /*id=*/stream_executor::sycl::kSyclPlatformId,
       /*pointer_size=*/llvm::DataLayout(xla::gpu::spir::DataLayout())
           .getPointerSize(0 /* default address space */));
 }
 
 static bool InitModule() {
   xla::TransferManager::RegisterTransferManager(
-      stream_executor::gpu::kSyclPlatformId, &CreateSYCLTransferManager);
+      stream_executor::sycl::kSyclPlatformId, &CreateSYCLTransferManager);
   return true;
 }
 static bool module_initialized = InitModule();

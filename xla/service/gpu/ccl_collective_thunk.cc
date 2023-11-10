@@ -208,7 +208,8 @@ Status CclCollectiveThunk::ExecuteOnStream(const ExecuteParams& params) {
   // continue enqueuing operations. Otherwise, the allocations can cause
   // deadlock in the CUDA driver (b/215649390).
   if (first_call_to_execute_) {
-    se::Stream* stream = IsAsync() ? params.async_comms_stream : params.stream;
+    se::Stream* stream =
+        IsAsync() ? params.async_comms_streams[0] : params.stream;
     TF_RETURN_IF_ERROR(stream->BlockHostUntilDone());
     first_call_to_execute_ = false;
   }
@@ -229,7 +230,7 @@ std::string CclCollectiveThunk::GetDeviceString(
 Status CclCollectiveThunk::AsyncExecutor::Execute(
     absl::FunctionRef<Status(const ExecuteParams&, se::Stream&, ncclComm_t)> fn,
     const ExecuteParams& params, ncclComm_t comm) {
-  se::Stream& async_comms_stream = *params.async_comms_stream;
+  se::Stream& async_comms_stream = *params.async_comms_streams[0];
   // Wait until compute inputs are ready.
   async_comms_stream.ThenWaitFor(params.stream);
 

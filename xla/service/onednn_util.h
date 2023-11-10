@@ -26,7 +26,7 @@ limitations under the License.
 #include "tsl/framework/numeric_types.h"
 #include "tsl/platform/types.h"
 #include "tsl/util/env_var.h"
-#include "xla/stream_executor/sycl/sycl_types.h"
+#include "xla/stream_executor/gpu/gpu_types.h"
 
 namespace xla {
 inline dnnl::memory::dims CalculateTFStrides(

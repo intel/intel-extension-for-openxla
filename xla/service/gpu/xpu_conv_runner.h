@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_SERVICE_GPU_GPU_CONV_RUNNER_H_
-#define XLA_SERVICE_GPU_GPU_CONV_RUNNER_H_
+#ifndef XLA_SERVICE_GPU_XPU_CONV_RUNNER_H_
+#define XLA_SERVICE_GPU_XPU_CONV_RUNNER_H_
 
 #include <optional>
 
@@ -22,6 +22,7 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/cublas_cudnn.h"
+#include "xla/service/gpu/gpu_conv_runner.h"
 #include "xla/service/gpu/thunk.h"
 #include "xla/service/onednn_util.h"
 #include "xla/status.h"
@@ -29,7 +30,6 @@ limitations under the License.
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/types.h"
 #include "xla/xla_data.pb.h"
-
 namespace xla {
 
 namespace gpu {
@@ -56,7 +56,7 @@ typedef struct OneDnnConvPrimitive {
   dnnl::stream stream;
   bool has_reorder = false;
 } OneDnnConvPrimitive;
-
+#if 0
 struct GpuConvDescriptor {
   CudnnConvKind kind;
   CudnnConvBackendConfig backend_config;
@@ -69,7 +69,7 @@ struct GpuConvDescriptor {
   // mlir::lmhlo_gpu::Activation activation;
   int64_t feature_group_count;
 };
-
+#endif
 Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
 
                   const GpuConvDescriptor& conv_descriptor,
@@ -80,4 +80,4 @@ Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_GPU_CONV_RUNNER_H_
+#endif  // XLA_SERVICE_GPU_XPU_CONV_RUNNER_H_

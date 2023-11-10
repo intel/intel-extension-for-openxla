@@ -71,7 +71,7 @@ bool IsProfitableOperand(HloInstruction* instr) {
 }
 
 FusionDecision LegalToFuse(HloInstruction* instr1, HloInstruction* instr2,
-                           const GpuDeviceInfo& device_info,
+                           const se::DeviceDescription& device_info,
                            FusionInfoCache* fusion_info_cache) {
   // Do this check last, as it may be expensive.
   return FusionFitsInBudget(*instr1, *instr2, device_info,
@@ -134,7 +134,7 @@ bool FusedQKVRewriter::FuseQKVSiblings(HloComputation* computation,
 
       VLOG(1) << "Considering siblingA: " << (*i)->name()
               << "  and siblingB: " << (*j)->name();
-      if (NoFusionPossible sibling_fusible =
+      if (auto sibling_fusible =
               (!is_disconnected(*i, *j) ||
                !LegalToFuse(*i, *j, device_info_, fusion_info_cache) ||
                !IsEqualShapeAndAttrs((*i), (*j)))) {

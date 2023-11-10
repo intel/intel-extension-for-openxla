@@ -36,7 +36,7 @@ class SPIRCompiler : public GpuCompiler {
   ~SPIRCompiler() override {}
 
   Status OptimizeHloConvolutionCanonicalization(
-      HloModule* hlo_module, GpuVersion gpu_version,
+      HloModule* hlo_module, se::GpuComputeCapability gpu_version,
       se::DeviceMemoryAllocator* device_allocator) override;
 
   Status OptimizeHloPostLayoutAssignment(
@@ -47,11 +47,9 @@ class SPIRCompiler : public GpuCompiler {
 
   HloDataflowAnalysis::CanShareBuffer GetCanShareBuffer() override;
 
-  GpuVersion GetGpuVersion(se::StreamExecutor* stream_exec) override;
-
   StatusOr<std::pair<std::string, std::vector<uint8_t>>> CompileTargetBinary(
       const HloModuleConfig& module_config, llvm::Module* llvm_module,
-      GpuVersion gpu_version, bool relocatable,
+      se::GpuComputeCapability gpu_version, bool relocatable,
       const HloModule* debug_module) override;
 
   static SPIRCompiler* CreateSPIRCompiler();

@@ -29,6 +29,7 @@ limitations under the License.
 #include "xla/service/gpu/gpu_conv_runner.h"
 #include "xla/service/gpu/gpu_executable.h"
 #include "xla/service/gpu/thunk.h"
+#include "xla/service/gpu/xpu_conv_runner.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/types.h"
 #include "xla/xla_data.pb.h"
@@ -66,7 +67,8 @@ class ConvolutionThunk : public Thunk {
       onednn_primitives_;
   StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
       se::Stream*, const std::vector<se::DeviceMemoryBase>& operand_se_buffers,
-      const se::DeviceMemoryBase& result_buffer, const ExecuteParams& params);
+      const se::DeviceMemoryBase& result_buffer, const ExecuteParams& params,
+      se::ScratchAllocator* scratch_allocator);
 };
 
 }  // namespace gpu

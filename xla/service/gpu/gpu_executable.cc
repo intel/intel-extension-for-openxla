@@ -47,7 +47,6 @@ limitations under the License.
 #include "xla/service/gpu/buffer_allocations.h"
 #include "xla/service/gpu/gpu_constants.h"
 #include "xla/service/gpu/gpu_executable_run_options.h"
-#include "xla/service/gpu/gpu_types.h"
 #include "xla/service/gpu/non_atomically_upgradeable_rw_lock.h"
 #include "xla/service/gpu/stream_executor_util.h"
 #include "xla/service/hlo_parser.h"
@@ -124,8 +123,8 @@ GpuExecutable::GpuExecutable(GpuExecutable::Params params)
       constants_(std::move(params.constants)),
       output_info_(std::move(params.output_info)) {
   if (has_module()) {
-    XlaDebugInfoManager::Get()->RegisterModule(
-        module().unique_id(), shared_module(), debug_buffer_assignment_);
+    XlaDebugInfoManager::Get()->RegisterModule(shared_module(),
+                                               debug_buffer_assignment_);
   }
 }
 
@@ -177,8 +176,17 @@ Status ExecuteThunks(const std::string& module_name, ModuleIdentifier module_id,
   se::Stream* main_stream = run_options->stream();
   se::StreamExecutor* executor = main_stream->parent();
 
+  // Create the needed streams to support NcclCollectiveThunk.
+  absl::InlinedVector<se::Stream*, kAsyncStreamTotal> async_comms_streams(
+      kAsyncStreamTotal, nullptr);
   StatusOr<StreamPool::Ptr> async_comms_stream =
       run_options->BorrowStream(executor->device_ordinal());
+
+  if (async_comms_stream.ok()) {
+    for (int64_t i = 0; i < kAsyncStreamTotal; ++i) {
+      async_comms_streams[i] = async_comms_stream->get();
+    }
+  }
 
   uint64_t start_nanos = tsl::Env::Default()->NowNanos();
 
@@ -204,9 +212,9 @@ Status ExecuteThunks(const std::string& module_name, ModuleIdentifier module_id,
     TF_RET_CHECK(async_comms_stream.ok() || !NeedsAsyncCommsStream(*thunk))
         << "`run_options` must have a stream borrower for async thunks.";
 
-    Thunk::ExecuteParams thunk_params{
-        *run_options, buffer_allocations, main_stream,
-        async_comms_stream.ok() ? async_comms_stream->get() : nullptr};
+    Thunk::ExecuteParams thunk_params{*run_options, buffer_allocations,
+                                      main_stream, async_comms_streams};
+
     TF_RETURN_IF_ERROR(thunk->ExecuteOnStream(thunk_params));
   }
   return MaybeSyncAndProfile(run_options, start_nanos,

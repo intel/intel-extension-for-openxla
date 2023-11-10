@@ -13,122 +13,357 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "gemm.h"
+#include "xla/service/gpu/xetla/gemm/gemm.h"
 
-#include "hgemm_splitk.h"
+#include "xla/service/gpu/matrix_descriptor.h"
+#include "xla/service/gpu/xetla/gemm/hgemm_impl.h"
+#include "xla/stream_executor/blas.h"
+#include "xla/stream_executor/gpu/gpu_types.h"
+#include "xla/stream_executor/sycl/sycl_stream.h"
+
+namespace se = ::stream_executor;
 
 namespace gpu {
 namespace xetla {
 
-#define HGEMM_IMPL_FUNC(WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, B_ROW_MAJOR)                         \
-  void                                                                                             \
-      hgemm_##WG_M##x##WG_N##_##SG_M##x##SG_N##x##SG_K##_##SLM_KS##_##B_ROW_MAJOR##_(              \
-          sycl::queue& queue, sycl::half* out, const sycl::half* a,                                \
-          const sycl::half* b, const int m, const int n, const int k) {                            \
-    hgemm_common<sycl::half, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,                        \
-                 B_ROW_MAJOR>(queue, out, a, b, m, n, k);                                          \
-  }                                                                                                \
-  void                                                                                             \
-      hgemm_bias_##WG_M##x##WG_N##_##SG_M##x##SG_N##x##SG_K##_##SLM_KS##_##B_ROW_MAJOR##_(         \
-          sycl::queue& queue, sycl::half* out, const sycl::half* a,                                \
-          const sycl::half* b, const sycl::half* bias, const int m,                                \
-          const int n, const int k) {                                                              \
-    hgemm_bias<sycl::half, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,                          \
-               B_ROW_MAJOR>(queue, out, a, b, bias, m, n, k);                                      \
-  }                                                                                                \
-  void                                                                                             \
-      hgemm_bias_res_res_##WG_M##x##WG_N##_##SG_M##x##SG_N##x##SG_K##_##SLM_KS##_##B_ROW_MAJOR##_( \
-          sycl::queue& queue, sycl::half* out, const sycl::half* a,                                \
-          const sycl::half* b, const sycl::half* bias, const sycl::half* res0,                     \
-          const sycl::half* res1, const int m, const int n, const int k) {                         \
-    hgemm_bias_res_res<sycl::half, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1,                     \
-                       3, B_ROW_MAJOR>(queue, out, a, b, bias, res0, res1, m,                      \
-                                       n, k);                                                      \
-  }                                                                                                \
-  void                                                                                             \
-      hgemm_bias_gelu_##WG_M##x##WG_N##_##SG_M##x##SG_N##x##SG_K##_##SLM_KS##_##B_ROW_MAJOR##_(    \
-          sycl::queue& queue, sycl::half* out, const sycl::half* a,                                \
-          const sycl::half* b, const sycl::half* bias, const int m,                                \
-          const int n, const int k) {                                                              \
-    hgemm_bias_gelu<sycl::half, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,                     \
-                    B_ROW_MAJOR>(queue, out, a, b, bias, m, n, k);                                 \
-  }                                                                                                \
-  void                                                                                             \
-      hgemm_resmul_##WG_M##x##WG_N##_##SG_M##x##SG_N##x##SG_K##_##SLM_KS##_##B_ROW_MAJOR##_(       \
-          sycl::queue& queue, sycl::half* out, const sycl::half* a,                                \
-          const sycl::half* b, const sycl::half* mul, const int m,                                 \
-          const int n, const int k) {                                                              \
-    hgemm_mul<sycl::half, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,                           \
-              B_ROW_MAJOR>(queue, out, a, b, mul, m, n, k);                                        \
-  }                                                                                                \
-  void                                                                                             \
-      hgemm_silu_##WG_M##x##WG_N##_##SG_M##x##SG_N##x##SG_K##_##SLM_KS##_##B_ROW_MAJOR##_(         \
-          sycl::queue& queue, sycl::half* out, const sycl::half* a,                                \
-          const sycl::half* b, const int m, const int n, const int k) {                            \
-    hgemm_silu<sycl::half, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,                          \
-               B_ROW_MAJOR>(queue, out, a, b, m, n, k);                                            \
-  }                                                                                                \
-  void                                                                                             \
-      hgemm_res_##WG_M##x##WG_N##_##SG_M##x##SG_N##x##SG_K##_##SLM_KS##_##B_ROW_MAJOR##_(          \
-          sycl::queue& queue, sycl::half* out, const sycl::half* a,                                \
-          const sycl::half* b, const sycl::half* res, const int m,                                 \
-          const int n, const int k) {                                                              \
-    hgemm_res<sycl::half, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,                           \
-              B_ROW_MAJOR>(queue, out, a, b, res, m, n, k);                                        \
-  }                                                                                                \
-  void                                                                                             \
-      hgemm_qkv_##WG_M##x##WG_N##_##SG_M##x##SG_N##x##SG_K##_##SLM_KS##_##B_ROW_MAJOR##_(          \
-          sycl::queue& queue, sycl::half* out0, sycl::half* out1,                                  \
-          sycl::half* out2, const sycl::half* a, const sycl::half* b,                              \
-          const int m, const int n, const int k) {                                                 \
-    hgemm_qkv<sycl::half, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,                           \
-              B_ROW_MAJOR>(queue, out0, out1, out2, a, b, m, n, k);                                \
-  }                                                                                                \
-  void                                                                                             \
-      hgemm_qkv_bias_##WG_M##x##WG_N##_##SG_M##x##SG_N##x##SG_K##_##SLM_KS##_##B_ROW_MAJOR##_(     \
-          sycl::queue& queue, sycl::half* out0, sycl::half* out1,                                  \
-          sycl::half* out2, const sycl::half* a, const sycl::half* b,                              \
-          const sycl::half* bias, const int m, const int n, const int k) {                         \
-    hgemm_qkv_bias<sycl::half, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,                      \
-                   B_ROW_MAJOR>(queue, out0, out1, out2, a, b, bias, m, n, k);                     \
-  }                                                                                                \
-  void                                                                                             \
-      hgemm_bias_res_##WG_M##x##WG_N##_##SG_M##x##SG_N##x##SG_K##_##SLM_KS##_##B_ROW_MAJOR##_(     \
-          sycl::queue& queue, sycl::half* out, const sycl::half* a,                                \
-          const sycl::half* b, const sycl::half* bias, const sycl::half* res,                      \
-          const sycl::half res_scale, const int m, const int n, const int k) {                     \
-    hgemm_bias_res<sycl::half, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,                      \
-                   B_ROW_MAJOR>(queue, out, a, b, bias, res, res_scale, m, n,                      \
-                                k);                                                                \
+std::unordered_map<std::string, std::tuple<int, int, int, int, int, int>>
+    configMap = {{"1_4096_16384", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"1_16384_4096", std::make_tuple(8, 512, 8, 16, 16, 1)},
+                 {"1_4096_4096", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"4_16384_4096", std::make_tuple(8, 512, 8, 16, 16, 1)},
+                 {"4_4096_4096", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"4_4096_16384", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"4096_16384_4096", std::make_tuple(256, 256, 32, 64, 32, 1)},
+                 {"4096_4096_4096", std::make_tuple(256, 256, 32, 64, 32, 1)},
+                 {"4096_4096_16384", std::make_tuple(256, 256, 32, 64, 32, 1)},
+                 {"4_50400_4096", std::make_tuple(128, 512, 64, 32, 16, 1)},
+                 {"32_4096_16384", std::make_tuple(32, 64, 8, 16, 16, 2)},
+                 {"32_16384_4096", std::make_tuple(32, 512, 32, 16, 16, 1)},
+                 {"32_4096_4096", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"33_4096_16384", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"33_16384_4096", std::make_tuple(128, 512, 64, 32, 16, 1)},
+                 {"33_4096_4096", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"64_4096_16384", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"64_16384_4096", std::make_tuple(128, 256, 64, 16, 16, 1)},
+                 {"64_4096_4096", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"65_4096_16384", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"65_16384_4096", std::make_tuple(128, 256, 64, 16, 16, 1)},
+                 {"65_4096_4096", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"128_4096_16384", std::make_tuple(128, 128, 32, 32, 32, 2)},
+                 {"128_16384_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"128_4096_4096", std::make_tuple(128, 128, 32, 32, 32, 2)},
+                 {"130_4096_16384", std::make_tuple(128, 128, 32, 32, 32, 2)},
+                 {"130_16384_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"130_4096_4096", std::make_tuple(128, 128, 16, 32, 64, 1)},
+                 {"256_4096_16384", std::make_tuple(128, 128, 16, 32, 64, 1)},
+                 {"256_16384_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"256_4096_4096", std::make_tuple(128, 128, 32, 32, 32, 2)},
+                 {"512_4096_16384", std::make_tuple(128, 256, 32, 32, 16, 1)},
+                 {"512_16384_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"512_4096_4096", std::make_tuple(128, 128, 32, 32, 32, 2)},
+                 {"513_4096_16384", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"513_4096_4096", std::make_tuple(128, 512, 64, 32, 16, 1)},
+                 {"1024_4096_16384", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1024_16384_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1024_4096_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1028_4096_16384", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1028_16384_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1028_4096_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"2016_4096_16384", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"2016_16384_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"2016_4096_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1_50400_4096", std::make_tuple(128, 512, 64, 32, 16, 1)},
+                 {"1_50272_4096", std::make_tuple(128, 512, 64, 32, 16, 1)},
+                 {"4_50400_4096", std::make_tuple(128, 512, 64, 32, 16, 1)},
+                 {"4_50272_4096", std::make_tuple(128, 512, 64, 32, 16, 1)},
+                 {"1_250880_4096", std::make_tuple(32, 64, 8, 16, 16, 2)},
+                 {"4_250880_4096", std::make_tuple(32, 64, 8, 16, 16, 2)},
+                 {"1_11008_4096", std::make_tuple(16, 256, 8, 16, 16, 1)},
+                 {"4_11008_4096", std::make_tuple(16, 256, 8, 16, 16, 1)},
+                 {"32_11008_4096", std::make_tuple(64, 256, 64, 16, 16, 2)},
+                 {"64_11008_4096", std::make_tuple(64, 256, 64, 16, 16, 2)},
+                 {"128_11008_4096", std::make_tuple(128, 256, 32, 32, 16, 1)},
+                 {"256_11008_4096", std::make_tuple(256, 256, 32, 64, 32, 1)},
+                 {"512_11008_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1024_11008_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"2016_11008_4096", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1_32000_4096", std::make_tuple(256, 256, 32, 64, 16, 1)},
+                 {"4_32000_4096", std::make_tuple(256, 256, 32, 64, 16, 1)},
+                 {"1_13824_5120", std::make_tuple(256, 256, 32, 64, 16, 1)},
+                 {"1_5120_5120", std::make_tuple(8, 128, 8, 16, 16, 2)},
+                 {"4_13824_5120", std::make_tuple(128, 256, 64, 16, 16, 1)},
+                 {"4_5120_5120", std::make_tuple(8, 128, 8, 16, 16, 2)},
+                 {"32_13824_5120", std::make_tuple(128, 256, 64, 16, 16, 1)},
+                 {"32_5120_5120", std::make_tuple(32, 128, 32, 16, 16, 4)},
+                 {"64_13824_5120", std::make_tuple(128, 256, 32, 32, 16, 1)},
+                 {"64_5120_5120", std::make_tuple(128, 128, 16, 32, 64, 1)},
+                 {"128_13824_5120", std::make_tuple(128, 256, 32, 32, 16, 1)},
+                 {"128_5120_5120", std::make_tuple(128, 128, 16, 32, 64, 1)},
+                 {"256_13824_5120", std::make_tuple(256, 256, 32, 64, 32, 1)},
+                 {"256_5120_5120", std::make_tuple(128, 256, 32, 32, 16, 1)},
+                 {"512_13824_5120", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"512_5120_5120", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1024_13824_5120", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1024_5120_5120", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"2016_13824_5120", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"2016_5120_5120", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1_32000_5120", std::make_tuple(256, 256, 32, 64, 16, 1)},
+                 {"4_32000_5120", std::make_tuple(256, 256, 32, 64, 16, 1)},
+                 {"1_7168_14336", std::make_tuple(8, 256, 8, 16, 16, 2)},
+                 {"1_1792_14336", std::make_tuple(16, 64, 16, 16, 16, 8)},
+                 {"4_7168_14336", std::make_tuple(8, 256, 8, 16, 16, 2)},
+                 {"4_1792_14336", std::make_tuple(16, 64, 16, 16, 16, 8)},
+                 {"32_7168_14336", std::make_tuple(32, 256, 32, 16, 16, 2)},
+                 {"32_1792_14336", std::make_tuple(16, 64, 16, 16, 16, 8)},
+                 {"1_14336_7168", std::make_tuple(128, 512, 64, 32, 16, 1)},
+                 {"1_14336_1792", std::make_tuple(16, 256, 8, 16, 16, 1)},
+                 {"4_14336_7168", std::make_tuple(128, 256, 64, 16, 16, 1)},
+                 {"4_14336_1792", std::make_tuple(128, 256, 32, 32, 16, 1)},
+                 {"32_14336_7168", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"32_14336_1792", std::make_tuple(128, 256, 32, 32, 16, 1)},
+                 {"1_250880_1792", std::make_tuple(16, 256, 8, 16, 16, 1)},
+                 {"1_2048_8192", std::make_tuple(8, 64, 8, 16, 32, 8)},
+                 {"1_3584_7168", std::make_tuple(32, 64, 8, 16, 16, 2)},
+                 {"1_7168_3584", std::make_tuple(128, 128, 16, 32, 64, 1)},
+                 {"1_7168_8192", std::make_tuple(128, 128, 16, 32, 64, 1)},
+                 {"1_8192_2048", std::make_tuple(128, 64, 16, 16, 64, 1)},
+                 {"1_8192_7168", std::make_tuple(8, 256, 8, 16, 16, 2)},
+                 {"1_256_8192", std::make_tuple(16, 64, 16, 16, 16, 8)},
+                 {"1_32000_2048", std::make_tuple(16, 256, 8, 16, 16, 1)},
+                 {"4_2048_8192", std::make_tuple(8, 64, 8, 16, 32, 8)},
+                 {"4_3584_7168", std::make_tuple(32, 64, 8, 16, 16, 2)},
+                 {"4_7168_3584", std::make_tuple(128, 128, 16, 32, 64, 1)},
+                 {"4_7168_8192", std::make_tuple(8, 256, 8, 16, 16, 2)},
+                 {"4_8192_2048", std::make_tuple(8, 256, 8, 16, 16, 2)},
+                 {"4_8192_7168", std::make_tuple(128, 256, 32, 32, 16, 1)},
+                 {"4_256_8192", std::make_tuple(16, 64, 16, 16, 16, 8)},
+                 {"4_32000_2048", std::make_tuple(256, 256, 32, 64, 16, 1)},
+                 {"1024_2048_8192", std::make_tuple(128, 256, 32, 32, 16, 1)},
+                 {"1024_7168_8192", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1024_8192_2048", std::make_tuple(256, 256, 64, 32, 16, 1)},
+                 {"1024_8192_7168", std::make_tuple(256, 256, 32, 64, 32, 1)},
+                 {"1024_256_8192", std::make_tuple(32, 128, 32, 16, 16, 4)}};
+
+std::tuple<int, int, int, int, int, int> selectXetlaGemmConfig(int m, int n,
+                                                               int k) {
+  std::string mnk =
+      std::to_string(m) + "_" + std::to_string(n) + "_" + std::to_string(k);
+  if (configMap.find(mnk) != configMap.end()) {
+    return configMap[mnk];
+  } else {
+    return std::make_tuple(256, 256, 32, 64, 16, 1);
   }
+}
 
-HGEMM_IMPL_FUNC(32, 64, 8, 16, 16, 2, true)
-HGEMM_IMPL_FUNC(8, 512, 8, 16, 16, 1, true)
-HGEMM_IMPL_FUNC(16, 256, 8, 16, 16, 1, true)
-HGEMM_IMPL_FUNC(8, 128, 8, 16, 16, 4, true)
-HGEMM_IMPL_FUNC(32, 256, 8, 32, 16, 1, true)
-HGEMM_IMPL_FUNC(16, 128, 8, 16, 16, 1, true)
-HGEMM_IMPL_FUNC(8, 256, 8, 32, 16, 2, true)
-HGEMM_IMPL_FUNC(8, 512, 8, 32, 16, 2, true)
-HGEMM_IMPL_FUNC(256, 256, 32, 64, 32, 1, true)
-HGEMM_IMPL_FUNC(8, 128, 8, 16, 32, 4, true)
-HGEMM_IMPL_FUNC(32, 128, 8, 32, 32, 1, true)
-HGEMM_IMPL_FUNC(32, 64, 8, 16, 32, 2, true)
-HGEMM_IMPL_FUNC(256, 256, 32, 64, 16, 1, true)
+std::tuple<int, int, int, int, int, int> selectXetlaQKVGemmConfig(int m, int n,
+                                                                  int k) {
+  return std::make_tuple(256, 256, 32, 64, 16, 1);
+}
 
-HGEMM_IMPL_FUNC(32, 64, 8, 16, 16, 2, false)
-HGEMM_IMPL_FUNC(8, 512, 8, 16, 16, 1, false)
-HGEMM_IMPL_FUNC(16, 256, 8, 16, 16, 1, false)
-HGEMM_IMPL_FUNC(8, 128, 8, 16, 16, 4, false)
-HGEMM_IMPL_FUNC(32, 256, 8, 32, 16, 1, false)
-HGEMM_IMPL_FUNC(16, 128, 8, 16, 16, 1, false)
-HGEMM_IMPL_FUNC(8, 256, 8, 32, 16, 2, false)
-HGEMM_IMPL_FUNC(8, 512, 8, 32, 16, 2, false)
-HGEMM_IMPL_FUNC(256, 256, 32, 64, 32, 1, false)
-HGEMM_IMPL_FUNC(8, 128, 8, 16, 32, 4, false)
-HGEMM_IMPL_FUNC(32, 128, 8, 32, 32, 1, false)
-HGEMM_IMPL_FUNC(32, 64, 8, 16, 32, 2, false)
-HGEMM_IMPL_FUNC(256, 256, 32, 64, 16, 1, false)
+template <typename ComputeType>
+template <int WG_M, int WG_N, int SG_M, int SG_N, int SG_K, int SLM_KS>
+void XetlaGemmKernel<ComputeType>::dispatch(se::gpu::GpuStreamHandle handle) {
+  sycl::queue q = *handle;
+  if (num_epilogues_ == 0) {
+    hgemm_common<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
+                 true>(q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
+                       reinterpret_cast<ComputeType*>(a_->data.opaque()),
+                       reinterpret_cast<ComputeType*>(b_->data.opaque()), m_,
+                       n_, k_);
+  } else if (num_epilogues_ == 1 && epilogue_types_[0] == RES_ADD) {
+    if (alpha_ == 1.0f) {
+      hgemm_res<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
+                true>(q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
+                      reinterpret_cast<ComputeType*>(a_->data.opaque()),
+                      reinterpret_cast<ComputeType*>(b_->data.opaque()),
+                      reinterpret_cast<ComputeType*>(epilogue_tensors_[0]), m_,
+                      n_, k_, epilogue_params_[0]);
+    } else {
+      hgemm_addmm<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
+                  true>(q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
+                        reinterpret_cast<ComputeType*>(epilogue_tensors_[0]),
+                        reinterpret_cast<ComputeType*>(a_->data.opaque()),
+                        reinterpret_cast<ComputeType*>(b_->data.opaque()), m_,
+                        n_, k_, alpha_, epilogue_params_[0]);
+    }
+  } else if (num_epilogues_ == 1 && epilogue_types_[0] == BIAS) {
+    CHECK(alpha_ == 1.0f);
+    hgemm_bias<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
+               true>(q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
+                     reinterpret_cast<ComputeType*>(a_->data.opaque()),
+                     reinterpret_cast<ComputeType*>(b_->data.opaque()),
+                     reinterpret_cast<ComputeType*>(epilogue_tensors_[0]), m_,
+                     n_, k_, epilogue_params_[0]);
+  } else if (num_epilogues_ == 2 && epilogue_types_[0] == BIAS &&
+             epilogue_types_[1] == RES_ADD) {
+    CHECK(alpha_ == 1.0f);
+    hgemm_bias_res<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
+                   true>(q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
+                         reinterpret_cast<ComputeType*>(a_->data.opaque()),
+                         reinterpret_cast<ComputeType*>(b_->data.opaque()),
+                         reinterpret_cast<ComputeType*>(epilogue_tensors_[0]),
+                         reinterpret_cast<ComputeType*>(epilogue_tensors_[1]),
+                         m_, n_, k_, epilogue_params_[0], epilogue_params_[1]);
+  } else if (num_epilogues_ == 2 && epilogue_types_[0] == BIAS &&
+             epilogue_types_[1] == GELU) {
+    CHECK(alpha_ == 1.0f);
+    hgemm_bias_gelu<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
+                    true>(q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
+                          reinterpret_cast<ComputeType*>(a_->data.opaque()),
+                          reinterpret_cast<ComputeType*>(b_->data.opaque()),
+                          reinterpret_cast<ComputeType*>(epilogue_tensors_[0]),
+                          m_, n_, k_, epilogue_params_[0]);
+
+  } else {
+    LOG(ERROR) << "No mateched policy";
+  }
+}
+
+template <typename ComputeType, int WG_M, int WG_N, int SG_M, int SG_N,
+          int SG_K, int SLM_KS>
+struct GemmPolicy {
+  static bool match_or_call(int wg_m, int wg_n, int sg_m, int sg_n, int sg_k,
+                            int slm_ks,
+                            XetlaGemmKernel<ComputeType>* gemm_kernel,
+                            se::gpu::GpuStreamHandle handle) {
+    if (WG_M == wg_m && WG_N == wg_n && SG_M == sg_m && SG_N == sg_n &&
+        SG_K == sg_k && SLM_KS == slm_ks) {
+      gemm_kernel->template dispatch<WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS>(
+          handle);
+      return true;
+    }
+    return false;
+  }
+};
+
+template <typename ComputeType, typename MATCHER, typename... TArgs>
+struct PolicyDispatcher {
+  static bool call(int wg_m, int wg_n, int sg_m, int sg_n, int sg_k, int slm_ks,
+                   XetlaGemmKernel<ComputeType>* gemm_kernel,
+                   se::gpu::GpuStreamHandle handle) {
+    if (MATCHER::match_or_call(wg_m, wg_n, sg_m, sg_n, sg_k, slm_ks,
+                               gemm_kernel, handle)) {
+      return true;
+    }
+    return PolicyDispatcher<ComputeType, TArgs...>::call(
+        wg_m, wg_n, sg_m, sg_n, sg_k, slm_ks, gemm_kernel, handle);
+  }
+};
+
+template <typename ComputeType, typename MATCHER>
+struct PolicyDispatcher<ComputeType, MATCHER> {
+  static bool call(int wg_m, int wg_n, int sg_m, int sg_n, int sg_k, int slm_ks,
+                   XetlaGemmKernel<ComputeType>* gemm_kernel,
+                   se::gpu::GpuStreamHandle handle) {
+    if (MATCHER::match_or_call(wg_m, wg_n, sg_m, sg_n, sg_k, slm_ks,
+                               gemm_kernel, handle)) {
+      return true;
+    }
+    return false;
+  }
+};
+
+template <typename ComputeType>
+void XetlaGemmKernel<ComputeType>::run(se::gpu::GpuStreamHandle handle) {
+  using gemm_policy =
+      PolicyDispatcher<ComputeType,
+                       GemmPolicy<ComputeType, 8, 64, 8, 16, 32, 8>,
+                       GemmPolicy<ComputeType, 8, 128, 8, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 8, 128, 8, 16, 32, 4>,
+                       GemmPolicy<ComputeType, 8, 256, 8, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 8, 512, 8, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 16, 64, 16, 16, 16, 8>,
+                       GemmPolicy<ComputeType, 16, 256, 8, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 16, 256, 16, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 16, 512, 16, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 32, 64, 32, 16, 16, 8>,
+                       GemmPolicy<ComputeType, 32, 64, 8, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 32, 128, 32, 16, 16, 4>,
+                       GemmPolicy<ComputeType, 32, 256, 32, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 32, 512, 32, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 64, 128, 64, 16, 16, 4>,
+                       GemmPolicy<ComputeType, 64, 256, 64, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 64, 512, 64, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 128, 128, 32, 32, 32, 2>,
+                       GemmPolicy<ComputeType, 128, 256, 64, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 128, 512, 64, 32, 16, 1>,
+                       GemmPolicy<ComputeType, 256, 256, 64, 32, 16, 1>,
+                       GemmPolicy<ComputeType, 256, 256, 32, 64, 16, 1>,
+                       GemmPolicy<ComputeType, 256, 256, 32, 64, 32, 1>,
+                       GemmPolicy<ComputeType, 128, 64, 16, 16, 64, 1>,
+                       GemmPolicy<ComputeType, 128, 128, 16, 32, 64, 1>,
+                       GemmPolicy<ComputeType, 128, 256, 32, 32, 16, 1>>;
+  int WG_M = std::get<0>(selected_policy_id_);
+  int WG_N = std::get<1>(selected_policy_id_);
+  int SG_M = std::get<2>(selected_policy_id_);
+  int SG_N = std::get<3>(selected_policy_id_);
+  int SG_K = std::get<4>(selected_policy_id_);
+  int SLM_KS = std::get<5>(selected_policy_id_);
+  gemm_policy::call(WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, this, handle);
+}
+
+template class XetlaGemmKernel<sycl::half>;
+template class XetlaGemmKernel<gpu::xetla::bf16>;
+
+template <typename ComputeType>
+template <int WG_M, int WG_N, int SG_M, int SG_N, int SG_K, int SLM_KS>
+void XetlaQKVGemmKernel<ComputeType>::dispatch(
+    se::gpu::GpuStreamHandle handle) {
+  sycl::queue q = *handle;
+  if (q_out_ != nullptr && k_out_ != nullptr && v_out_ != nullptr) {
+    CHECK(alpha_ == 1.0f);
+    hgemm_qkv<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3, true>(
+        q, reinterpret_cast<ComputeType*>(q_out_->data.opaque()),
+        reinterpret_cast<ComputeType*>(k_out_->data.opaque()),
+        reinterpret_cast<ComputeType*>(v_out_->data.opaque()),
+        reinterpret_cast<ComputeType*>(a_->data.opaque()),
+        reinterpret_cast<ComputeType*>(b_->data.opaque()), m_, n_, k_);
+  } else {
+    LOG(ERROR) << "No mateched policy";
+  }
+}
+
+template <typename ComputeType>
+void XetlaQKVGemmKernel<ComputeType>::run(se::gpu::GpuStreamHandle handle) {
+  using gemm_policy =
+      PolicyDispatcher<ComputeType,
+                       GemmPolicy<ComputeType, 8, 64, 8, 16, 32, 8>,
+                       GemmPolicy<ComputeType, 8, 128, 8, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 8, 128, 8, 16, 32, 4>,
+                       GemmPolicy<ComputeType, 8, 256, 8, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 8, 512, 8, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 16, 64, 16, 16, 16, 8>,
+                       GemmPolicy<ComputeType, 16, 256, 8, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 16, 256, 16, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 16, 512, 16, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 32, 64, 32, 16, 16, 8>,
+                       GemmPolicy<ComputeType, 32, 64, 8, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 32, 128, 32, 16, 16, 4>,
+                       GemmPolicy<ComputeType, 32, 256, 32, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 32, 512, 32, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 64, 128, 64, 16, 16, 4>,
+                       GemmPolicy<ComputeType, 64, 256, 64, 16, 16, 2>,
+                       GemmPolicy<ComputeType, 64, 512, 64, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 128, 128, 32, 32, 32, 2>,
+                       GemmPolicy<ComputeType, 128, 256, 64, 16, 16, 1>,
+                       GemmPolicy<ComputeType, 128, 512, 64, 32, 16, 1>,
+                       GemmPolicy<ComputeType, 256, 256, 64, 32, 16, 1>,
+                       GemmPolicy<ComputeType, 256, 256, 32, 64, 16, 1>,
+                       GemmPolicy<ComputeType, 256, 256, 32, 64, 32, 1>,
+                       GemmPolicy<ComputeType, 128, 64, 16, 16, 64, 1>,
+                       GemmPolicy<ComputeType, 128, 128, 16, 32, 64, 1>,
+                       GemmPolicy<ComputeType, 128, 256, 32, 32, 16, 1>>;
+  int WG_M = std::get<0>(selected_policy_id_);
+  int WG_N = std::get<1>(selected_policy_id_);
+  int SG_M = std::get<2>(selected_policy_id_);
+  int SG_N = std::get<3>(selected_policy_id_);
+  int SG_K = std::get<4>(selected_policy_id_);
+  int SLM_KS = std::get<5>(selected_policy_id_);
+  gemm_policy::call(WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, this, handle);
+}
+
+template class XetlaQKVGemmKernel<sycl::half>;
+template class XetlaQKVGemmKernel<gpu::xetla::bf16>;
 
 }  // namespace xetla
 }  // namespace gpu

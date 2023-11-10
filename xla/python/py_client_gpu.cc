@@ -23,6 +23,7 @@ limitations under the License.
 #include "absl/strings/numbers.h"
 #include "pybind11/pybind11.h"  // from @pybind11
 #include "tsl/platform/errors.h"
+#include "xla/primitive_util.h"
 #include "xla/python/callback.h"
 #include "xla/python/exceptions.h"
 #include "xla/service/custom_call_target_registry.h"

@@ -19,45 +19,24 @@ limitations under the License.
 
 #include "tsl/platform/statusor.h"
 #include "xla/stream_executor/sycl/sycl_executor.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
 
 namespace stream_executor {
 namespace gpu {
 
-GpuEvent::GpuEvent(GpuExecutor* parent)
-    : parent_(parent), gpu_event_(nullptr) {}
-
-GpuEvent::~GpuEvent() {}
-
-tsl::Status GpuEvent::Init() {
-  gpu_event_ = new ITEX_GPUEvent;
-  return ::tsl::OkStatus();
-}
-
-tsl::Status GpuEvent::Destroy() {
-  delete gpu_event_;
-  return ::tsl::OkStatus();
-}
-
-tsl::Status GpuEvent::Record(GpuStream* stream) {
-  if (IsMultipleStreamEnabled()) {
-    *gpu_event_ = stream->gpu_stream()->ext_oneapi_submit_barrier();
-  }
-  return ::tsl::OkStatus();
-}
-
-GpuEventHandle GpuEvent::gpu_event() { return gpu_event_; }
+namespace sycl = ::sycl;
 
 Event::Status GpuEvent::PollForStatus() {
   if (IsMultipleStreamEnabled()) {
     auto event_status =
-        gpu_event_->get_info<cl::sycl::info::event::command_execution_status>();
+        gpu_event_->get_info<sycl::info::event::command_execution_status>();
 
     switch (event_status) {
-      case cl::sycl::info::event_command_status::submitted:
-      case cl::sycl::info::event_command_status::running:
+      case sycl::info::event_command_status::submitted:
+      case sycl::info::event_command_status::running:
         return Event::Status::kPending;
-      case cl::sycl::info::event_command_status::complete:
+      case sycl::info::event_command_status::complete:
         return Event::Status::kComplete;
       default:
         return Event::Status::kUnknown;
