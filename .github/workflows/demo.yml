@@ -20,10 +20,14 @@ jobs:
      
       - name: Prepare Conda Environment
         run: |
-          set -e
+          set +e
           export CONDA_ENV=openXLA_preCI
-          source ${HOME}/miniconda3/bin/activate
-          conda create -n openXLA_preCI python=3.10 -y
+          conda ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          if [ $? -ne 0 ]; then
+              echo 'conda env does not exist'
+              conda create -n ${CONDA_ENV} python=3.10 -y
+              conda activate ${CONDA_ENV}
+          fi
           pip install jax==0.4.13 jaxlib==0.4.13
           conda install libstdcxx-ng==12.2.0 -c conda-forge
 
