@@ -27,6 +27,7 @@ import platform
 import subprocess
 import sys
 
+
 # pylint: disable=g-import-not-at-top
 try:
   from shutil import which
