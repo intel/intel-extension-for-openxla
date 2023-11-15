@@ -16,11 +16,10 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v3
-
+     
       - name: Prepare Conda Environment
         run: |
-          ls ${{ github.workspace }}
-          CONDA_ENV=openXLA_preci
+          export CONDA_ENV=openXLA_preci
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           if [ $? -ne 0 ]; then
               echo 'conda env does not exist'
@@ -32,6 +31,7 @@ jobs:
 
       - name: Build openXLA
         run: |
+          export CONDA_ENV=openXLA_preci
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
           bash bazel-5.3.0-installer-linux-x86_64.sh --user
