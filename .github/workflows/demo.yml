@@ -40,7 +40,7 @@ jobs:
           basekit_path=/home/sdp
           complier_path=${basekit_path}/intel/oneapi/complier/latest/linux
           mkl_path=${basekit_path}/intel/oneapi/mkl/latest
-          cp /home/sdp/openXLA_demoxla_auto_configure_mkl.exp .
+          cp /home/sdp/openXLA_demo/xla_auto_configure_mkl.exp .
           chmod +x xla_auto_configure_mkl.exp
           ./xla_auto_configure_mkl.exp $complier_path $mkl_path
           bazel clean --expunge --async
