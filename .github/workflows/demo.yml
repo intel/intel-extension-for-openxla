@@ -33,7 +33,7 @@ jobs:
 
       - name: Build openXLA
         run: |
-          export CONDA_ENV=openXLA_preci
+          export CONDA_ENV=openXLA_preCI
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
           bash bazel-5.3.0-installer-linux-x86_64.sh --user
