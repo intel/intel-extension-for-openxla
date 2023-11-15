@@ -1,3 +1,4 @@
+
 name: GitHub Actions Demo
 run-name: ${{ github.actor }} is testing out GitHub Action
 on:
@@ -19,7 +20,8 @@ jobs:
      
       - name: Prepare Conda Environment
         run: |
-          export CONDA_ENV=openxla_preCI
+          set -e
+          export CONDA_ENV=openXLA_preCI
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           if [ $? -ne 0 ]; then
               echo 'conda env does not exist'
