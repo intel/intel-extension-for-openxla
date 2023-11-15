@@ -1,0 +1,54 @@
+name: GitHub Actions Demo
+run-name: ${{ github.actor }} is testing out GitHub Action
+on:
+  pull_request:
+    branches: 
+      - IDC_demo_master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  openXLA-DEMO-CI:
+    runs-on: IDC_demo
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+
+      - name: Prepare Conda Environment
+        run: |
+          ls ${{ github.workspace }}
+          CONDA_ENV=openXLA_preci
+          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          if [ $? -ne 0 ]; then
+              echo 'conda env does not exist'
+              conda create -n ${CONDA_ENV} python=3.10 -y
+              conda activate ${CONDA_ENV}
+          fi
+          pip install jax==0.4.13 jaxlib==0.4.13
+          conda install libstdcxx-ng==12.2.0 -c conda-forge
+
+      - name: Build openXLA
+        run: |
+          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
+          bash bazel-5.3.0-installer-linux-x86_64.sh --user
+          basekit_path=/home/sdp
+          complier_path=${basekit_path}/intel/oneapi/complier/latest/linux
+          mkl_path=${basekit_path}/intel/oneapi/mkl/latest
+          cp /home/sdp/openXLA_demoxla_auto_configure_mkl.exp .
+          chmod +x xla_auto_configure_mkl.exp
+          ./xla_auto_configure_mkl.exp $complier_path $mkl_path
+          bazel clean --expunge --async
+          bazel build //xla/tools/pip_package:build_pip_package
+          ./bazel-bin/xla/tools/pip_package/build_pip_package ./
+          build_result=${PIPESTATUS[0]}
+          if [ "$build_result" = "0" ];then
+              echo "Build successful"
+              pip install *.whl
+          else
+              echo "Build Failed"
+              exit 1
+          fi
