@@ -37,10 +37,12 @@ jobs:
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
           bash bazel-5.3.0-installer-linux-x86_64.sh --user
+          export PATH=${HOME}/bin:$PATH
           basekit_path=/home/sdp
           complier_path=${basekit_path}/intel/oneapi/complier/latest/linux
           mkl_path=${basekit_path}/intel/oneapi/mkl/latest
           cp /home/sdp/openXLA_demo/xla_auto_configure_mkl.exp .
+          ls
           chmod +x xla_auto_configure_mkl.exp
           ./xla_auto_configure_mkl.exp $complier_path $mkl_path
           bazel clean --expunge --async
