@@ -47,7 +47,7 @@ jobs:
           cp /home/sdp/openXLA_demoxla_auto_configure_mkl.exp .
           ls
           chmod +x ./openXLA_demoxla_auto_configure_mkl.exp
-          ./xla_auto_configure_mkl.exp $complier_path $mkl_path
+          ./openXLA_demoxla_auto_configure_mkl.exp $complier_path $mkl_path
           bazel clean --expunge --async
           bazel build //xla/tools/pip_package:build_pip_package
           ./bazel-bin/xla/tools/pip_package/build_pip_package ./
