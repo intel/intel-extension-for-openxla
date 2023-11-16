@@ -27,17 +27,18 @@ jobs:
               conda create -n ${CONDA_ENV} python=3.10 -y
               conda activate ${CONDA_ENV}
           fi
-          pip install jax==0.4.13 jaxlib==0.4.13 numpy
+          pip install jax==0.4.13 jaxlib==0.4.13
+          pip install numpy
           conda install libstdcxx-ng==12.2.0 -c conda-forge
           pip list | grep numpy
           pip list | grep jax
 
       - name: Build openXLA
         run: |
-          wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
-          bash bazel-5.3.0-installer-linux-x86_64.sh --user
           echo ${CONDA_ENV}
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
+          bash bazel-5.3.0-installer-linux-x86_64.sh --user
           pip list | grep numpy
           pip install numpy
           basekit_path=/home/sdp
