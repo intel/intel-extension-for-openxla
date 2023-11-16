@@ -20,7 +20,7 @@ jobs:
       - name: Prepare Conda Environment
         run: |
           ls ${{ github.workspace }}
-          CONDA_ENV=openXLA_preci
+          CONDA_ENV=openxla_preCI
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           if [ $? -ne 0 ]; then
               echo 'conda env does not exist'
