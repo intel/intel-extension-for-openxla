@@ -73,7 +73,7 @@ jobs:
           source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
           source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
           folder_path="/home/sdp/xuming/ut"
-
+          pip install absl-py
           # Loop through all Python files in the folder and execute them
           for file in "$folder_path"/*.py; do
                   echo $file
