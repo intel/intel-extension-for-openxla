@@ -79,7 +79,7 @@ jobs:
                   echo $file
                   if [ -f "$file" ]; then
                   echo "Running $file..."
-                  ${CONDA_PREFIX}/bin/python "$file" |& tee ./$file.log
+                  python "$file" |& tee ./$file.log
                   if [ ${PIPESTATUS[0]} -eq 0 ]; then
                     echo "run $test_case successfully"
                     echo "$test_case" | awk -F 'tests/' '{print $NF}' >> "./xla_ut_success.log"
