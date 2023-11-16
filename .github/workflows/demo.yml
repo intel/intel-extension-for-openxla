@@ -30,6 +30,7 @@ jobs:
           pip install jax==0.4.13 jaxlib==0.4.13
           pip install numpy
           conda install libstdcxx-ng==12.2.0 -c conda-forge
+          pip install absl-py
           pip list | grep numpy
           pip list | grep jax
 
@@ -63,4 +64,35 @@ jobs:
           else
               echo "Build Failed"
               exit 1
+          fi
+      - name: UT testing
+        run: |
+          echo ${CONDA_ENV}
+          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          basekit_path=/home/sdp
+          source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
+          source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
+          folder_path="/home/sdp/xuming/ut"
+
+          # Loop through all Python files in the folder and execute them
+          for file in "$folder_path"/*.py; do
+                  echo $file
+                  if [ -f "$file" ]; then
+                  echo "Running $file..."
+                  ${CONDA_PREFIX}/bin/python "$file" |& tee ./$file.log
+                  if [ ${PIPESTATUS[0]} -eq 0 ]; then
+                    echo "run $test_case successfully"
+                    echo "$test_case" | awk -F 'tests/' '{print $NF}' >> "./xla_ut_success.log"
+                  else
+                      echo "run $test_case failed"
+                      echo "$test_case" | awk -F 'tests/' '{print $NF}' >> "./xla_ut_error.log"
+                  fi
+                  echo "----------------------------------------"
+              fi
+          done
+
+          if [ -e "./xla_ut_error.log" ]; then
+            echo "Error: xla_ut_error.log exist shows ut error"
+            cat ./xla_ut_error.log
+            exit 1
           fi
