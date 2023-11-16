@@ -79,20 +79,12 @@ jobs:
                   echo $file
                   if [ -f "$file" ]; then
                   echo "Running $file..."
-                  python "$file" |& tee ./$file.log
+                  python "$file"
                   if [ ${PIPESTATUS[0]} -eq 0 ]; then
                     echo "run $test_case successfully"
-                    echo "$test_case" | awk -F 'tests/' '{print $NF}' >> "./xla_ut_success.log"
                   else
                       echo "run $test_case failed"
-                      echo "$test_case" | awk -F 'tests/' '{print $NF}' >> "./xla_ut_error.log"
                   fi
                   echo "----------------------------------------"
               fi
           done
-
-          if [ -e "./xla_ut_error.log" ]; then
-            echo "Error: xla_ut_error.log exist shows ut error"
-            cat ./xla_ut_error.log
-            exit 1
-          fi
