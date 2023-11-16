@@ -49,7 +49,7 @@ jobs:
           mkl_path=${basekit_path}/intel/oneapi/mkl/latest
           cp /home/sdp/openXLA_demoxla_auto_configure_mkl.exp .
           ls
-          python
+          python --version
           chmod +x ./openXLA_demoxla_auto_configure_mkl.exp
           ./openXLA_demoxla_auto_configure_mkl.exp $complier_path $mkl_path
           bazel clean --expunge --async
