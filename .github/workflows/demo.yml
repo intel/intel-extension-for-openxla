@@ -40,6 +40,8 @@ jobs:
           wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
           bash bazel-5.3.0-installer-linux-x86_64.sh --user
           export PATH=$PATH:/home/sdp/bin
+          source /home/sdp/.bazel/bin/bazel-complete.bash
+          bazel --version
           pip list | grep numpy
           pip install numpy
           basekit_path=/home/sdp
