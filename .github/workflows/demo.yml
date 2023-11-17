@@ -20,7 +20,7 @@ jobs:
       - name: Prepare Conda Environment
         run: |
           echo ${{ github.event.pull_request.number }}
-          echo ${{ runner.name }}
+          echo ${{ env.GIT_ACTIONS_RUNNER_LABEL }}
           CONDA_ENV=openxla_preCI
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           if [ $? -ne 0 ]; then
@@ -37,7 +37,7 @@ jobs:
 
       - name: Build openXLA
         run: |
-          CONDA_ENV=openxla_preCI
+          CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
           bash bazel-5.3.0-installer-linux-x86_64.sh --user
@@ -68,7 +68,7 @@ jobs:
           fi
       - name: UT testing
         run: |
-          CONDA_ENV=openxla_preCI
+          CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           basekit_path=/home/sdp
           source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
