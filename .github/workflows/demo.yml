@@ -20,6 +20,7 @@ jobs:
       - name: Prepare Conda Environment
         run: |
           echo ${{ github.event.pull_request.number }}
+          echo ${{ runner.name }}
           CONDA_ENV=openxla_preCI
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           if [ $? -ne 0 ]; then
