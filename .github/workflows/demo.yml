@@ -12,14 +12,14 @@ concurrency:
 
 jobs:
   openXLA-DEMO-CI:
-    runs-on: IDC_demo
+    runs-on: self-hosted
     steps:
       - name: Check out repository code
         uses: actions/checkout@v3
 
       - name: Prepare Conda Environment
         run: |
-          ls ${{ github.workspace }}
+          echo ${{ github.event.pull_request.number }}
           CONDA_ENV=openxla_preCI
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           if [ $? -ne 0 ]; then
