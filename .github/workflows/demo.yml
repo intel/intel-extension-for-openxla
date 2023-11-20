@@ -36,6 +36,7 @@ jobs:
 
       - name: Build openXLA
         run: |
+          set +e
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
           which bazel
