@@ -1,13 +1,35 @@
 cc_library(
-    name = "xpu_pjrt_client",
-    srcs = ["xpu_pjrt_client.cc"],
-    hdrs = [
-        "xpu_pjrt_client.h",
-    ],
-    linkstatic = 1,
+    name = "pjrt_c_api_xpu_internal",
+    srcs = ["pjrt_c_api_xpu_internal.cc"],
+    hdrs = ["pjrt_c_api_xpu_internal.h"],
     visibility = ["//visibility:public"],
     deps = [
+        ":pjrt_c_api_wrapper_impl",
         ":se_xpu_client",
+        "@xla//xla/pjrt/c:pjrt_c_api_helpers",
+        "@xla//xla/pjrt/c:pjrt_c_api_tpu_hdrs",
+    ],
+)
+
+cc_library(
+    name = "pjrt_c_api_xpu",
+    srcs = ["pjrt_c_api_xpu.cc"],
+    linkstatic = 1,
+    deps = [
+        ":pjrt_c_api_xpu_internal",
+        "@xla//xla/pjrt/c:pjrt_c_api_tpu_hdrs",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "pjrt_c_api_wrapper_impl",
+    srcs = ["pjrt_c_api_wrapper_impl.cc"],
+    hdrs = [
+        "pjrt_c_api_wrapper_impl.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
         "//xla/service/gpu:gpu_computation_placer",
         "//xla/service/gpu:gpu_transfer_manager",
         "//xla/service/gpu:spir_compiler",
@@ -25,7 +47,6 @@ cc_library(
         "@xla//xla/service:computation_placer",
         "@xla//xla/stream_executor/tpu:c_api_conversions",
     ],
-    alwayslink = True,
 )
 
 cc_library(

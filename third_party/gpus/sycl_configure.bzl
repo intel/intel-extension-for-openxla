@@ -128,7 +128,7 @@ def find_sycl_include_path(repository_ctx, sycl_config):
             fail("Cannot find DPC++ compiler, please correct your path")
     else:
         icpx_extra = "-fsycl"
-    gcc_path = repository_ctx.path("/usr/bin/gcc")
+    gcc_path = repository_ctx.which("gcc")
     gcc_install_dir = repository_ctx.execute([gcc_path, "-print-libgcc-file-name"])
     gcc_install_dir_opt = "--gcc-install-dir=" + str(repository_ctx.path(gcc_install_dir.stdout.strip()).dirname)
     cmd_out = repository_ctx.execute([bin_path, icpx_extra, gcc_install_dir_opt, "-xc++", "-E", "-v", "/dev/null", "-o", "/dev/null"])

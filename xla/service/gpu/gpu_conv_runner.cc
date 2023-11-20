@@ -100,6 +100,8 @@ Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
                             std::to_string(__LINE__);
     std::cout << error_msg << std::endl;
   }
+
+  return tsl::OkStatus();
 }
 
 }  // namespace gpu

@@ -307,7 +307,7 @@ SPIRCompiler::CompileTargetBinary(const HloModuleConfig& module_config,
     XLA_SCOPED_LOGGING_TIMER("CompileTargetBinary - CompileToSpir");
     TF_ASSIGN_OR_RETURN(
         spir,
-        spir::CompileToSpir(selected_module, module_config, libdevice_dir));
+        spir::CompileToSpir(selected_module, gpu_version, module_config, libdevice_dir));
   }
 
   std::vector<uint8_t> spir_bin(spir.begin(), spir.end());

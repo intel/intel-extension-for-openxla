@@ -69,7 +69,7 @@ cc_library(
         ":mkl_rewriter",
         ":onednn_fused_conv_rewriter",
         ":triangular_solve_rewriter",
-        "//xla/service/gpu/llvm_gpu_backend",
+        "@xla//xla/service/gpu/llvm_gpu_backend",
         "//xla/stream_executor/sycl:sycl_platform_id",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/container:node_hash_map",

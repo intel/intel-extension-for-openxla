@@ -474,6 +474,223 @@ index 5603f6b87..9a78219a3 100644
      } else {
        LOG(FATAL) << "Invalid triple " << target_triple.str();
      }
+diff --git a/xla/service/gpu/llvm_gpu_backend/BUILD b/xla/service/gpu/llvm_gpu_backend/BUILD
+index c6a4a50aa..73e53dd91 100644
+--- a/xla/service/gpu/llvm_gpu_backend/BUILD
++++ b/xla/service/gpu/llvm_gpu_backend/BUILD
+@@ -3,6 +3,10 @@ load(
+     "@local_config_rocm//rocm:build_defs.bzl",
+     "if_rocm_is_configured",
+ )
++load(
++    "@local_config_sycl//sycl:build_defs.bzl",
++    "if_sycl_is_configured",
++)
+ 
+ package(
+     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
+@@ -66,6 +70,8 @@ cc_library(
+     ] + if_rocm_is_configured([
+         "@local_config_rocm//rocm:rocm_headers",
+         "@llvm-project//llvm:AMDGPUCodeGen",
++    ]) + if_sycl_is_configured([
++        "@llvm_spir//:llvm_spir_translator",
+     ]),
+ )
+ 
+diff --git a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
+index 32980ae56..bc15fa1f4 100644
+--- a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
++++ b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
+@@ -73,6 +73,9 @@ limitations under the License.
+ #include "rocm/rocm_config.h"
+ #endif
+ 
++#include "LLVMSPIRVLib.h"
++#include "LLVMSPIRVOpts.h"
++
+ namespace xla {
+ namespace gpu {
+ namespace {
+@@ -146,8 +149,9 @@ std::unique_ptr<llvm::TargetMachine> GetTargetMachine(
+   const llvm::Target* target =
+       llvm::TargetRegistry::lookupTarget("", triple, error);
+   if (target == nullptr) {
+-    LOG(FATAL) << "Unable to find Target for triple '" << triple.str() << "'"
+-               << " -- " << error;
++    // SYCL: do not have target machine for spirv
++    LOG(INFO) << "Unable to find Target for triple '" << triple.str() << "'"
++              << " -- " << error;
+     return nullptr;
+   }
+ 
+@@ -368,10 +372,15 @@ Status LinkAndOptimizeModule(llvm::Module* module, GpuVersion gpu_version,
+   llvm::CGSCCAnalysisManager cgam;
+   llvm::ModuleAnalysisManager mam;
+ 
+-  fam.registerPass([&] { return target_machine->getTargetIRAnalysis(); });
++  if (target_machine)
++    fam.registerPass([&] { return target_machine->getTargetIRAnalysis(); });
+ 
++  // SYCL: customized config
+   llvm::PipelineTuningOptions pto;
+-  pto.SLPVectorization = true;
++  pto.SLPVectorization = 0;
++  pto.LoopVectorization = 0;
++  pto.MergeFunctions = 0;
++  pto.CallGraphProfile = 1;
+   pto.InlinerThreshold = inline_threshold;
+ 
+   llvm::PassInstrumentationCallbacks pic;
+@@ -1017,5 +1026,130 @@ StatusOr<std::vector<uint8_t>> CompileToHsaco(
+ 
+ }  // namespace amdgpu
+ 
++namespace {
++std::unique_ptr<llvm::TargetMachine> SPIRGetTargetMachine(
++    llvm::Triple target_triple, const HloModuleConfig& hlo_module_config) {
++  // Actually no Target Machine for spir triple.
++  return GetTargetMachine(target_triple, "cpu", hlo_module_config, "fs");
++}
++
++Status SPIRTargetModuleLinker(llvm::Module* module, GpuVersion gpu_version,
++                              const HloModuleConfig& hlo_module_config,
++                              const std::string& device_bitcode_dir_path) {
++  return OkStatus();
++}
++
++StatusOr<std::string> EmitModuleToSpir(llvm::Module* module,
++                                       const HloModuleConfig& module_config) {
++  SPIRV::TranslatorOpts::ExtensionsStatusMap ExtensionsStatus;
++  SPIRV::TranslatorOpts opts(SPIRV::VersionNumber::MaximumVersion,
++                             ExtensionsStatus);
++  opts.enableAllExtensions();  // enable all SPIR-V extension first
++
++  std::ostringstream oss;
++  std::string err;
++  bool success = llvm::writeSpirv(module, opts, oss, err);
++  if (!success) {
++    return xla::InternalError("Fails to convert LLVM as SPIR-V: %s", err);
++  }
++  return oss.str();
++}
++
++// One-time module initializer.
++// Must be called only once -- DO NOT CALL DIRECTLY.
++void SPIRBackendInit(const HloModuleConfig& hlo_module_config) {
++  // Feed all customized flags here, so we can override them with llvm_cl_opts
++  // without redeploy the compiler for development purpose.
++
++  // This flag tunes a threshold in branch folding. The default threshold, which
++  // is one, is not suitable for CUDA programs where branches are more expensive
++  // than for CPU programs. Setting the threshold to 2 improves the latency of
++  // TwoDPatchDotProductKernel_IND_3_ND_48 by over 5%, and does not affect the
++  // latency of other benchmarks so far.
++  //
++  // I also tried setting this threshold to other values:
++  // * 3-6 gives similar results as 2;
++  // * >6 start hurting the performance of at least dot product kernels.
++  //
++  // TODO(jingyue): The current threshold only considers the number of IR
++  // instructions which do not accurately reflect the true cost. We need a
++  // better cost model.
++  FeedLLVMWithFlags({"-bonus-inst-threshold=2"});
++  // Increase limit when scanning memory dependencies.  This helps to reduce
++  // more redundant load instructions.
++  //
++  // The specific value is currently large enough for s3d in shoc benchmark,
++  // which contains a lot of load instructions and many arithmetic instructions
++  // between those loads.
++  FeedLLVMWithFlags({"-memdep-block-scan-limit=500"});
++
++  // Most of the slowness appears to be in trying to form horizontal reductions,
++  // which don't exist in PTX *anyway*.  Disable these.
++  FeedLLVMWithFlags({"-slp-vectorize-hor=false"});
++
++  bool vec = true;
++  tsl::ReadBoolFromEnvVar("VECTORIZE", true, &vec);
++  if (vec) {
++    FeedLLVMWithFlags({
++        "-slp-min-reg-size=64",
++        "-slp-max-reg-size=64",
++    });
++  } else {
++    // TODO: sycl-opt disables all LLVM vectorization passes. Evaluate if it is
++    // needed.
++    FeedLLVMWithFlags({"-sycl-opt=1"});
++  }
++
++  llvm_ir::InitializeLLVMCommandLineOptions(
++      hlo_module_config.debug_options().xla_backend_extra_options());
++
++  // Initialize the LLVM optimization passes.
++  llvm::PassRegistry* registry = llvm::PassRegistry::getPassRegistry();
++  InitializePasses(registry);
++}
++}  // namespace
++
++namespace spir {
++StatusOr<std::string> CompileToSpir(llvm::Module* module,
++                                    GpuVersion gpu_version,
++                                    const HloModuleConfig& hlo_module_config,
++                                    const std::string& libdevice_dir_path) {
++  static absl::once_flag backend_init_flag;
++  absl::call_once(backend_init_flag, SPIRBackendInit, hlo_module_config);
++
++  std::string spir;
++  {
++    XLA_SCOPED_LOGGING_TIMER("Compile module " + module->getName().str());
++
++    // If the module has no functions or globals, there's nothing to compile.
++    // Just return an empty string.
++    if (module->empty() && module->global_empty()) {
++      VLOG(2) << "Module '" << module->getName().str()
++              << "' is empty. Skipping compilation.";
++      return std::string();
++    }
++
++    // No SPIR target machine?
++    llvm::Triple default_target_triple("spir64-unknown-unknown");
++    std::unique_ptr<llvm::TargetMachine> target_machine =
++        SPIRGetTargetMachine(default_target_triple, hlo_module_config);
++
++    bool opt = true;
++    tsl::ReadBoolFromEnvVar("SYCL_LLVM_OPT", true, &opt);
++    if (opt) {
++      // Link with libdevice, and optimize the LLVM module.
++      TF_RETURN_IF_ERROR(LinkAndOptimizeModule(
++          module, gpu_version, hlo_module_config, libdevice_dir_path,
++          SPIRTargetModuleLinker, default_target_triple, target_machine.get(),
++          kDefaultInlineThreshold));
++    }
++
++    // Lower optimized LLVM module to SPIR.
++    TF_ASSIGN_OR_RETURN(spir, EmitModuleToSpir(module, hlo_module_config));
++  }
++  return spir;
++}
++}  // namespace spir
++
+ }  // namespace gpu
+ }  // namespace xla
+diff --git a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
+index 07a3d6a25..b4bb332aa 100644
+--- a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
++++ b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
+@@ -66,6 +66,13 @@ StatusOr<std::vector<uint8_t>> CompileToHsaco(
+     const std::string& rocdl_dir_path);
+ }  // namespace amdgpu
+ 
++namespace spir {
++StatusOr<std::string> CompileToSpir(llvm::Module* module,
++                                    GpuVersion gpu_version,
++                                    const HloModuleConfig& hlo_module_config,
++                                    const std::string& libdevice_dir_path);
++}  // namespace spir
++
+ }  // namespace gpu
+ }  // namespace xla
+ 
 diff --git a/xla/service/gpu/matmul_utils.h b/xla/service/gpu/matmul_utils.h
 index c46ba6922..dedac9e37 100644
 --- a/xla/service/gpu/matmul_utils.h
