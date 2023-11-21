@@ -50,8 +50,8 @@ jobs:
           pip list | grep numpy
           pip install numpy
           basekit_path=/home/sdp
-          complier_path=${basekit_path}/intel/oneapi/compiler/latest/linux
-          mkl_path=${basekit_path}/intel/oneapi/mkl/latest
+          complier_path=${basekit_path}/intel_2023.1/oneapi/compiler/latest/linux
+          mkl_path=${basekit_path}/intel_2023.1/oneapi/mkl/latest
           cp /home/sdp/openXLA_demoxla_auto_configure_mkl.exp .
           ls
           python --version
@@ -69,26 +69,35 @@ jobs:
               echo "Build Failed"
               exit 1
           fi
-#      - name: UT testing
-#        run: |
-#          CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-#          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
-#          basekit_path=/home/sdp
-#          source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
-#          source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
-#          folder_path="/home/sdp/xuming/ut"
-#          pip install absl-py
-#          # Loop through all Python files in the folder and execute them
-#          for file in "$folder_path"/*.py; do
-#                  echo $file
-#                  if [ -f "$file" ]; then
-#                  echo "Running $file..."
-#                  python "$file"
-#                  if [ ${PIPESTATUS[0]} -eq 0 ]; then
-#                    echo "run $test_case successfully"
-#                  else
-#                      echo "run $test_case failed"
-#                  fi
-#                  echo "----------------------------------------"
-#              fi
-#          done
+      - name: UT testing
+        run: |
+          if [[ "${{ runner.name }}" = "pytorch" ]];then
+              export ZE_AFFINITY_MASK=0
+          elif [[ "${{ runner.name }}" = "pytorch_1" ]];then
+              export ZE_AFFINITY_MASK=1
+          elif [[ "${{ runner.name }}" = "pytorch_2" ]];then
+              export ZE_AFFINITY_MASK=2
+          elif [[ "${{ runner.name }}" = "pytorch_3" ]];then
+              export ZE_AFFINITY_MASK=3
+          fi
+          CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
+          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          basekit_path=/home/sdp
+          source ${basekit_path}/intel_2023.1/oneapi/compiler/latest/env/vars.sh
+          source ${basekit_path}/intel_2023.1/oneapi/mkl/latest/env/vars.sh
+          folder_path="/home/sdp/xuming/ut"
+          pip install absl-py
+          # Loop through all Python files in the folder and execute them
+          for file in "$folder_path"/*.py; do
+                  echo $file
+                  if [ -f "$file" ]; then
+                  echo "Running $file..."
+                  python "$file"
+                  if [ ${PIPESTATUS[0]} -eq 0 ]; then
+                    echo "run $test_case successfully"
+                  else
+                      echo "run $test_case failed"
+                  fi
+                  echo "----------------------------------------"
+              fi
+          done
