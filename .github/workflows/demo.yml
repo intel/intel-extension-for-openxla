@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   openXLA-DEMO-CI:
-    runs-on: self-hosted
+    runs-on: IDC_demo_3
     steps:
       - name: Check out repository code
         uses: actions/checkout@v3
