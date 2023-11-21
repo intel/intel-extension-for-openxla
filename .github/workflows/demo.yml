@@ -73,12 +73,16 @@ jobs:
         run: |
           if [[ "${{ runner.name }}" = "pytorch" ]];then
               export ZE_AFFINITY_MASK=0
+              echo "export ZE_AFFINITY_MASK=0"
           elif [[ "${{ runner.name }}" = "pytorch_1" ]];then
               export ZE_AFFINITY_MASK=1
+              echo "export ZE_AFFINITY_MASK=1"
           elif [[ "${{ runner.name }}" = "pytorch_2" ]];then
               export ZE_AFFINITY_MASK=2
+              echo "export ZE_AFFINITY_MASK=2"
           elif [[ "${{ runner.name }}" = "pytorch_3" ]];then
               export ZE_AFFINITY_MASK=3
+              echo "export ZE_AFFINITY_MASK=3"
           fi
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
