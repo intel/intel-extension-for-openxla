@@ -97,7 +97,7 @@ jobs:
               echo "running ut on device-$id"
               key=$(basename $file .py)
               echo $file
-              ZE_AFFINITY_MASK="$id" python $file
+              ZE_AFFINITY_MASK="$id" python $file |$ tee $file.log
               if [ ${PIPESTATUS[0]} -eq 0 ]; then
                 echo "run $file successfully"
               else
