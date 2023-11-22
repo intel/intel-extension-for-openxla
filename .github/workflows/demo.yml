@@ -50,7 +50,7 @@ jobs:
           pip list | grep numpy
           pip install numpy
           basekit_path=/home/sdp
-          complier_path=${basekit_path}/intel/oneapi/compiler/latest/linux
+          complier_path=${basekit_path}/intel/oneapi/compiler/latest
           mkl_path=${basekit_path}/intel/oneapi/mkl/latest
           cp /home/sdp/openXLA_demoxla_auto_configure_mkl.exp .
           ls
