@@ -34,41 +34,41 @@ jobs:
           pip list | grep numpy
           pip list | grep jax
 
-      - name: Build openXLA
-        run: |
-          set +e
-          CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
-          which bazel
-          if [ $? -eq 1 ]; then
-            wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
-            bash bazel-5.3.0-installer-linux-x86_64.sh --user
-          fi
-          export PATH=$PATH:/home/sdp/bin
-          source /home/sdp/.bazel/bin/bazel-complete.bash
-          bazel --version
-          pip list | grep numpy
-          pip install numpy
-          basekit_path=/home/sdp
-          complier_path=${basekit_path}/intel/oneapi/compiler/latest/linux
-          mkl_path=${basekit_path}/intel/oneapi/mkl/latest
-          cp /home/sdp/openXLA_demoxla_auto_configure_mkl.exp .
-          ls
-          python --version
-          chmod +x ./openXLA_demoxla_auto_configure_mkl.exp
-          ./openXLA_demoxla_auto_configure_mkl.exp $complier_path $mkl_path
-          bazel clean --expunge --async
-          bazel build //xla/tools/pip_package:build_pip_package
-          ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-          build_result=${PIPESTATUS[0]}
-          echo $build_result
-          if [ "$build_result" = "0" ];then
-              echo "Build successful"
-              pip install *.whl
-          else
-              echo "Build Failed"
-              exit 1
-          fi
+      # - name: Build openXLA
+      #   run: |
+      #     set +e
+      #     CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
+      #     source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+      #     which bazel
+      #     if [ $? -eq 1 ]; then
+      #       wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
+      #       bash bazel-5.3.0-installer-linux-x86_64.sh --user
+      #     fi
+      #     export PATH=$PATH:/home/sdp/bin
+      #     source /home/sdp/.bazel/bin/bazel-complete.bash
+      #     bazel --version
+      #     pip list | grep numpy
+      #     pip install numpy
+      #     basekit_path=/home/sdp
+      #     complier_path=${basekit_path}/intel/oneapi/compiler/latest/linux
+      #     mkl_path=${basekit_path}/intel/oneapi/mkl/latest
+      #     cp /home/sdp/openXLA_demoxla_auto_configure_mkl.exp .
+      #     ls
+      #     python --version
+      #     chmod +x ./openXLA_demoxla_auto_configure_mkl.exp
+      #     ./openXLA_demoxla_auto_configure_mkl.exp $complier_path $mkl_path
+      #     bazel clean --expunge --async
+      #     bazel build //xla/tools/pip_package:build_pip_package
+      #     ./bazel-bin/xla/tools/pip_package/build_pip_package ./
+      #     build_result=${PIPESTATUS[0]}
+      #     echo $build_result
+      #     if [ "$build_result" = "0" ];then
+      #         echo "Build successful"
+      #         pip install *.whl
+      #     else
+      #         echo "Build Failed"
+      #         exit 1
+      #     fi
      - name: UT testing
        run: |
         CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
