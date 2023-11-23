@@ -90,7 +90,7 @@ jobs:
               echo "$i"
           done >&6
 
-          find "$folder_path" -type f -name '*.py' | while read -r file; do
+          for file in ./ut/*.py; do
             # read one data from the pipe
             read -u6 id
             {
@@ -101,7 +101,7 @@ jobs:
               if [ ${PIPESTATUS[0]} -eq 0 ]; then
                 echo "run $file successfully"
               else
-                  echo "run $test_case failed"
+                  echo "run $file failed"
               fi
               # writing one data to the pipe for the next task
               echo $id >&6
