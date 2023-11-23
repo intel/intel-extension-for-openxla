@@ -102,6 +102,7 @@ jobs:
                 echo "run $file successfully"
               else
                   echo "run $file failed"
+                  exit 1
               fi
               # writing one data to the pipe for the next task
               echo $id >&6
