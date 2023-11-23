@@ -90,7 +90,7 @@ jobs:
               echo "$i"
           done >&6
 
-          for file in ./ut/*.py; do
+          for file in $folder_path/*.py; do
             # read one data from the pipe
             read -u6 id
             {
