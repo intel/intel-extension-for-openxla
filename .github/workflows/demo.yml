@@ -109,20 +109,4 @@ jobs:
         done
         wait
         exec 6>&-
-          for file in $folder_path/*.py; do
-            # read one data from the pipe
-            read -u6 id
-            {
-              echo "running ut on device-$id"
-              key=$(basename $file .py)
-              echo $file
-              ZE_AFFINITY_MASK="$id" python $file
-              if [ ${PIPESTATUS[0]} -eq 0 ]; then
-                echo "run $file successfully"
-              else
-                  echo "run $file failed"
-              fi
-              # writing one data to the pipe for the next task
-              echo $id >&6
-            } &
-          done
+        
