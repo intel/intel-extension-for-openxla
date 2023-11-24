@@ -2,8 +2,7 @@ name: GitHub Actions Demo
 run-name: ${{ github.actor }} is testing out GitHub Action
 on:
   pull_request:
-    branches: 
-      - wenjun/ci
+    branches: [wenjun/ci]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
