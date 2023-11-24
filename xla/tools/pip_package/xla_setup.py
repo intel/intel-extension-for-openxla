@@ -38,7 +38,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'jax_p
 # result for pip.
 # Also update xla/xla.bzl
 # _VERSION = __version__
-_VERSION = "0.1.0"
+_VERSION = "0.2.0"
 
 REQUIRED_PACKAGES = []
 
