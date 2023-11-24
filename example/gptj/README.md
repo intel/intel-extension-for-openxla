@@ -5,7 +5,7 @@ Script jax_gptj.py for [EleutherAI/gpt-j-6B](https://huggingface.co/EleutherAI/g
 ## Prerequisites
 
 ```bash
-pip install jax==0.4.13 jaxlib==0.4.13 flax==0.7.0 transformers==4.27.4 diffusers==0.16.1 datasets==2.12.0
+pip install jax==0.4.20 jaxlib==0.4.20 flax==0.7.0 transformers==4.32 diffusers==0.16.1 datasets==2.12.0
 ```
 
 ## Options

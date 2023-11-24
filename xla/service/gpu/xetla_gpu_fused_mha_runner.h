@@ -1,6 +1,6 @@
 /* Copyright (c) 2023 Intel Corporation
 
-Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,37 +15,34 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_SERVICE_GPU_ONEDNN_MATMUL_UTILS_H_
-#define XLA_SERVICE_GPU_ONEDNN_MATMUL_UTILS_H_
+#ifndef XLA_SERVICE_GPU_XETLA_GPU_FUSED_MHA_RUNNER_H_
+#define XLA_SERVICE_GPU_XETLA_GPU_FUSED_MHA_RUNNER_H_
 
-#include <cstdint>
 #include <optional>
-#include <utility>
-#include <vector>
 
-#include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/gpu/backend_configs.pb.h"
-#include "xla/service/gpu/ir_emission_utils.h"
-#include "xla/service/gpu/matmul_utils.h"
-#include "xla/service/gpu/scratch_allocator.h"
-#include "xla/shape.h"
+#include "xla/service/gpu/cublas_cudnn.h"
+#include "xla/service/gpu/gpu_fused_mha_runner.h"
+#include "xla/status.h"
 #include "xla/statusor.h"
-#include "xla/stream_executor/blas.h"
+#include "xla/stream_executor/dnn.h"
+#include "xla/stream_executor/stream_executor.h"
 #include "xla/types.h"
 #include "xla/xla_data.pb.h"
 
 namespace xla {
 namespace gpu {
 
-Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
-               se::DeviceMemoryBase rhs_buffer, se::DeviceMemoryBase add_buffer,
-               se::DeviceMemoryBase output_buffer,
-               se::DeviceMemoryBase bias_buffer, se::Stream* stream,
-               se::gpu::BlasLt::Epilogue epilogue,
-               se::ScratchAllocator* scratch_allocator = nullptr);
+Status RunXetlaGpuFMHA(
+    const GpufMHAConfig& fmha_config, se::DeviceMemoryBase lhs_bmm1_buffer,
+    se::DeviceMemoryBase rhs_bmm1_buffer, se::DeviceMemoryBase rhs_bmm2_buffer,
+    se::DeviceMemoryBase output_buffer, se::DeviceMemoryBase scratch_buffer,
+    std::optional<se::DeviceMemoryBase> mask_buffer,
+    std::optional<se::DeviceMemoryBase> bias_buffer,
+    std::optional<se::DeviceMemoryBase> activation_buffer, se::Stream* stream);
 
 }  // namespace gpu
 }  // namespace xla
-
-#endif  // XLA_SERVICE_GPU_ONEDNN_MATMUL_UTILS_H_
+#endif  // XLA_SERVICE_GPU_XETLA_GPU_FUSED_MHA_RUNNER_H_

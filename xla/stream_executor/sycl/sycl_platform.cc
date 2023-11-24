@@ -17,20 +17,18 @@ limitations under the License.
 
 #include "xla/stream_executor/sycl/sycl_platform.h"
 
-#include <algorithm>
-#include <string>
-#include <utility>
 
 #include "absl/base/call_once.h"
 #include "absl/base/const_init.h"
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+// #include "xla/stream_executor/sycl/sycl_driver.h"
+#include "xla/stream_executor/sycl/sycl_platform_id.h"
+#include "xla/stream_executor/gpu/gpu_executor.h"
+#include "xla/stream_executor/platform/initialize.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/status.h"
-#include "xla/stream_executor/platform/initialize.h"
-#include "xla/stream_executor/sycl/sycl_executor.h"
-#include "xla/stream_executor/sycl/sycl_platform_id.h"
 
 namespace stream_executor {
 namespace gpu {
@@ -93,7 +91,12 @@ tsl::StatusOr<StreamExecutor*> SyclPlatform::FirstExecutorForBus(
 Platform::Id SyclPlatform::id() const { return sycl::kSyclPlatformId; }
 
 int SyclPlatform::VisibleDeviceCount() const {
-  return GpuDriver::GetDeviceCount();
+  // Initialized in a thread-safe manner the first time this is run.
+  static const int num_devices = [] {
+    if (!GpuDriver::Init().ok()) return -1;
+    return GpuDriver::GetDeviceCount();
+  }();
+  return num_devices;
 }
 
 const std::string& SyclPlatform::Name() const { return name_; }
@@ -106,16 +109,6 @@ SyclPlatform::DescriptionForDevice(int ordinal) const {
 tsl::StatusOr<StreamExecutor*> SyclPlatform::ExecutorForDevice(int ordinal) {
   StreamExecutorConfig config;
   config.ordinal = ordinal;
-  config.plugin_config = PluginConfig();
-  config.device_options = DeviceOptions::Default();
-  return GetExecutor(config);
-}
-
-tsl::StatusOr<StreamExecutor*> SyclPlatform::ExecutorForDeviceWithPluginConfig(
-    int device_ordinal, const PluginConfig& plugin_config) {
-  StreamExecutorConfig config;
-  config.ordinal = device_ordinal;
-  config.plugin_config = plugin_config;
   config.device_options = DeviceOptions::Default();
   return GetExecutor(config);
 }
@@ -135,27 +128,17 @@ tsl::StatusOr<StreamExecutor*> SyclPlatform::GetExecutor(
 tsl::StatusOr<std::unique_ptr<StreamExecutor>>
 SyclPlatform::GetUncachedExecutor(const StreamExecutorConfig& config) {
   auto executor = std::make_unique<StreamExecutor>(
-      this, std::make_unique<GpuExecutor>(config.plugin_config),
-      config.ordinal);
+      this, std::make_unique<GpuExecutor>(), config.ordinal);
   auto init_status = executor->Init(config.device_options);
   if (!init_status.ok()) {
     return tsl::Status(
         absl::StatusCode::kInternal,
         absl::StrFormat(
-            "failed initializing StreamExecutor for SYCL device ordinal %d: %s",
+            "failed initializing StreamExecutor for CUDA device ordinal %d: %s",
             config.ordinal, init_status.ToString()));
   }
 
   return std::move(executor);
-}
-
-void SyclPlatform::RegisterTraceListener(
-    std::unique_ptr<TraceListener> listener) {
-  LOG(FATAL) << "not yet implemented: register SYCL trace listener";
-}
-
-void SyclPlatform::UnregisterTraceListener(TraceListener* listener) {
-  LOG(FATAL) << "not yet implemented: unregister SYCL trace listener";
 }
 
 }  // namespace gpu

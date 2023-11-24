@@ -37,7 +37,7 @@ Verified Hardware Platforms:
 * Ubuntu 22.04, Red Hat 8.6/8.8/9.2 (64-bit), SUSE Linux Enterprise Server(SLES) 15 SP4
   * Intel® Data Center GPU Max Series
 * Intel® oneAPI Base Toolkit 2023.2
-* Jax/Jaxlib 0.4.13
+* Jax/Jaxlib 0.4.20
 * Python 3.9-3.11
 * pip 19.0 or later (requires manylinux2014 support)
 
@@ -69,7 +69,7 @@ source /opt/intel/oneapi/tbb/2021.9.0/env/vars.sh
 ### Install Jax and Jaxlib
 
 ```bash
-pip install jax==0.4.13 jaxlib==0.4.13
+pip install jax==0.4.20 jaxlib==0.4.20
 ```
 
 ## 3. Install

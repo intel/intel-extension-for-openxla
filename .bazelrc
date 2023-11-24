@@ -24,6 +24,7 @@ build:gpu --define=using_sycl=true
 build:gpu --define=device=gpu
 build:gpu --config=onednn_v3
 build:gpu --repo_env TF_NEED_SYCL=1
+build:gpu --define=tensorflow_mkldnn_contraction_kernel=0
 
 # This config build with oneDNN V3 API, which is enabled by default
 build:onednn_v3 --copt=-DITEX_ONEDNN_3_0 --define=onednn_version=3

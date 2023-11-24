@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_SERVICE_GPU_GPU_CONV_RUNNER_H_
-#define XLA_SERVICE_GPU_GPU_CONV_RUNNER_H_
+#ifndef XLA_SERVICE_GPU_ONEDNN_GPU_CONV_RUNNER_H_
+#define XLA_SERVICE_GPU_ONEDNN_GPU_CONV_RUNNER_H_
 
 #include <optional>
 
@@ -22,6 +22,7 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/cublas_cudnn.h"
+#include "xla/service/gpu/gpu_conv_runner.h"
 #include "xla/service/gpu/thunk.h"
 #include "xla/service/onednn_util.h"
 #include "xla/status.h"
@@ -57,21 +58,14 @@ typedef struct OneDnnConvPrimitive {
   bool has_reorder = false;
 } OneDnnConvPrimitive;
 
-struct GpuConvDescriptor {
-  CudnnConvKind kind;
-  CudnnConvBackendConfig backend_config;
-  Shape operand0_shape;
-  Shape operand1_shape;
-  Shape result_shape;
-  size_t scratch_size;
-  Window window;
-  ConvolutionDimensionNumbers dnums;
-  // mlir::lmhlo_gpu::Activation activation;
-  int64_t feature_group_count;
-};
+StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
+    se::Stream*, const GpuConvDescriptor& descriptor,
+    const std::vector<se::DeviceMemoryBase>& operand_se_buffers,
+    const se::DeviceMemoryBase& result_buffer,
+    const Thunk::ExecuteParams& params,
+    se::ScratchAllocator* scratch_allocator);
 
 Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
-
                   const GpuConvDescriptor& conv_descriptor,
                   absl::Span<const se::DeviceMemoryBase> operand_buffers,
                   se::DeviceMemoryBase result_buffer,
@@ -80,4 +74,4 @@ Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_GPU_CONV_RUNNER_H_
+#endif  // XLA_SERVICE_GPU_ONEDNN_GPU_CONV_RUNNER_H_

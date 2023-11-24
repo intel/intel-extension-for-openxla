@@ -13,7 +13,7 @@ pip uninstall tensorflow -y
 pip install tensorflow==2.12.0
 
 conda install libstdcxx-ng==12.2.0 -c conda-forge -y
-pip install jax==0.4.13 jaxlib==0.4.13
+pip install jax==0.4.20 jaxlib==0.4.20
 
 pip uninstall mdit-py-plugins jupytext -y
 pip install t5

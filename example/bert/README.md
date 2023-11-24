@@ -10,7 +10,7 @@ Please got the [main page](https://github.com/intel/intel-extension-for-openxla/
 ### 2. Install dependency
 Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```bash
-pip install jax==0.4.13 jaxlib==0.4.13 flax==0.7.0
+pip install jax==0.4.20 jaxlib==0.4.20 flax==0.7.0
 cd <WORKSPACE>/example/bert
 pip install -r requirements.txt
 ```

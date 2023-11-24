@@ -22,21 +22,31 @@ limitations under the License.
 #include <set>
 #include <utility>
 
+#include <cstdint>
+#include <cstring>
+#include <map>
+#include <set>
+#include <string>
+#include <utility>
+
 #include "absl/base/casts.h"
+#include "absl/base/const_init.h"
+#include "absl/base/optimization.h"
 #include "absl/container/inlined_vector.h"
+#include "absl/debugging/leak_check.h"
+#include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/synchronization/notification.h"
+#include "xla/stream_executor/gpu/gpu_driver.h"
+#include "xla/stream_executor/platform/port.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
-#include "tsl/platform/numbers.h"
+#include "tsl/platform/logging.h"
 #include "tsl/platform/stacktrace.h"
-#include "tsl/platform/static_threadlocal.h"
+#include "tsl/platform/status.h"
 #include "tsl/platform/threadpool.h"
-#include "xla/stream_executor/gpu/gpu_driver.h"
-#include "xla/stream_executor/platform/logging.h"
-#include "xla/stream_executor/platform/port.h"
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 
 #define RETURN_IF_SYCL_RES_ERROR(expr, ...)                            \
@@ -67,6 +77,21 @@ class GpuContext {
   sycl::device* device_;
   sycl::context* context_;
 };
+
+namespace {
+
+static tsl::Status InternalInit() {
+  return ::tsl::OkStatus();
+}
+
+}  // namespace
+/* static */ tsl::Status GpuDriver::Init() {
+  // Cached return value from calling InternalInit()
+  static tsl::Status* init_retval = [] {
+    return new tsl::Status(InternalInit());
+  }();
+  return *init_retval;
+}
 
 /* static */ tsl::Status GpuDriver::GetDevice(int device_ordinal,
                                               sycl::device** device) {
@@ -563,6 +588,14 @@ class GpuContext {
   }
 
   return device_count;
+}
+
+/* static */ tsl::Status GpuDriver::GetComputeCapability(int* cc_major,
+                                                         int* cc_minor,
+                                                         sycl::device* device) {
+  *cc_major = 100;
+  *cc_minor = 100;
+  return ::tsl::OkStatus();
 }
 
 /* static */ tsl::StatusOr<int> GpuDriver::GetMultiprocessorCount(

@@ -1,3 +1,19 @@
+diff --git a/third_party/tsl/third_party/gpus/cuda_configure.bzl b/third_party/tsl/third_party/gpus/cuda_configure.bzl
+index 7e9c443cd..88bfb2137 100644
+--- a/third_party/tsl/third_party/gpus/cuda_configure.bzl
++++ b/third_party/tsl/third_party/gpus/cuda_configure.bzl
+@@ -25,9 +25,9 @@
+   * `PYTHON_BIN_PATH`: The python binary path
+ """
+ 
+-load("//third_party/clang_toolchain:download_clang.bzl", "download_clang")
++load("@xla//third_party/tsl/third_party/clang_toolchain:download_clang.bzl", "download_clang")
+ load(
+-    "//third_party/remote_config:common.bzl",
++    "@xla//third_party/tsl/third_party/remote_config:common.bzl",
+     "config_repo_label",
+     "err_out",
+     "execute",
 diff --git a/third_party/tsl/third_party/grpc/upb_platform_fix.patch b/third_party/tsl/third_party/grpc/upb_platform_fix.patch
 index 6edd66067..022c9d155 100644
 --- a/third_party/tsl/third_party/grpc/upb_platform_fix.patch
@@ -16,25 +32,10 @@ index 6edd66067..022c9d155 100644
 +     # copybara:strip_end
 + ]
 diff --git a/third_party/tsl/third_party/llvm/build.patch b/third_party/tsl/third_party/llvm/build.patch
-index bbf8f587a..ab0df933f 100644
+index bbf8f587a..c2a3c6bd3 100644
 --- a/third_party/tsl/third_party/llvm/build.patch
 +++ b/third_party/tsl/third_party/llvm/build.patch
-@@ -2,6 +2,14 @@ diff --git a/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel b/utils/bazel/llv
- index 2b88729d748b..e12d979b4908 100644
- --- a/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel
- +++ b/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel
-+@@ -25,6 +25,7 @@ exports_files(["LICENSE.TXT"])
-+ # widely available feature to enable unlimited stack frame instead of using
-+ # this `Make` variable.
-+ llvm_copts = [
-++    "-fvisibility=hidden",
-+     "$(STACK_FRAME_UNLIMITED)",
-+ ]
-+
- @@ -207,13 +207,15 @@ cc_library(
-          "lib/Support/BLAKE3/llvm_blake3_prefix.h",
-      ] + select({
-@@ -44,3 +52,24 @@ index 2b88729d748b..e12d979b4908 100644
+@@ -44,3 +44,24 @@ index 2b88729d748b..e12d979b4908 100644
           "//conditions:default": [
               "BLAKE3_NO_AVX2",
               "BLAKE3_NO_AVX512",
@@ -61,15 +62,15 @@ index bbf8f587a..ab0df933f 100644
 +   if (failed(reader.parseVarInt(version)))
 diff --git a/third_party/tsl/third_party/llvm/spirv.patch b/third_party/tsl/third_party/llvm/spirv.patch
 new file mode 100644
-index 000000000..5b8db357e
+index 000000000..8643e9181
 --- /dev/null
 +++ b/third_party/tsl/third_party/llvm/spirv.patch
 @@ -0,0 +1,76 @@
 +diff --git a/llvm/lib/Passes/PassBuilderPipelines.cpp b/llvm/lib/Passes/PassBuilderPipelines.cpp
-+index 34d3b9d7467e..bd26295c6527 100644
++index 78e0e6353056..4f9f51164bfe 100644
 +--- a/llvm/lib/Passes/PassBuilderPipelines.cpp
 ++++ b/llvm/lib/Passes/PassBuilderPipelines.cpp
-+@@ -180,6 +180,10 @@ static cl::opt<bool> EnableGlobalAnalyses(
++@@ -183,6 +183,10 @@ static cl::opt<bool> EnableGlobalAnalyses(
 +     "enable-global-analyses", cl::init(true), cl::Hidden,
 +     cl::desc("Enable inter-procedural analyses"));
 + 
@@ -80,7 +81,7 @@ index 000000000..5b8db357e
 + static cl::opt<bool>
 +     RunPartialInlining("enable-partial-inlining", cl::init(false), cl::Hidden,
 +                        cl::desc("Run Partial inlinining pass"));
-+@@ -396,6 +400,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
++@@ -406,6 +410,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
 +   // Form canonically associated expression trees, and simplify the trees using
 +   // basic mathematical properties. For example, this will form (nearly)
 +   // minimal multiplication trees.
@@ -88,7 +89,7 @@ index 000000000..5b8db357e
 +   FPM.addPass(ReassociatePass());
 + 
 +   // Add the primary loop simplification pipeline.
-+@@ -467,7 +472,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
++@@ -477,7 +482,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
 +   FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM2),
 +                                               /*UseMemorySSA=*/false,
 +                                               /*UseBlockFrequencyInfo=*/false));
@@ -97,15 +98,15 @@ index 000000000..5b8db357e
 +   // Delete small array after loop unroll.
 +   FPM.addPass(SROAPass(SROAOptions::ModifyCFG));
 + 
-+@@ -573,6 +578,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++@@ -580,6 +585,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
 +   // Form canonically associated expression trees, and simplify the trees using
 +   // basic mathematical properties. For example, this will form (nearly)
 +   // minimal multiplication trees.
 ++  if (!SYCLOptimizationMode) {
 +   FPM.addPass(ReassociatePass());
 + 
-+   // Add the primary loop simplification pipeline.
-+@@ -647,7 +653,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++   if (EnableConstraintElimination)
++@@ -657,7 +663,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
 +   FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM2),
 +                                               /*UseMemorySSA=*/false,
 +                                               /*UseBlockFrequencyInfo=*/false));
@@ -114,7 +115,7 @@ index 000000000..5b8db357e
 +   // Delete small array after loop unroll.
 +   FPM.addPass(SROAPass(SROAOptions::ModifyCFG));
 + 
-+@@ -705,6 +711,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
++@@ -715,6 +721,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
 + 
 +   invokeScalarOptimizerLateEPCallbacks(FPM, Level);
 + 
@@ -124,7 +125,7 @@ index 000000000..5b8db357e
 +   FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions()
 +                                   .convertSwitchRangeToICmp(true)
 +                                   .hoistCommonInsts(true)
-+@@ -1338,6 +1347,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
++@@ -1385,6 +1394,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
 + 
 +   invokeVectorizerStartEPCallbacks(OptimizePM, Level);
 + 
@@ -132,7 +133,7 @@ index 000000000..5b8db357e
 +   LoopPassManager LPM;
 +   // First rotate loops that may have been un-rotated by prior passes.
 +   // Disable header duplication at -Oz.
-+@@ -1361,7 +1371,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
++@@ -1408,7 +1418,7 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
 +   OptimizePM.addPass(InjectTLIMappings());
 + 
 +   addVectorPasses(Level, OptimizePM, /* IsFullLTO */ false);
@@ -142,7 +143,7 @@ index 000000000..5b8db357e
 +   // canonicalization pass that enables other optimizations. As a result,
 +   // LoopSink pass needs to be a very late IR pass to avoid undoing LICM
 diff --git a/third_party/tsl/third_party/llvm/workspace.bzl b/third_party/tsl/third_party/llvm/workspace.bzl
-index 0d5a44fe7..d1468201f 100644
+index e3f1876db..b9debef80 100644
 --- a/third_party/tsl/third_party/llvm/workspace.bzl
 +++ b/third_party/tsl/third_party/llvm/workspace.bzl
 @@ -17,6 +17,7 @@ def repo(name):
@@ -153,80 +154,8 @@ index 0d5a44fe7..d1468201f 100644
              "//third_party/llvm:generated.patch",  # Autogenerated, don't remove.
              "//third_party/llvm:build.patch",
              "//third_party/llvm:mathextras.patch",
-diff --git a/third_party/tsl/tsl/framework/contraction/BUILD b/third_party/tsl/tsl/framework/contraction/BUILD
-index 980ca390d..2374e6d10 100644
---- a/third_party/tsl/tsl/framework/contraction/BUILD
-+++ b/third_party/tsl/tsl/framework/contraction/BUILD
-@@ -104,7 +104,6 @@ cc_library(
-         "//tsl:macos_arm64": [],
-         "//conditions:default": [
-             "TENSORFLOW_USE_CUSTOM_CONTRACTION_KERNEL",
--            "TENSORFLOW_USE_MKLDNN_CONTRACTION_KERNEL",
-         ],
-     }),
-     deps = [
-@@ -121,7 +120,7 @@ cc_library(
-         "//tsl:linux_ppc64le": [],
-         "//tsl:linux_s390x": [],
-         "//tsl:macos_arm64": [],
--        "//conditions:default": ["@mkl_dnn_v1//:mkl_dnn"],
-+        "//conditions:default": [],
-     }),
- )
- 
-diff --git a/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td b/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td
-index 72fd56b2a..87451f0c5 100644
---- a/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td
-+++ b/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.td
-@@ -306,6 +306,16 @@ def LHLOGPU_AllToAllDoneOp: LHLOGPU_Op<"all_to_all_done"> {
-   let arguments = (ins MHLO_Token:$token);
- }
- 
-+def LHLOGPU_fusedQKVOp : LHLOGPU_Op<"fQKV"> {
-+  let arguments = (ins
-+    Arg<LHLO_Buffer, "", [MemRead]>:$input,
-+    Arg<LHLO_Buffer, "", [MemRead]>:$weight,
-+    Arg<LHLO_Buffer, "", [MemWrite]>:$bmm_output1,
-+    Arg<LHLO_Buffer, "", [MemWrite]>:$bmm_output2,
-+    Arg<LHLO_Buffer, "", [MemWrite]>:$bmm_output3,
-+    MHLO_DotDimensionNumbers:$dot_dimension_numbers);
-+}
-+
- def LHLOGPU_fusedMHAOp : LHLOGPU_Op<"fMHA"> {
-   let arguments = (ins
-     Arg<LHLO_Buffer, "", [MemRead]>:$lhs_bmm1,
-@@ -317,6 +327,7 @@ def LHLOGPU_fusedMHAOp : LHLOGPU_Op<"fMHA"> {
-     MHLO_DotDimensionNumbers:$bmm2_dot_dimension_numbers,
-     I64ArrayAttr:$intermediate_tensor_dimensions,
-     I64ArrayAttr:$intermediate_tensor_layout,
-+    F64Attr:$fmha_scale,
-     OptionalAttr<F64Attr>:$dropout_rate,
-     FusedMhaDagSignatureAttr:$fused_mha_dag,
-     FusedMHAAlgorithmConfigAttr:$algorithm_config,
-diff --git a/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops_enums.td b/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops_enums.td
-index 2a527ac55..94e0d78be 100644
---- a/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops_enums.td
-+++ b/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops_enums.td
-@@ -136,6 +136,7 @@ def FusedMhaDagSoftmaxDropout : I32EnumAttrCase<"SoftmaxDropout", 5>;
- def FusedMhaDagSoftmax : I32EnumAttrCase<"Softmax", 6>;
- def FusedMhaDagScaleBiasSoftmaxDropout : I32EnumAttrCase<"ScaleBiasSoftmaxDropout", 7>;
- def FusedMhaDagScaleBiasSoftmax : I32EnumAttrCase<"ScaleBiasSoftmax", 8>;
-+def FusedMhaDagScaleSoftmax : I32EnumAttrCase<"ScaleSoftmax", 9>;
- 
- def FusedMhaDagSignature: I32EnumAttr<"FusedMhaDagSignature",
-     "DAG configuration for Fused Multi-Headed Attention",
-@@ -147,7 +148,8 @@ def FusedMhaDagSignature: I32EnumAttr<"FusedMhaDagSignature",
-     FusedMhaDagSoftmaxDropout,
-     FusedMhaDagSoftmax,
-     FusedMhaDagScaleBiasSoftmaxDropout,
--    FusedMhaDagScaleBiasSoftmax]> {
-+    FusedMhaDagScaleBiasSoftmax,
-+    FusedMhaDagScaleSoftmax]> {
-   let genSpecializedAttr = 0;
-   let cppNamespace = "::mlir::lmhlo_gpu";
- }
 diff --git a/xla/pjrt/gpu/gpu_helpers.cc b/xla/pjrt/gpu/gpu_helpers.cc
-index b7064ac25..dcb1efbd8 100644
+index 449b43cb6..423a153ad 100644
 --- a/xla/pjrt/gpu/gpu_helpers.cc
 +++ b/xla/pjrt/gpu/gpu_helpers.cc
 @@ -37,11 +37,12 @@ namespace xla {
@@ -264,8 +193,20 @@ index b7064ac25..dcb1efbd8 100644
  }
  
  }  // namespace xla
+diff --git a/xla/service/BUILD b/xla/service/BUILD
+index bc4000eea..d8cae9dc8 100644
+--- a/xla/service/BUILD
++++ b/xla/service/BUILD
+@@ -3855,6 +3855,7 @@ cc_library(
+         "//xla/stream_executor/cuda:cuda_platform_id",
+         "//xla/stream_executor/host:host_platform_id",
+         "//xla/stream_executor/rocm:rocm_platform_id",
++        "@intel_extension_for_openxla//xla/stream_executor/sycl:sycl_platform_id",
+         "@com_google_absl//absl/container:flat_hash_map",
+         "@com_google_absl//absl/memory",
+         "@com_google_absl//absl/strings",
 diff --git a/xla/service/algebraic_simplifier.h b/xla/service/algebraic_simplifier.h
-index 32be0a59d..bde8901d2 100644
+index 232074497..8b304b6e2 100644
 --- a/xla/service/algebraic_simplifier.h
 +++ b/xla/service/algebraic_simplifier.h
 @@ -27,6 +27,7 @@ limitations under the License.
@@ -276,7 +217,7 @@ index 32be0a59d..bde8901d2 100644
  #include "xla/hlo/ir/dfs_hlo_visitor_with_default.h"
  #include "xla/hlo/ir/hlo_instruction.h"
  #include "xla/hlo/ir/hlo_module.h"
-@@ -400,7 +401,9 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
+@@ -432,7 +433,9 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
    virtual bool IsValidLayout(const Shape& shape) { return true; }
    // Allow backend targets to determine whether a layout is inefficient.
    virtual bool ShouldStrengthReduceDotToReduce(const HloInstruction* hlo) {
@@ -287,11 +228,32 @@ index 32be0a59d..bde8901d2 100644
    }
  
   protected:
+diff --git a/xla/service/computation_placer.cc b/xla/service/computation_placer.cc
+index 9410c30d6..fe4c15705 100644
+--- a/xla/service/computation_placer.cc
++++ b/xla/service/computation_placer.cc
+@@ -31,6 +31,7 @@ limitations under the License.
+ #include "xla/stream_executor/cuda/cuda_platform_id.h"
+ #include "xla/stream_executor/host/host_platform_id.h"
+ #include "xla/stream_executor/rocm/rocm_platform_id.h"
++#include "xla/stream_executor/sycl/sycl_platform_id.h"
+ #include "xla/types.h"
+ #include "xla/util.h"
+ #include "tsl/platform/errors.h"
+@@ -216,6 +217,8 @@ static bool InitModule() {
+       stream_executor::cuda::kCudaPlatformId, &CreateComputationPlacer);
+   xla::ComputationPlacer::RegisterComputationPlacer(
+       stream_executor::rocm::kROCmPlatformId, &CreateComputationPlacer);
++  xla::ComputationPlacer::RegisterComputationPlacer(
++      stream_executor::sycl::kSyclPlatformId, &CreateComputationPlacer);
+   return true;
+ }
+ static bool module_initialized = InitModule();
 diff --git a/xla/service/dump.cc b/xla/service/dump.cc
-index ad67a9e0f..dd6687d38 100644
+index a490f9af9..659e5659e 100644
 --- a/xla/service/dump.cc
 +++ b/xla/service/dump.cc
-@@ -615,6 +615,8 @@ void DumpToFileInDirOrStdout(const HloModule& module, string_view file_prefix,
+@@ -622,6 +622,8 @@ void DumpToFileInDirOrStdout(const HloModule& module, string_view file_prefix,
    if (opts.dumping_to_stdout()) return op->dump();
  
    mlir::OpPrintingFlags print_flags = mlir::OpPrintingFlags().useLocalScope();
@@ -300,103 +262,1029 @@ index ad67a9e0f..dd6687d38 100644
    // Enable debug info so that it is easier to see the corresponding HLO node.
    if (file_prefix == "lmhlo") {
      print_flags.enableDebugInfo(/*enable=*/true,
-diff --git a/xla/service/gpu/cublas_cudnn.cc b/xla/service/gpu/cublas_cudnn.cc
-index 240e69ac4..65ed0bd9b 100644
---- a/xla/service/gpu/cublas_cudnn.cc
-+++ b/xla/service/gpu/cublas_cudnn.cc
-@@ -39,6 +39,7 @@ bool IsCublasLtMatmulF8(const HloInstruction& hlo) {
-          hlo.custom_call_target() == kCublasLtMatmulF8CallTarget;
+diff --git a/xla/service/gpu/BUILD b/xla/service/gpu/BUILD
+index af77ce507..992ab3000 100644
+--- a/xla/service/gpu/BUILD
++++ b/xla/service/gpu/BUILD
+@@ -34,6 +34,7 @@ load(
+     "@tsl//tsl/platform/default:cuda_build_defs.bzl",
+     "if_cuda_is_configured",
+ )
++load("@local_config_sycl//sycl:build_defs.bzl", "if_sycl_is_configured")
+ 
+ package(
+     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
+@@ -939,7 +940,7 @@ cc_library(
+         ":kernel_arguments",
+         ":launch_dimensions",
+         ":matmul_utils",
+-        ":nccl_collective_thunks",
++        # ":nccl_collective_thunks",
+         ":non_atomically_upgradeable_rw_lock",
+         ":stream_executor_util",
+         ":thunk",
+@@ -955,11 +956,11 @@ cc_library(
+         "//xla:util",
+         "//xla:xla_data_proto_cc",
+         "//xla/hlo/ir:hlo",
+-        "//xla/mlir/runtime/ir:rt",
+-        "//xla/mlir/runtime/transforms:compilation_pipeline_gpu",
+-        "//xla/mlir/runtime/transforms:type_converter",
++        # "//xla/mlir/runtime/ir:rt",
++        # "//xla/mlir/runtime/transforms:compilation_pipeline_gpu",
++        # "//xla/mlir/runtime/transforms:type_converter",
+         "//xla/mlir_hlo:lhlo_gpu",
+-        "//xla/runtime:executable",
++        # "//xla/runtime:executable",
+         "//xla/service:buffer_assignment",
+         "//xla/service:custom_call_status_internal",
+         "//xla/service:executable",
+@@ -969,8 +970,8 @@ cc_library(
+         "//xla/service:shaped_buffer",
+         "//xla/service:stream_pool",
+         "//xla/service:xla_debug_info_manager",
+-        "//xla/service/gpu/runtime:executable",
+-        "//xla/service/gpu/runtime:support",
++        # "//xla/service/gpu/runtime:executable",
++        # "//xla/service/gpu/runtime:support",
+         "//xla/service/gpu/runtime3:custom_call_thunk",
+         "//xla/service/gpu/runtime3:fft_thunk",
+         "//xla/stream_executor",
+@@ -1009,6 +1010,8 @@ cc_library(
+         "@tsl//tsl/platform:status",
+         "@tsl//tsl/profiler/lib:scoped_annotation",
+         "@tsl//tsl/profiler/lib:traceme",
++        "@intel_extension_for_openxla//xla/service/gpu:xetla_gpu_fused_mha_runner",
++        "@intel_extension_for_openxla//xla/service/gpu:onednn_gpu_conv_runner",
+     ] + if_gpu_is_configured([
+         ":precompiled_kernels",
+         "//xla/service/gpu/runtime3:cholesky_thunk",
+@@ -1352,6 +1355,7 @@ cc_library(
+         "//xla/service:buffer_assignment",
+         "//xla/stream_executor",
+         "//xla/stream_executor:device_memory",
++        "@intel_extension_for_openxla//xla/service/gpu:onednn_matmul_utils",
+         "@tsl//tsl/platform:logging",
+     ],
+ )
+@@ -1364,6 +1368,7 @@ cc_library(
+         "TENSORFLOW_USE_ROCM=1",
+     ]),
+     deps = if_gpu_is_configured([
++        "@intel_extension_for_openxla//xla/service/gpu:onednn_matmul_utils",
+         ":matmul_utils",
+         ":thunk",
+         "//xla/service:buffer_assignment",
+@@ -1886,6 +1891,8 @@ cc_library(
+         "//xla/stream_executor/rocm:rocblas_wrapper",
+         "//xla/stream_executor/rocm:rocsolver_wrapper",
+         "//xla/stream_executor/rocm:hipsolver_wrapper",
++    ]) + if_sycl_is_configured([
++        "@local_config_sycl//sycl:sycl_headers",
+     ]),
+ )
+ 
+@@ -2407,6 +2414,7 @@ cc_library(
+         "//xla/stream_executor/cuda:cuda_platform_id",
+         "//xla/stream_executor/host:host_platform_id",
+         "//xla/stream_executor/rocm:rocm_platform_id",
++        "@intel_extension_for_openxla//xla/stream_executor/sycl:sycl_platform_id",
+         "@com_google_absl//absl/cleanup",
+         "@llvm-project//llvm:Core",
+         "@tsl//tsl/platform:errors",
+diff --git a/xla/service/gpu/buffer_sharing.cc b/xla/service/gpu/buffer_sharing.cc
+index 64421596d..8908ba761 100644
+--- a/xla/service/gpu/buffer_sharing.cc
++++ b/xla/service/gpu/buffer_sharing.cc
+@@ -198,6 +198,14 @@ std::optional<bool> CanShareBufferHint(const HloInstruction* user,
+             std::move(user->backend_config<GemmBackendConfig>()).value();
+         return (config.beta() != 0.) && user->operand(2) == operand;
+       }
++      // SYCL
++      if (user->custom_call_target() ==
++          kCudnnConvBiasActivationForwardCallTarget) {
++        CudnnConvBackendConfig config =
++            std::move(user->backend_config<CudnnConvBackendConfig>()).value();
++        return (config.side_input_scale() != 0.) &&
++               (user->operand(user->operand_count() - 1) == operand);
++      }
+       // The operand of cholesky can be shared with the first output.
+       if (user->custom_call_target() == kCusolverCholeskyCallTarget) {
+         return user_index.size() == 1 && user_index[0] == 0;
+diff --git a/xla/service/gpu/convolution_thunk.cc b/xla/service/gpu/convolution_thunk.cc
+index 17096e890..4ddf43c02 100644
+--- a/xla/service/gpu/convolution_thunk.cc
++++ b/xla/service/gpu/convolution_thunk.cc
+@@ -28,11 +28,20 @@ limitations under the License.
+ #include "xla/util.h"
+ #include "tsl/platform/logging.h"
+ 
++#if GOOGLE_SYCL
++#include "xla/service/gpu/onednn_gpu_conv_runner.h"
++#include "xla/stream_executor/scratch_allocator.h"
++#endif
++
+ namespace xla {
+ namespace gpu {
+ 
+ ConvolutionThunk::ConvolutionThunk(
++#if GOOGLE_SYCL
++    ThunkInfo thunk_info, GpuConvDescriptor descriptor,
++#else
+     ThunkInfo thunk_info, GpuConvConfig config,
++#endif
+     std::vector<BufferAllocation::Slice> operand_slices,
+     std::vector<BufferAllocation::Slice> result_slices,
+     BufferAllocation::Slice scratch_slice)
+@@ -40,8 +49,13 @@ ConvolutionThunk::ConvolutionThunk(
+       operand_buffers_(std::move(operand_slices)),
+       result_buffers_(std::move(result_slices)),
+       scratch_buffer_(scratch_slice),
++#if GOOGLE_SYCL
++      descriptor_(std::move(descriptor)) {}
++#else
+       config_(std::move(config)) {}
++#endif
+ 
++#if !GOOGLE_SYCL
+ GenericConvRunner& ConvolutionThunk::GetOrCreateRunner(
+     const stream_executor::Stream* stream) {
+   absl::MutexLock lock(&mu_);
+@@ -53,6 +67,7 @@ GenericConvRunner& ConvolutionThunk::GetOrCreateRunner(
+   }
+   return *it->second;
+ }
++#endif
+ 
+ Status ConvolutionThunk::ExecuteOnStream(const ExecuteParams& params) {
+   const auto& buffer_allocations = *params.buffer_allocations;
+@@ -71,13 +86,26 @@ Status ConvolutionThunk::ExecuteOnStream(const ExecuteParams& params) {
+   se::DeviceMemoryBase scratch =
+       buffer_allocations.GetDeviceAddress(scratch_buffer_);
+ 
++#if GOOGLE_SYCL
++  auto stream = params.stream;
++  se::OwningScratchAllocator<2> scratch_allocator(
++      buffer_allocations.device_ordinal(),
++      buffer_allocations.memory_allocator());
++  TF_ASSIGN_OR_RETURN(auto conv_primitive,
++                      GetOrCreateOneDnnConvPrimitive(stream, descriptor_, operand_se_buffers,
++                                                     result_se_buffers[0], params, &scratch_allocator));
++
++  TF_RETURN_IF_ERROR(RunGpuConv(conv_primitive, descriptor_,
++                                absl::MakeSpan(operand_se_buffers),
++                                result_se_buffers[0], params));
++#else
+   RunConvOptions opts;
+   opts.runner_cache = &GetOrCreateRunner(params.stream);
+ 
+   TF_RETURN_IF_ERROR(RunGpuConv(config_, absl::MakeSpan(operand_se_buffers),
+                                 absl::MakeSpan(result_se_buffers), scratch,
+                                 params.stream, opts));
+-
++#endif
+   // Note: Convolution has a tuple buffer as an output, but we don't need to
+   // populate it as no one should be reading from the tuple directly.
+   if (!params.stream->ok()) {
+diff --git a/xla/service/gpu/convolution_thunk.h b/xla/service/gpu/convolution_thunk.h
+index d7f731302..063638587 100644
+--- a/xla/service/gpu/convolution_thunk.h
++++ b/xla/service/gpu/convolution_thunk.h
+@@ -44,7 +44,12 @@ class ConvolutionThunk : public Thunk {
+   // Constructs a thunk for launching a DNN convolution.
+   //
+   // operand_slices should be in the same order as cudnn_call->operands().
+-  ConvolutionThunk(ThunkInfo thunk_info, GpuConvConfig config,
++  ConvolutionThunk(ThunkInfo thunk_info,
++#if GOOGLE_SYCL
++                   GpuConvDescriptor descriptor,
++#else
++                   GpuConvConfig config,
++#endif
+                    std::vector<BufferAllocation::Slice> operand_slices,
+                    std::vector<BufferAllocation::Slice> result_slices,
+                    BufferAllocation::Slice scratch_slice);
+@@ -61,7 +66,11 @@ class ConvolutionThunk : public Thunk {
+   GenericConvRunner& GetOrCreateRunner(const stream_executor::Stream* stream);
+ 
+   // Convolution config
++#if GOOGLE_SYCL
++  const GpuConvDescriptor descriptor_;
++#else
+   const GpuConvConfig config_;
++#endif
+   absl::Mutex mu_;
+   absl::flat_hash_map<const stream_executor::Stream*,
+                       std::unique_ptr<GenericConvRunner>>
+diff --git a/xla/service/gpu/cudnn_fused_conv_rewriter.cc b/xla/service/gpu/cudnn_fused_conv_rewriter.cc
+index 2cd279b68..5b803d065 100644
+--- a/xla/service/gpu/cudnn_fused_conv_rewriter.cc
++++ b/xla/service/gpu/cudnn_fused_conv_rewriter.cc
+@@ -824,6 +824,13 @@ StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
+         conv->CloneWithNewOperands(conv->shape(), new_operands));
+     comp->parent()->SetAndUniquifyInstrName(new_conv, conv->name());
+     TF_RETURN_IF_ERROR(new_conv->set_backend_config(config));
++#if GOOGLE_SYCL
++    if (can_accept_side_input) {
++      xla::Cast<HloCustomCallInstruction>(new_conv)
++          ->set_output_to_operand_aliasing(
++              {{{}, {new_operands.size() - 1, {}}}});
++    }
++#endif
+     TF_ASSIGN_OR_RETURN(HloInstruction * new_instr,
+                         MakeGetTupleElementHlo(new_conv, 0));
+     TF_RETURN_IF_ERROR(comp->ReplaceInstruction(instr, new_instr));
+diff --git a/xla/service/gpu/cudnn_fused_mha_rewriter.cc b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
+index 099e6776a..1078de300 100644
+--- a/xla/service/gpu/cudnn_fused_mha_rewriter.cc
++++ b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
+@@ -295,14 +295,22 @@ bool IsSupportedPrimitiveType(const HloInstruction* bmm) {
  }
  
-+const absl::string_view kCudnnfQKVCallTarget = "__cudnn$fQKV";
- const absl::string_view kGemmCallTarget = "__cublas$gemm";
- const absl::string_view kCublasLtMatmulCallTarget = "__cublas$lt$matmul";
- const absl::string_view kCublasLtMatmulF8CallTarget = "__cublas$lt$matmul$f8";
-@@ -65,6 +66,8 @@ const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget =
-     "__cudnn$fhmaScaleBiasMaskSoftmaxDropout";
- const absl::string_view kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget =
-     "__cudnn$fhmaScaleBiasSoftmaxDropout";
-+const absl::string_view kCudnnfMHAScaleSoftmaxCallTarget =
-+    "__cudnn$fmhaScaleSoftmax";
- const absl::string_view kCudnnfMHAScaleBiasSoftmaxCallTarget =
-     "__cudnn$fhmaScaleBiasSoftmax";
- const absl::string_view kCudnnfMHAScaleMaskSoftmaxCallTarget =
-@@ -94,6 +97,11 @@ bool IsCudnnConvolutionReorder(const HloInstruction& hlo) {
-          target == kCudnnConvReorderFilterAndBiasCallTarget;
+ bool IsContractingDimSupported(absl::Span<const int64_t> contracting_dims) {
++#if GOOGLE_SYCL
++  return true;
++#else
+   return absl::c_all_of(contracting_dims,
+                         [](int64_t dim) { return dim == 64; });
++#endif
  }
  
-+bool IsCustomCallTofQKV(const HloInstruction& hlo) {
-+  const auto& target = hlo.custom_call_target();
-+  return target == kCudnnfQKVCallTarget;
+ bool IsNonContractingDimSupported(
+     const std::vector<int64_t>& non_contracting_dims) {
++#if GOOGLE_SYCL
++  return true;
++#else
+   return absl::c_all_of(non_contracting_dims,
+                         [](int64_t dim) { return dim <= 512; });
++#endif
+ }
+ 
+ std::vector<int64_t> GetDimensionVector(absl::Span<const int64_t> dimensions,
+@@ -388,6 +396,7 @@ StatusOr<bool> IsSupportedBMM2(const HloInstruction* bmm_2,
+   std::vector<int64_t> non_contracting_dims_bmm2 =
+       GetDimensionVector(bmm_2->operand(operand_index)->shape().dimensions(),
+                          non_contracting_dim_nums_bmm2);
++#if !GOOGLE_SYCL
+   // The non contracting dimension for BMM2 needs to be 64 for the input matrix.
+   // The input matrix is the second argument to BMM2 i.e, rhs.
+   if (!absl::c_all_of(non_contracting_dims_bmm2,
+@@ -399,6 +408,7 @@ StatusOr<bool> IsSupportedBMM2(const HloInstruction* bmm_2,
+     }
+     return false;
+   }
++#endif
+   return true;
+ }
+ 
+@@ -523,6 +533,7 @@ MatchFwdResult MatchBmm1UnfusedBiasSoftmaxBmm2(MatchFwdResult previous_result,
+ 
+   if (Match(softmax_input,
+             OptionalConvert(OptionalBitcast(first_bmm_pattern)))) {
++    // BMM + softmax
+     match_result.matched_bmm_1 = bmm_1;
+     match_result.matched_custom_call_name =
+         has_dropout ? kCudnnfMHASoftmaxDropoutCallTarget
+@@ -533,6 +544,8 @@ MatchFwdResult MatchBmm1UnfusedBiasSoftmaxBmm2(MatchFwdResult previous_result,
+                        OptionalConvert(OptionalBitcast(m::AnyOf<HloInstruction>(
+                            unfused_scaled_bmm_subpattern, first_bmm_pattern))),
+                        m::Op(&bias))))) {
++    // BMM + add + softmax
++    // BMM + scale + add + softmax
+     match_result.matched_bmm_1 = bmm_1;
+     match_result.matched_scale = scale;
+     match_result.matched_bias = bias;
+@@ -540,6 +553,15 @@ MatchFwdResult MatchBmm1UnfusedBiasSoftmaxBmm2(MatchFwdResult previous_result,
+         has_dropout ? kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget
+                     : kCudnnfMHAScaleBiasSoftmaxCallTarget;
+     match_result.has_match = true;
++  } else if (Match(softmax_input, unfused_scaled_bmm_subpattern)) {
++    // SYCL: BMM + scale + softmax
++    match_result.matched_bmm_1 = bmm_1;
++    match_result.matched_scale = scale;
++    match_result.matched_custom_call_name =
++        has_dropout ? kCudnnfMHASoftmaxDropoutCallTarget
++                    : kCudnnfMHASoftmaxCallTarget;
++
++    match_result.has_match = true;
+   } else {
+     match_result.has_match = false;
+   }
+@@ -1522,12 +1544,14 @@ StatusOr<bool> CudnnFusedMHARewriter::Run(
+        module->MakeNonfusionComputations(execution_threads)) {
+     const DebugOptions& debug_options =
+         comp->parent()->config().debug_options();
++#if !GOOGLE_SYCL
+     if (!debug_options.xla_gpu_enable_cudnn_fmha() ||
+         !IsComputeCapabilityAndCudnnSupported(
+             compute_capability_, cudnn_version_, stream_executor_,
+             stream_executor::dnn::VersionInfo(8, 8, 0))) {
+       return false;
+     }
++#endif  // !GOOGLE_SYCL
+     for (HloInstruction* instr : comp->MakeInstructionPostOrder()) {
+       bool v_transposed = false;
+       MatchFwdResult matched_result =
+@@ -1564,6 +1588,7 @@ StatusOr<bool> CudnnFusedMHARewriter::Run(
+               matched_result.is_training, changed, v_transposed));
+       any_changed |= changed;
+ 
++#if !GOOGLE_SYCL
+       if (matched_result.is_training) {
+         // if fwd uses mask input, then bwd needs cudnn 8.9.1 to take in a mask
+         // input if cudnn version < 8.9.1 we won't lower the bwd pass
+@@ -1636,6 +1661,7 @@ StatusOr<bool> CudnnFusedMHARewriter::Run(
+                 matched_bwd_result.bmm_2_grad_1_need_canonicalization));
+         any_changed |= changed;
+       }
++#endif  // !GOOGLE_SYCL
+     }
+   }
+ 
+diff --git a/xla/service/gpu/cusolver_context.cc b/xla/service/gpu/cusolver_context.cc
+index 282bfa295..1b095f307 100644
+--- a/xla/service/gpu/cusolver_context.cc
++++ b/xla/service/gpu/cusolver_context.cc
+@@ -26,6 +26,7 @@ limitations under the License.
+ namespace xla {
+ namespace gpu {
+ 
++#if !GOOGLE_SYCL
+ namespace {
+ 
+ // Type traits to get CUDA complex types from std::complex<T>.
+@@ -414,6 +415,59 @@ Status GpuSolverContext::PotrfBatched(
+ #endif
+       ToDevicePointer(lapack_info), batch_size));
+ }
++#else // !GOOGLE_SYCL
+ 
++StatusOr<GpuSolverContext> GpuSolverContext::Create() {
++  return GpuSolverContext();
 +}
 +
- bool IsCustomCallTofMHA(const HloInstruction& hlo) {
-   const auto& target = hlo.custom_call_target();
-   return target == kCudnnfMHABmmBmmCallTarget ||
-@@ -102,6 +110,7 @@ bool IsCustomCallTofMHA(const HloInstruction& hlo) {
-          target == kCudnnfMHAScaleBiasMaskSoftmaxDropoutCallTarget ||
-          target == kCudnnfMHAScaleMaskSoftmaxCallTarget ||
-          target == kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget ||
-+         target == kCudnnfMHAScaleSoftmaxCallTarget ||
-          target == kCudnnfMHASoftmaxDropoutCallTarget ||
-          target == kCudnnfMHAScaleBiasSoftmaxCallTarget ||
-          target == kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget;
-@@ -150,6 +159,8 @@ StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(
-     return CudnnfMHAKind::kScaleMaskSoftmax;
-   if (target == kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget)
-     return CudnnfMHAKind::kScaleMaskSoftmaxDropout;
-+  if (target == kCudnnfMHAScaleSoftmaxCallTarget)
-+    return CudnnfMHAKind::kScaleSoftmax;
-   if (target == kCudnnfMHASoftmaxDropoutCallTarget)
-     return CudnnfMHAKind::kSoftmaxDropout;
-   if (target == kCudnnfMHASoftmaxCallTarget) return CudnnfMHAKind::kSoftmax;
-@@ -181,6 +192,8 @@ std::string CudnnfMHAKindToString(CudnnfMHAKind kind) {
-       return "fmha_bias_softmax_with_dropout";
-     case CudnnfMHAKind::kScaleBiasSoftmax:
-       return "fmha_bias_softmax";
-+    case CudnnfMHAKind::kScaleSoftmax:
-+      return "fmha_scale_softmax";
-   }
++GpuSolverContext::GpuSolverContext() {}
++
++std::string TransposeString(oneapi::mkl::transpose t) {
++  switch (t) {
++    case oneapi::mkl::transpose::N:
++      return "NoTranspose";
++    case oneapi::mkl::transpose::T:
++      return "Transpose";
++    case oneapi::mkl::transpose::C:
++      return "ConjugateTranspose";
++    default:
++      LOG(FATAL) << "Unknown transpose " << static_cast<tsl::int32>(t);
++  }
++}
++
++std::string UpperLowerString(oneapi::mkl::uplo ul) {
++  switch (ul) {
++    case oneapi::mkl::uplo::U:
++      return "Upper";
++    case oneapi::mkl::uplo::L:
++      return "Lower";
++    default:
++      LOG(FATAL) << "Unknown upperlower " << static_cast<tsl::int32>(ul);
++  }
++}
++
++std::string DiagonalString(oneapi::mkl::diag d) {
++  switch (d) {
++    case oneapi::mkl::diag::U:
++      return "Unit";
++    case oneapi::mkl::diag::N:
++      return "NonUnit";
++    default:
++      LOG(FATAL) << "Unknown diagonal " << static_cast<tsl::int32>(d);
++  }
++}
++
++std::string SideString(oneapi::mkl::side s) {
++  switch (s) {
++    case oneapi::mkl::side::L:
++      return "Left";
++    case oneapi::mkl::side::R:
++      return "Right";
++    default:
++      LOG(FATAL) << "Unknown side " << static_cast<tsl::int32>(s);
++  }
++}
++#endif // !GOOGLE_SYCL
+ }  // namespace gpu
+ }  // namespace xla
+diff --git a/xla/service/gpu/cusolver_context.h b/xla/service/gpu/cusolver_context.h
+index 63138f5fd..25bb8c00d 100644
+--- a/xla/service/gpu/cusolver_context.h
++++ b/xla/service/gpu/cusolver_context.h
+@@ -26,6 +26,12 @@ limitations under the License.
+ #define TENSORFLOW_USE_CUSOLVER_OR_HIPSOLVER \
+   (!TENSORFLOW_USE_ROCM || TENSORFLOW_USE_HIPSOLVER)
+ 
++#if GOOGLE_SYCL
++#include "oneapi/mkl/blas.hpp"
++#include "oneapi/mkl/lapack.hpp"
++#include "oneapi/mkl/dfti.hpp"
++#include "oneapi/mkl/exceptions.hpp"
++#else // GOOGLE_SYCL
+ #if !TENSORFLOW_USE_ROCM
+ #include "third_party/gpus/cuda/include/cusolverDn.h"
+ using gpusolverHandle_t = cusolverDnHandle_t;
+@@ -41,6 +47,7 @@ using gpusolverHandle_t = hipsolverHandle_t;
+ using gpusolverHandle_t = rocblas_handle;
+ #endif  // TF_ROCM_VERSION >= 40500
+ #endif  // TENSORFLOW_USE_ROCM
++#endif  // GOOGLE_SYCL
+ 
+ #include "xla/statusor.h"
+ #include "xla/stream_executor/blas.h"
+@@ -50,6 +57,7 @@ using gpusolverHandle_t = rocblas_handle;
+ namespace xla {
+ namespace gpu {
+ 
++#if !GOOGLE_SYCL
+ namespace se = ::stream_executor;
+ 
+ class GpuSolverContext {
+@@ -104,6 +112,19 @@ class GpuSolverContext {
+   std::unique_ptr<std::remove_pointer_t<gpusolverHandle_t>, Deleter> handle_;
+ };
+ 
++#else // !GOOGLE_SYCL
++class GpuSolverContext {
++ public:
++  static StatusOr<GpuSolverContext> Create();
++ private:
++  explicit GpuSolverContext();
++};
++
++std::string TransposeString(oneapi::mkl::transpose t);
++std::string UpperLowerString(oneapi::mkl::uplo ul);
++std::string DiagonalString(oneapi::mkl::diag d);
++std::string SideString(oneapi::mkl::side s);
++#endif // !GOOGLE_SYCL
+ }  // namespace gpu
+ }  // namespace xla
+ 
+diff --git a/xla/service/gpu/cusolver_rewriter.cc b/xla/service/gpu/cusolver_rewriter.cc
+index 904673038..eac7e0b99 100644
+--- a/xla/service/gpu/cusolver_rewriter.cc
++++ b/xla/service/gpu/cusolver_rewriter.cc
+@@ -65,6 +65,7 @@ StatusOr<HloInstruction*> CreateCholesky(GpuSolverContext* context,
+   absl::c_iota(batch_dim_ids, 0);
+   int64_t batch_size = absl::c_accumulate(batch_dims, 1, std::multiplies<>{});
+ 
++#if !GOOGLE_SYCL
+   // Find the workspace size.
+   se::blas::UpperLower uplo = options.lower() ? se::blas::UpperLower::kLower
+                                               : se::blas::UpperLower::kUpper;
+@@ -72,7 +73,36 @@ StatusOr<HloInstruction*> CreateCholesky(GpuSolverContext* context,
+   TF_ASSIGN_OR_RETURN(
+       workspace_size,
+       context->PotrfBufferSize(a_shape.element_type(), uplo, n, n, batch_size));
+-
++#else
++  // Find the workspace size.
++  int64_t workspace_size = 0;
++  oneapi::mkl::uplo uplo =
++      options.lower() ? oneapi::mkl::uplo::L : oneapi::mkl::uplo::U;
++  sycl::property_list propList{sycl::property::queue::in_order()};
++  sycl::queue queue(sycl::gpu_selector{}, propList);
++  switch (a_shape.element_type()) {
++    case F32:
++      workspace_size = oneapi::mkl::lapack::potrf_batch_scratchpad_size<float>(
++          queue, uplo, n, n, n * n, batch_size);
++      break;
++    case F64:
++      workspace_size = oneapi::mkl::lapack::potrf_batch_scratchpad_size<double>(
++          queue, uplo, n, n, n * n, batch_size);
++      break;
++    case C64:
++      workspace_size =
++          oneapi::mkl::lapack::potrf_batch_scratchpad_size<std::complex<float>>(
++              queue, uplo, n, n, n * n, batch_size);
++      break;
++    case C128:
++      workspace_size = oneapi::mkl::lapack::potrf_batch_scratchpad_size<
++          std::complex<double>>(queue, uplo, n, n, n * n, batch_size);
++      break;
++    default:
++      return InvalidArgument("Invalid type for cholesky %s",
++                             PrimitiveType_Name(a_shape.element_type()));
++  }
++#endif
+   // TODO(phawkins): Ideally we would relax this constraint. What we actually
+   // want is that:
+   // a) the batch dimensions are major, in no particular order.
+@@ -99,6 +129,9 @@ StatusOr<HloInstruction*> CreateCholesky(GpuSolverContext* context,
+   TF_RETURN_IF_ERROR(custom_call->set_backend_config(options));
+   HloInstruction* out = computation->AddInstruction(
+       HloInstruction::CreateGetTupleElement(a_shape, custom_call, 0));
++#if GOOGLE_SYCL
++  return out;
++#else
+   HloInstruction* info = computation->AddInstruction(
+       HloInstruction::CreateGetTupleElement(info_shape, custom_call, 2));
+ 
+@@ -128,6 +161,7 @@ StatusOr<HloInstruction*> CreateCholesky(GpuSolverContext* context,
+       computation->AddInstruction(HloInstruction::CreateTernary(
+           a_shape, HloOpcode::kSelect, ok, out, nans));
+   return select;
++#endif
  }
  
-diff --git a/xla/service/gpu/cublas_cudnn.h b/xla/service/gpu/cublas_cudnn.h
-index 50eddecea..fff26fb91 100644
---- a/xla/service/gpu/cublas_cudnn.h
-+++ b/xla/service/gpu/cublas_cudnn.h
-@@ -53,6 +53,7 @@ enum class CudnnfMHAKind {
-   kScaleMaskSoftmaxDropout,
-   kSoftmaxDropout,
-   kSoftmax,
-+  kScaleSoftmax,
-   kScaleBiasSoftmax,
-   kScaleBiasSoftmaxDropout,
- };
-@@ -152,6 +153,7 @@ bool IsCudnnConvolutionReorder(const HloInstruction& hlo);
- // 6. BMM1 - Softmax - Dropout - BMM2
- // 7. BMM1 - Softmax - BMM2
- // 8. BMM1 - scale - Bias - Softmax - BMM2
-+extern const absl::string_view kCudnnfQKVCallTarget;
- extern const absl::string_view kCudnnfMHABmmBmmCallTarget;
- extern const absl::string_view kCudnnfMHASoftmaxCallTarget;
- extern const absl::string_view kCudnnfMHAScaleBiasMaskSoftmaxCallTarget;
-@@ -161,9 +163,12 @@ extern const absl::string_view kCudnnfMHAScaleMaskSoftmaxDropoutCallTarget;
- extern const absl::string_view kCudnnfMHASoftmaxDropoutCallTarget;
- extern const absl::string_view kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget;
- extern const absl::string_view kCudnnfMHAScaleBiasSoftmaxCallTarget;
-+extern const absl::string_view kCudnnfMHAScaleSoftmaxCallTarget;
+ // Tries to rewrite a single convolution into a call to cudnn.
+diff --git a/xla/service/gpu/fused_mha_thunk.cc b/xla/service/gpu/fused_mha_thunk.cc
+index 96562a8e2..e8aa10851 100644
+--- a/xla/service/gpu/fused_mha_thunk.cc
++++ b/xla/service/gpu/fused_mha_thunk.cc
+@@ -28,6 +28,10 @@ limitations under the License.
+ #include "xla/util.h"
+ #include "tsl/platform/logging.h"
  
- bool IsCustomCallTofMHA(const HloInstruction& hlo);
- 
-+bool IsCustomCallTofQKV(const HloInstruction& hlo);
++#if GOOGLE_SYCL
++#include "xla/service/gpu/xetla_gpu_fused_mha_runner.h"
++#endif
 +
- StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(const HloCustomCallInstruction* instr);
+ namespace xla {
+ namespace gpu {
  
- std::string CudnnfMHAKindToString(CudnnfMHAKind kind);
+@@ -88,12 +92,19 @@ Status FusedMHAThunk::ExecuteOnStream(const ExecuteParams& params) {
+     activation_buffer = buffer_allocations.GetDeviceAddress(activation_buffer_);
+   }
+ 
++#if GOOGLE_SYCL
++  TF_RETURN_IF_ERROR(RunXetlaGpuFMHA(config_, lhs_bmm1_buffer, rhs_bmm1_buffer,
++                                     rhs_bmm2_buffer, output_buffer, scratch_buffer,
++                                     mask_buffer, bias_buffer,
++                                     activation_buffer, params.stream));
++#else
+   RunFusedMHAOptions opts;
+   opts.runner_cache = &GetOrCreateRunner(params.stream);
+   TF_RETURN_IF_ERROR(RunGpuFMHA(config_, lhs_bmm1_buffer, rhs_bmm1_buffer,
+                                 rhs_bmm2_buffer, output_buffer, scratch_buffer,
+                                 mask_buffer, bias_buffer, activation_buffer,
+                                 params.stream, opts));
++#endif
+ 
+   if (!params.stream->ok()) {
+     return InternalError("FusedMHAThunk::ExecuteOnStream failed.");
+diff --git a/xla/service/gpu/fusions/copy.cc b/xla/service/gpu/fusions/copy.cc
+index a04885f9f..bdff1fc0d 100644
+--- a/xla/service/gpu/fusions/copy.cc
++++ b/xla/service/gpu/fusions/copy.cc
+@@ -18,6 +18,10 @@ limitations under the License.
+ 
+ #include "xla/service/gpu/copy_thunk.h"
+ 
++#if GOOGLE_SYCL
++#include "xla/service/gpu/ir_emission_utils.h"
++#endif
++
+ namespace xla {
+ namespace gpu {
+ 
+diff --git a/xla/service/gpu/fusions/fusion_emitter.cc b/xla/service/gpu/fusions/fusion_emitter.cc
+index fd3d73035..a511484a7 100644
+--- a/xla/service/gpu/fusions/fusion_emitter.cc
++++ b/xla/service/gpu/fusions/fusion_emitter.cc
+@@ -36,6 +36,10 @@ limitations under the License.
+ #include "tsl/platform/errors.h"
+ #include "tsl/platform/statusor.h"
+ 
++#if GOOGLE_SYCL
++#include "xla/service/gpu/ir_emission_utils.h"
++#endif
++
+ namespace xla {
+ namespace gpu {
+ namespace {
+@@ -114,7 +118,8 @@ BuildKernelPrototype(IrEmitterContext& ir_emitter_context,
+   llvm::LLVMContext& context = llvm_module->getContext();
+   llvm::FunctionType* kernel_type = llvm::FunctionType::get(
+       /*Result=*/llvm::Type::getVoidTy(context),
+-      std::vector<llvm::Type*>(kNumLlvmArgs, builder->getInt8PtrTy()),
++      // SYCL: Hardcode to global device addrspace.
++      std::vector<llvm::Type*>(kNumLlvmArgs, llvm::Type::getInt8PtrTy(builder->getInt8PtrTy()->getContext(), 1)),
+       /*isVarArg=*/false);
+   llvm::Function* kernel =
+       llvm::Function::Create(kernel_type, llvm::GlobalValue::ExternalLinkage,
+@@ -123,6 +128,19 @@ BuildKernelPrototype(IrEmitterContext& ir_emitter_context,
+   AnnotateFunctionAsGpuKernel(llvm_module, kernel, builder);
+   AnnotateKernelLaunchDimensions(launch_dimensions, kernel_name, llvm_module);
+ 
++  // SYCL: Set function metadata
++  if (llvm::Triple(llvm_module->getTargetTriple()).isSPIR()) {
++    kernel->setCallingConv(llvm::CallingConv::SPIR_KERNEL);
++
++    llvm::LLVMContext& context = llvm_module->getContext();
++    llvm::IntegerType* i32 = llvm::Type::getInt32Ty(context);
++    kernel->setMetadata(
++        "intel_reqd_sub_group_size",
++        llvm::MDNode::get(context,
++                          {llvm::ConstantAsMetadata::get(
++                              llvm::ConstantInt::get(i32, WarpSize()))}));
++  }
++
+   // TODO(b/65380986): Investigate if adding fast math flags for generated
+   // kernels makes sense.
+ 
+diff --git a/xla/service/gpu/fusions/reduction.cc b/xla/service/gpu/fusions/reduction.cc
+index 318e34fea..7f527acd5 100644
+--- a/xla/service/gpu/fusions/reduction.cc
++++ b/xla/service/gpu/fusions/reduction.cc
+@@ -1021,10 +1021,13 @@ StatusOr<FusionEmissionResult> ReductionFusion::Emit(
+     Shape reduce_operand_shape =
+         reduction_codegen_info->GetReduceOperandShape();
+ 
+-    llvm::CallInst* raw_block_id_y = gpu::EmitCallToTargetIntrinsic(
++    llvm::Value* raw_block_id_y = gpu::EmitCallToTargetIntrinsic(
+         gpu::TargetIntrinsicID::kBlockIdy, {}, {}, builder);
+     llvm_ir::AddRangeMetadata(0, instr_index_groups.size(),
+                               llvm::cast<llvm::Instruction>(raw_block_id_y));
++    // SYCL: Cast to int32 output.
++    raw_block_id_y = builder->CreateZExtOrTrunc(
++        raw_block_id_y, builder->getInt32Ty(), "raw_block_id_y");
+     for (int i = 0; i < instr_index_groups.size(); ++i) {
+       TF_RETURN_IF_ERROR(ksl.IfWithStatus(
+           absl::StrCat("reduce-group-", i),
+diff --git a/xla/service/gpu/gemm_rewriter.cc b/xla/service/gpu/gemm_rewriter.cc
+index 0e41cfdcb..be0559e3f 100644
+--- a/xla/service/gpu/gemm_rewriter.cc
++++ b/xla/service/gpu/gemm_rewriter.cc
+@@ -561,6 +561,7 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
+ 
+   Status HandleMultiply(HloInstruction *instr) override {
+     HloInstruction *alpha, *existing_gemm;
++#if !GOOGLE_SYCL
+     if (Match(instr,
+               m::MultiplyAnyOrder(
+                   GemmOrCublasLtMatmulMaybeF8(&existing_gemm).WithOneUser(),
+@@ -584,11 +585,13 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
+         return ReplaceInstruction(instr, existing_gemm);
+       }
+     }
++#endif  // !GOOGLE_SYCL
+ 
+     // Attempt to match approximate GELU activation
+     // (https://arxiv.org/abs/1606.08415), where:
+     // approx_gelu(x) = x * cdf(x)
+     // cdf(x) = 0.5 * (1 + tanh(sqrt(2 / pi) * (x + 0.044715 * x**3))
++    // SYCL: OptionalBitcast?
+     HloInstruction *cdf, *slice_or_bitcast = nullptr;
+     if (Match(instr, m::MultiplyAnyOrder(
+                          m::AnyOf<HloInstruction>(
+@@ -628,6 +631,14 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
+                                   .WithOneUser())
+                               .WithOneUser())
+                           .WithOneUser())))) {
++      // SYCL
++      // gemm - bitcast - gelu - bitcast
++      if (instr->user_count() == 1) {
++        auto bitcast = instr->users()[0];
++        if (bitcast->opcode() == HloOpcode::kBitcast &&
++            ShapeUtil::Compatible(bitcast->shape(), existing_gemm->shape()))
++          return FuseGeluActivation(bitcast, existing_gemm);
++      }
+       return FuseGeluActivation(instr, existing_gemm, slice_or_bitcast);
+     }
+     return OkStatus();
+@@ -1266,8 +1277,8 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
+       return in_out_alias_config.ParameterHasAlias(bias->parameter_number(),
+                                                    /*param_index=*/{});
+     }();
+-    bool want_to_fuse_bias = IsCublasLtMatmulF8(*gemm) ||
+-                             IsCublasLtMatmul(*gemm) || can_overwrite_bias;
++    // SYCL: cannot always fuse bias.
++    bool want_to_fuse_bias = can_overwrite_bias;
+ 
+     auto config = gemm->backend_config<GemmBackendConfig>().value();
+ 
+@@ -1558,13 +1569,14 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
+   StatusOr<absl::string_view> GetNonFp8GemmCustomCallTarget(
+       const HloInstruction &instr,
+       const GemmBackendConfig &gemm_backend_config) const {
+-    if (!instr.GetModule()
+-             ->config()
+-             .debug_options()
+-             .xla_gpu_enable_cublaslt()) {
+-      // cublasLt is not enabled.
+-      return absl::string_view(kGemmCallTarget);
+-    }
++    // SYCL: disable fallback
++    // if (!instr.GetModule()
++    //          ->config()
++    //          .debug_options()
++    //          .xla_gpu_enable_cublaslt()) {
++    //   // cublasLt is not enabled.
++    //   return absl::string_view(kGemmCallTarget);
++    // }
+ 
+     // cublasLt is enabled, check if other internal conditions are met.
+     const HloInstruction *lhs = instr.operand(0);
+diff --git a/xla/service/gpu/gemm_thunk.cc b/xla/service/gpu/gemm_thunk.cc
+index b774280a2..d7fbb3006 100644
+--- a/xla/service/gpu/gemm_thunk.cc
++++ b/xla/service/gpu/gemm_thunk.cc
+@@ -23,6 +23,10 @@ limitations under the License.
+ #include "xla/stream_executor/device_memory.h"
+ #include "tsl/platform/logging.h"
+ 
++#if GOOGLE_SYCL
++#include "xla/service/gpu/onednn_matmul_utils.h"
++#endif
++
+ namespace xla {
+ namespace gpu {
+ 
+@@ -38,6 +42,7 @@ GemmThunk::GemmThunk(ThunkInfo thunk_info, GemmConfig config,
+       output_buffer_(output_buffer),
+       deterministic_(deterministic) {}
+ 
++#if !GOOGLE_SYCL
+ Status GemmThunk::ExecuteOnStream(const ExecuteParams& params) {
+   VLOG(3) << "Running GEMM thunk";
+   const BufferAllocations& allocs = *params.buffer_allocations;
+@@ -49,6 +54,26 @@ Status GemmThunk::ExecuteOnStream(const ExecuteParams& params) {
+                  allocs.GetDeviceAddress(output_buffer_), workspace,
+                  deterministic_, params.stream);
+ }
++#else // !GOOGLE_SYCL
++Status GemmThunk::ExecuteOnStream(const ExecuteParams& params) {
++  VLOG(3) << "Running GEMM thunk";
++  const BufferAllocations& allocs = *params.buffer_allocations;
++  se::DeviceMemoryBase lhs_data = allocs.GetDeviceAddress(lhs_buffer_);
++  se::DeviceMemoryBase rhs_data = allocs.GetDeviceAddress(rhs_buffer_);
++  se::DeviceMemoryBase output_data = allocs.GetDeviceAddress(output_buffer_);
++  se::DeviceMemoryBase add_data;
++  se::DeviceMemoryBase bias_data;
++
++  auto& buffer_allocations = *params.buffer_allocations;
++  se::OwningScratchAllocator<> scratch_allocator(
++      buffer_allocations.device_ordinal(),
++      buffer_allocations.memory_allocator());
++
++  se::gpu::BlasLt::Epilogue epilogue = se::gpu::BlasLt::Epilogue::kDefault;
++  return RunGemm(config_, lhs_data, rhs_data, add_data, output_data, bias_data,
++                 params.stream, epilogue, &scratch_allocator);
++}
++#endif // !GOOGLE_SYCL
+ 
+ Status GemmThunk::Initialize(se::StreamExecutor* executor,
+                              ExecutableSource src) {
+diff --git a/xla/service/gpu/gpu_executable.cc b/xla/service/gpu/gpu_executable.cc
+index a576d8922..1846cd6a8 100644
+--- a/xla/service/gpu/gpu_executable.cc
++++ b/xla/service/gpu/gpu_executable.cc
+@@ -33,15 +33,15 @@ limitations under the License.
+ #include "mlir/Parser/Parser.h"  // from @llvm-project
+ #include "xla/hlo/ir/hlo_instruction.h"
+ #include "xla/map_util.h"
+-#include "xla/mlir/runtime/ir/rt_ops.h"
+-#include "xla/mlir/runtime/transforms/compilation_pipeline_gpu.h"
+-#include "xla/mlir/runtime/transforms/type_converter.h"
+-#include "xla/runtime/executable.h"
++// #include "xla/mlir/runtime/ir/rt_ops.h"
++// #include "xla/mlir/runtime/transforms/compilation_pipeline_gpu.h"
++// #include "xla/mlir/runtime/transforms/type_converter.h"
++// #include "xla/runtime/executable.h"
+ #include "xla/service/buffer_assignment.h"
+ #include "xla/service/gpu/buffer_allocations.h"
+ #include "xla/service/gpu/gpu_constants.h"
+ #include "xla/service/gpu/non_atomically_upgradeable_rw_lock.h"
+-#include "xla/service/gpu/runtime/executable.h"
++// #include "xla/service/gpu/runtime/executable.h"
+ #include "xla/service/gpu/stream_executor_util.h"
+ #include "xla/service/gpu/thunk.h"
+ #include "xla/service/hlo_parser.h"
+@@ -78,7 +78,11 @@ namespace xla {
+ namespace gpu {
+ 
+ bool IsXlaRuntimeExecutableEnabled(const HloModuleConfig& config) {
++#if GOOGLE_SYCL
++  return false;
++#else
+   return config.debug_options().xla_gpu_enable_xla_runtime_executable();
++#endif
+ }
+ 
+ namespace {
+@@ -106,7 +110,7 @@ StatusOr<std::unique_ptr<GpuExecutable>> GpuExecutable::Create(Params params) {
+     result->thunks_ = std::move(std::get<OwnedThunkSequence>(executable));
+     return result;
+   }
+-
++#if !GOOGLE_SYCL
+   if (std::holds_alternative<OwnedGpuRuntimeProgram>(executable)) {
+     auto& program = std::get<OwnedGpuRuntimeProgram>(executable);
+     TF_ASSIGN_OR_RETURN(
+@@ -114,7 +118,7 @@ StatusOr<std::unique_ptr<GpuExecutable>> GpuExecutable::Create(Params params) {
+         GpuRuntimeExecutable::Create(result->module_name_, std::move(program)));
+     return result;
+   }
+-
++#endif
+   return InternalError("No XLA gpu executable was provided");
+ }
+ 
+@@ -186,7 +190,9 @@ Status GpuExecutable::CheckCompatibilityWithServiceExecutableRunOptions(
+         << "}, but was {" << std::get<se::CudaComputeCapability>(cc).ToString()
+         << "}";
+   } else {
++#if !GOOGLE_SYCL
+     return InternalError("Unknown platform");
++#endif
+   }
+ 
+   return OkStatus();
+@@ -207,6 +213,9 @@ Status ExecuteThunks(const std::string& module_name, ModuleIdentifier module_id,
+   se::StreamExecutor* executor = main_stream->parent();
+   stream_executor::StreamPriority stream_priority =
+       stream_executor::StreamPriority::Default;
++#if GOOGLE_SYCL
++  use_highest_priority_for_async_stream = false;
++#endif
+   if (use_highest_priority_for_async_stream) {
+     stream_priority = stream_executor::StreamPriority::Highest;
+   }
+@@ -310,10 +319,16 @@ GpuExecutable::ResolveConstantGlobals(se::Stream* stream) {
+   // The CUDA driver isn't able to load a PTX and a binary which are both empty.
+   // It's okay if we skip loading in this case; if the module isn't loaded, all
+   // symbol lookups will fail, just as they should for an empty module.
++#if !GOOGLE_SYCL
+   if (!(executor->platform()->id() == stream_executor::cuda::kCudaPlatformId &&
+         binary().empty() && text().empty())) {
+     TF_RETURN_IF_ERROR(executor->LoadModule(module_spec, &module_handle));
+   }
++#else
++  if (module_spec.has_cuda_cubin_in_memory()) {
++    TF_RETURN_IF_ERROR(executor->LoadModule(module_spec, &module_handle));
++  }
++#endif
+ 
+   // A flag signalling if constant initialization submitted memcpy operations
+   // to the `stream`.
+@@ -341,6 +356,26 @@ GpuExecutable::ResolveConstantGlobals(se::Stream* stream) {
+         submitted_mem_copies = true;
+       }
+     } else {
++#if GOOGLE_SYCL
++      // SYCL: content may be empty
++      if (info.content.empty()) {
++        // LLVM module contains the const variable, but it still fails to look
++        // up symbol. So allocate an empty buffer here.
++        void* opaque = nullptr;
++        size_t bytes = 0;
++        global = se::DeviceMemoryBase(opaque, bytes);
++      } else {
++        TF_ASSIGN_OR_RETURN(
++            auto shared, executor->CreateOrShareConstant(stream, info.content));
++        global = *shared;
++        VLOG(3) << "Allocated (or shared) global " << info.symbol_name << " at "
++                << global.opaque();
++        // XLA will continue to own this global at least until this executable
++        // is destroyed (longer if another, longer-lived executable shares the
++        // same constant).
++        shared_constants_.push_back(std::move(shared));
++      }
++#else
+       // The constant was not defined in the PTX and therefore must be both
+       // allocated and initialized by XLA here.
+       CHECK(!info.content.empty());
+@@ -354,6 +389,7 @@ GpuExecutable::ResolveConstantGlobals(se::Stream* stream) {
+       // destroyed (longer if another, longer-lived executable shares the same
+       // constant).
+       shared_constants_.push_back(std::move(shared));
++#endif
+     }
+ 
+     if (info.allocation_index != -1) {
+@@ -494,7 +530,7 @@ StatusOr<ScopedShapedBuffer> GpuExecutable::ExecuteAsyncOnStream(
+                       ExecuteAsyncOnStreamImpl(run_options, arguments));
+   return out.ConsumeResult();
+ }
+-
++#if !GOOGLE_SYCL
+ static Status ExecuteXlaRuntime(const std::string& module_name,
+                                 ModuleIdentifier module_id,
+                                 GpuRuntimeExecutable& gpu_runtime_executable,
+@@ -528,7 +564,7 @@ static Status ExecuteXlaRuntime(const std::string& module_name,
+       run_options, start_nanos,
+       block_host_until_done ? run_options->stream() : nullptr);
+ }
+-
++#endif
+ Status GpuExecutable::PopulatePersistentTempBuffers(
+     se::StreamExecutor* executor) {
+   auto search = persistent_temp_buffers_.find(executor);
+@@ -789,13 +825,13 @@ Status GpuExecutable::ExecuteThunksOrXlaRuntime(
+       if (temp_buffer == nullptr) temp_buffer = &alloc;
+     }
+   }
+-
++#if !GOOGLE_SYCL
+   if (gpu_runtime_executable_) {
+     return ExecuteXlaRuntime(module_name_, unique_id, *gpu_runtime_executable_,
+                              run_options, text_, binary_, buffer_allocations,
+                              temp_buffer, block_host_until_done, gpu_lock);
+   }
+-
++#endif
+   return FailedPrecondition("Expected XLA gpu executable is not supplied.");
+ }
+ 
+@@ -928,7 +964,7 @@ GetOutputInfo(const HloModule& hlo_module, const BufferAssignment& assignment) {
+       }));
+   return output;
+ }
+-
++#if !GOOGLE_SYCL
+ GpuExecutable::GpuExecutable(
+     std::shared_ptr<HloModule> hlo_module, std::string asm_text,
+     std::vector<uint8_t> binary, std::vector<ConstantInfo> constants,
+@@ -1137,6 +1173,6 @@ StatusOr<std::string_view> GpuExecutable::GetMlirModule() const {
+     return Internal("gpu_runtime_executable is null");
+   return gpu_runtime_executable_->GetMlirModule();
+ }
+-
++#endif
+ }  // namespace gpu
+ }  // namespace xla
+diff --git a/xla/service/gpu/gpu_executable.h b/xla/service/gpu/gpu_executable.h
+index bef637f59..029d60184 100644
+--- a/xla/service/gpu/gpu_executable.h
++++ b/xla/service/gpu/gpu_executable.h
+@@ -37,7 +37,7 @@ limitations under the License.
+ #include "xla/service/executable.h"
+ #include "xla/service/gpu/buffer_allocations.h"
+ #include "xla/service/gpu/non_atomically_upgradeable_rw_lock.h"
+-#include "xla/service/gpu/runtime/executable.h"
++// #include "xla/service/gpu/runtime/executable.h"
+ #include "xla/service/gpu/thunk.h"
+ #include "xla/service/hlo_execution_profile.h"
+ #include "xla/service/shaped_buffer.h"
+@@ -52,6 +52,25 @@ namespace gpu {
+ // Returns whether GpuExecutable runs with Xla Runtime.
+ bool IsXlaRuntimeExecutableEnabled(const HloModuleConfig& config);
+ 
++// SYCL: dummy GpuRuntimeProgram for compilation
++#if GOOGLE_SYCL
++struct GpuRuntimeProgram {
++  GpuRuntimeProgram(std::string entry_point, std::string module,
++                    std::vector<int64_t> buffer_sizes,
++                    DebugOptions debug_options)
++      : entry_point(std::move(entry_point)),
++        module(std::move(module)),
++        buffer_sizes(std::move(buffer_sizes)),
++        debug_options(std::move(debug_options)) {}
++
++  std::string entry_point;
++  std::string module;
++  std::vector<int64_t> buffer_sizes;
++  DebugOptions debug_options;
++};
++class GpuRuntimeExecutable {};
++#endif
++
+ // GPU-targeting implementation of the XLA Executable interface.
+ //
+ // Launches the given GPU kernel via the StreamExecutor.
+@@ -118,7 +137,7 @@ class GpuExecutable : public Executable {
+       std::vector<BufferAllocation>* allocations,
+       absl::flat_hash_map<ShapeIndex, OutputInfo>* output_info,
+       Shape* output_shape);
+-
++#if !GOOGLE_SYCL
+   // Returns an Executable that is loaded from an object file (XLA program
+   // compiled to a native function using the XLA Runtime stack).
+   static StatusOr<std::unique_ptr<Executable>> LoadFromObjFile(
+@@ -128,7 +147,7 @@ class GpuExecutable : public Executable {
+       absl::string_view asm_text, absl::string_view binary,
+       std::vector<ConstantInfo> constants, se::GpuComputeCapability gpu_version,
+       stream_executor::StreamExecutor* executor);
+-
++#endif
+   // Constructor to use when loading a GpuExecutable from an object file (native
+   // function compiled for XLA Runtime). Omits setting class members that aren't
+   // used in XLA Runtime execution mode.
+diff --git a/xla/service/gpu/gpu_fused_mha_runner.cc b/xla/service/gpu/gpu_fused_mha_runner.cc
+index 74c3d8397..293dbccd7 100644
+--- a/xla/service/gpu/gpu_fused_mha_runner.cc
++++ b/xla/service/gpu/gpu_fused_mha_runner.cc
+@@ -153,6 +153,8 @@ void AssignScale(GpufMHAConfig &config,
+   double fmha_scale = 0.0;
+ 
+   switch (config.kind) {
++    // SYCL: supports bias + softmax
++    case CudnnfMHAKind::kSoftmax:
+     case CudnnfMHAKind::kScaleBiasMaskSoftmax:
+     case CudnnfMHAKind::kScaleBiasMaskSoftmaxDropout:
+     case CudnnfMHAKind::kScaleMaskSoftmax:
 diff --git a/xla/service/gpu/gpu_layout_assignment.cc b/xla/service/gpu/gpu_layout_assignment.cc
-index 590f5ff41..6dcb1939b 100644
+index ad2d7ffa6..06c8ab79b 100644
 --- a/xla/service/gpu/gpu_layout_assignment.cc
 +++ b/xla/service/gpu/gpu_layout_assignment.cc
-@@ -66,7 +66,7 @@ HeuristicLayoutAssignment(const HloInstruction* instr,
+@@ -69,7 +69,7 @@ HeuristicLayoutAssignment(const HloInstruction* instr,
        std::make_tuple(DataLayout::kBatchDepthYX4, FilterLayout::kOutputInputYX4,
                        DataLayout::kBatchDepthYX4);
    constexpr auto kAllNHWC =
@@ -405,11 +1293,138 @@ index 590f5ff41..6dcb1939b 100644
                        DataLayout::kBatchYXDepth);
  
    // Integer convolution must use NHWC or NCHW_VECT_C.
+diff --git a/xla/service/gpu/gpu_transfer_manager.cc b/xla/service/gpu/gpu_transfer_manager.cc
+index 5bd1c557e..f99b9b4c4 100644
+--- a/xla/service/gpu/gpu_transfer_manager.cc
++++ b/xla/service/gpu/gpu_transfer_manager.cc
+@@ -34,6 +34,7 @@ limitations under the License.
+ #include "xla/stream_executor/host/host_platform_id.h"
+ #include "xla/stream_executor/multi_platform_manager.h"
+ #include "xla/stream_executor/rocm/rocm_platform_id.h"
++#include "xla/stream_executor/sycl/sycl_platform_id.h"
+ #include "xla/stream_executor/stream_executor.h"
+ #include "xla/types.h"
+ #include "xla/util.h"
+@@ -207,11 +208,20 @@ static std::unique_ptr<xla::TransferManager> CreateAMDGPUTransferManager() {
+           .getPointerSize(0 /* default address space */));
+ }
+ 
++static std::unique_ptr<xla::TransferManager> CreateSYCLTransferManager() {
++  return std::make_unique<xla::gpu::GpuTransferManager>(
++      /*id=*/stream_executor::sycl::kSyclPlatformId,
++      /*pointer_size=*/llvm::DataLayout(xla::gpu::spir::DataLayout())
++          .getPointerSize(0 /* default address space */));
++}
++
+ static bool InitModule() {
+   xla::TransferManager::RegisterTransferManager(
+       stream_executor::cuda::kCudaPlatformId, &CreateNVPTXTransferManager);
+   xla::TransferManager::RegisterTransferManager(
+       stream_executor::rocm::kROCmPlatformId, &CreateAMDGPUTransferManager);
++  xla::TransferManager::RegisterTransferManager(
++      stream_executor::sycl::kSyclPlatformId, &CreateSYCLTransferManager);
+   return true;
+ }
+ static bool module_initialized = InitModule();
+diff --git a/xla/service/gpu/gpublas_lt_matmul_thunk.cc b/xla/service/gpu/gpublas_lt_matmul_thunk.cc
+index 4b3d4f1fc..be716e5b6 100644
+--- a/xla/service/gpu/gpublas_lt_matmul_thunk.cc
++++ b/xla/service/gpu/gpublas_lt_matmul_thunk.cc
+@@ -25,6 +25,10 @@ limitations under the License.
+ #include "xla/stream_executor/scratch_allocator.h"
+ #include "tsl/platform/logging.h"
+ 
++#if GOOGLE_SYCL
++#include "xla/service/gpu/onednn_matmul_utils.h"
++#endif
++
+ namespace xla {
+ namespace gpu {
+ 
+@@ -53,6 +57,36 @@ CublasLtMatmulThunk::CublasLtMatmulThunk(
+       d_scale_buffer_(d_scale),
+       d_amax_buffer_(d_amax) {}
+ 
++#if GOOGLE_SYCL
++Status CublasLtMatmulThunk::ExecuteOnStream(const ExecuteParams& params) {
++  VLOG(3) << "Running cublas_lt matmul thunk";
++  const BufferAllocations& allocs = *params.buffer_allocations;
++
++  se::DeviceMemoryBase a, b, c, d;
++  if (a_buffer_.allocation() != nullptr) {
++    a = allocs.GetDeviceAddress(a_buffer_);
++  }
++  if (b_buffer_.allocation() != nullptr) {
++    b = allocs.GetDeviceAddress(b_buffer_);
++  }
++  if (c_buffer_.allocation() != nullptr) {
++    c = allocs.GetDeviceAddress(c_buffer_);
++  }
++  if (d_buffer_.allocation() != nullptr) {
++    d = allocs.GetDeviceAddress(d_buffer_);
++  }
++
++  se::DeviceMemoryBase bias, a_scale, b_scale, c_scale, d_scale, d_amax;
++  if (bias_buffer_.allocation() != nullptr) {
++    bias = allocs.GetDeviceAddress(bias_buffer_);
++  }
++
++  se::OwningScratchAllocator<> scratch_allocator(allocs.device_ordinal(),
++                                                 allocs.memory_allocator());
++  return RunGemm(gemm_config_, a, b, c, d, bias, params.stream, epilogue_,
++                 &scratch_allocator);
++}
++#else  // GOOGLE_SYCL
+ Status CublasLtMatmulThunk::ExecuteOnStream(const ExecuteParams& params) {
+   TF_ASSIGN_OR_RETURN(auto plan, GetMatmulPlan(params.stream));
+   TF_ASSIGN_OR_RETURN(auto algorithm, GetMatmulAlgorithm(plan));
+@@ -119,6 +153,6 @@ CublasLtMatmulThunk::GetMatmulAlgorithm(
+   }
+   return it->second;
+ }
+-
++#endif  // GOOGLE_SYCL
+ }  // namespace gpu
+ }  // namespace xla
+diff --git a/xla/service/gpu/gpublas_lt_matmul_thunk.h b/xla/service/gpu/gpublas_lt_matmul_thunk.h
+index 5a394dbf8..2516e0604 100644
+--- a/xla/service/gpu/gpublas_lt_matmul_thunk.h
++++ b/xla/service/gpu/gpublas_lt_matmul_thunk.h
+@@ -48,6 +48,7 @@ class CublasLtMatmulThunk : public Thunk {
+   Status ExecuteOnStream(const ExecuteParams& params) override;
+ 
+  private:
++#if !GOOGLE_SYCL
+   StatusOr<se::gpu::BlasLt::MatmulPlan*> GetMatmulPlan(
+       const stream_executor::Stream* stream);
+   StatusOr<std::optional<se::gpu::BlasLt::MatmulAlgorithm> > GetMatmulAlgorithm(
+@@ -62,7 +63,7 @@ class CublasLtMatmulThunk : public Thunk {
+   absl::flat_hash_map<const se::gpu::BlasLt::MatmulPlan*,
+                       se::gpu::BlasLt::MatmulAlgorithm>
+       matmul_algorithm_cache_ ABSL_GUARDED_BY(matmul_algorithm_cache_mutex_);
+-
++#endif
+   GemmConfig gemm_config_;
+   se::gpu::BlasLt::Epilogue epilogue_;
+   int64_t algorithm_idx_;
+diff --git a/xla/service/gpu/hlo_fusion_analysis.cc b/xla/service/gpu/hlo_fusion_analysis.cc
+index 0605af7c2..e6d04d737 100644
+--- a/xla/service/gpu/hlo_fusion_analysis.cc
++++ b/xla/service/gpu/hlo_fusion_analysis.cc
+@@ -784,6 +784,8 @@ int HloFusionAnalysis::CalculateVirtualThreadScalingFactorForReduction(
+   int64_t dimx = reduction_dimensions.dimensions[kDimX];
+   if (reduction_dimensions.is_row_reduction && dimx <= 128) {
+     int rows_per_warp = RowReductionGetRowsPerWarp(dimx);
++    // SYCL: larger thread number causes hang.
++    return rows_per_warp;
+     const auto* cuda_cc = std::get_if<se::CudaComputeCapability>(
+         &device_info_->gpu_compute_capability());
+     if (cuda_cc != nullptr &&
 diff --git a/xla/service/gpu/ir_emission_utils.cc b/xla/service/gpu/ir_emission_utils.cc
-index 5603f6b87..9a78219a3 100644
+index a28628c14..483c2d6bd 100644
 --- a/xla/service/gpu/ir_emission_utils.cc
 +++ b/xla/service/gpu/ir_emission_utils.cc
-@@ -107,11 +107,11 @@ bool IsMatrixMultiplication(const HloInstruction& dot) {
+@@ -83,11 +83,11 @@ bool IsMatrixMultiplication(const HloInstruction& dot) {
    const DotDimensionNumbers& dim_numbers = dot.dot_dimension_numbers();
  
    PrimitiveType output_primitive_type = dot.shape().element_type();
@@ -423,7 +1438,7 @@ index 5603f6b87..9a78219a3 100644
        (output_primitive_type == S32 && lhs_shape.element_type() == S8 &&
         rhs_shape.element_type() == S8);
    bool shapes_are_valid =
-@@ -365,6 +365,31 @@ llvm::Value* EmitNVPTXShflDown(llvm::Value* value, llvm::Value* offset,
+@@ -235,6 +235,31 @@ llvm::Value* EmitNVPTXShflDown(llvm::Value* value, llvm::Value* offset,
        intrinsic, {b->getInt32(-1), value, offset, b->getInt32(WarpSize() - 1)});
  }
  
@@ -455,7 +1470,7 @@ index 5603f6b87..9a78219a3 100644
  llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
                                       llvm::IRBuilder<>* builder) {
    int bit_width = value->getType()->getPrimitiveSizeInBits();
-@@ -377,6 +402,8 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
+@@ -247,6 +272,8 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
        return EmitNVPTXShflDown(value, offset, builder);
      } else if (target_triple.getArch() == llvm::Triple::amdgcn) {
        return EmitAMDGPUShflDown(value, offset, builder);
@@ -464,7 +1479,7 @@ index 5603f6b87..9a78219a3 100644
      } else {
        LOG(FATAL) << "Invalid triple " << target_triple.str();
      }
-@@ -398,6 +425,9 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
+@@ -268,6 +295,9 @@ llvm::Value* EmitFullWarpShuffleDown(llvm::Value* value, llvm::Value* offset,
      } else if (target_triple.getArch() == llvm::Triple::amdgcn) {
        insert_val = EmitAMDGPUShflDown(builder->CreateExtractElement(x, i),
                                        offset, builder);
@@ -474,8 +1489,90 @@ index 5603f6b87..9a78219a3 100644
      } else {
        LOG(FATAL) << "Invalid triple " << target_triple.str();
      }
+diff --git a/xla/service/gpu/ir_emitter_context.cc b/xla/service/gpu/ir_emitter_context.cc
+index af3a8530b..d827f5f61 100644
+--- a/xla/service/gpu/ir_emitter_context.cc
++++ b/xla/service/gpu/ir_emitter_context.cc
+@@ -54,6 +54,8 @@ void IrEmitterContext::emit_constant(int64_t num_elements,
+       return llvm::ConstantAggregateZero::get(global_type);
+     }
+ 
++    // SYCL: always set info.content.
++    info.content = content;
+     std::vector<uint8_t> padded(kMinConstAllocationInBytes, 0);
+     absl::c_copy(content, padded.begin());
+     return llvm::ConstantDataArray::get<uint8_t>(
+@@ -74,9 +76,29 @@ void IrEmitterContext::emit_constant(int64_t num_elements,
+       llvm::GlobalValue::ExternalLinkage,
+       /*Initializer=*/initializer, symbol_name,
+       /*TLMode=*/llvm::GlobalValue::NotThreadLocal,
+-      /*AddressSpace=*/0,
++      /*AddressSpace=*/1,  // SYCL: Hardcode to global addrspace
+       /*isExternallyInitialized=*/false);
+   global_for_const->setAlignment(llvm::Align(kConstantBufferAlignBytes));
++
++  // SYCL: Add spirv.Decorations for global variable. See document about the
++  // annotation:
++  // https://github.com/intel/llvm/blob/sycl/sycl/doc/design/spirv-extensions/SPV_INTEL_global_variable_decorations.asciidoc
++  llvm::LLVMContext& context = llvm_module_->getContext();
++  llvm::SmallVector<llvm::Metadata*, 4> MDs;
++  std::vector<llvm::Metadata*> OPs;
++
++  auto* KindMD = llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
++      llvm::Type::getInt32Ty(context), /*IDecHostAccessINTEL*/ 6147));
++  OPs.push_back(KindMD);
++  auto* const AccModeMD = llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
++      llvm::Type::getInt32Ty(context), /*AccessMode*/ 2));
++  auto* const NameMD = llvm::MDString::get(context, symbol_name);
++  OPs.push_back(AccModeMD);
++  OPs.push_back(NameMD);
++  MDs.push_back(llvm::MDNode::get(context, OPs));
++
++  llvm::MDNode* MDList = llvm::MDNode::get(context, MDs);
++  global_for_const->setMetadata("spirv.Decorations", MDList);
+   llvm_module_->insertGlobalVariable(global_for_const);
+ 
+   info.symbol_name.assign(symbol_name);
+diff --git a/xla/service/gpu/ir_emitter_nested.cc b/xla/service/gpu/ir_emitter_nested.cc
+index ad83ba15a..dee125af9 100644
+--- a/xla/service/gpu/ir_emitter_nested.cc
++++ b/xla/service/gpu/ir_emitter_nested.cc
+@@ -33,6 +33,11 @@ limitations under the License.
+ #include "xla/service/llvm_ir/llvm_util.h"
+ #include "xla/service/llvm_ir/tuple_ops.h"
+ 
++#if GOOGLE_SYCL
++#include "xla/service/gpu/ir_emission_utils.h"
++#include "llvm/TargetParser/Triple.h"
++#endif
++
+ namespace xla {
+ namespace gpu {
+ namespace {
+diff --git a/xla/service/gpu/ir_emitter_unnested.cc b/xla/service/gpu/ir_emitter_unnested.cc
+index 53d02c62d..cf72aa8b0 100644
+--- a/xla/service/gpu/ir_emitter_unnested.cc
++++ b/xla/service/gpu/ir_emitter_unnested.cc
+@@ -896,6 +896,17 @@ Status IrEmitterUnnested::EmitConvolutionThunk(mlir::Operation* op) {
+     TF_RETURN_IF_ERROR(set_activation_mode(conv));
+     descriptor.backend_config.set_side_input_scale(
+         conv.getSideInputScale().convertToDouble());
++
++    // SYCL: OneDNN requires inplace sum
++    if (operand_slices[3] != conv_result_slice) {
++      thunks.push_back(std::make_unique<DeviceToDeviceCopyThunk>(
++          GetThunkInfo(op),
++          /*side_input_buffer=*/operand_slices[3],
++          /*destination_buffer=*/conv_result_slice,
++          /*mem_size=*/ShapeUtil::ByteSizeOf(GetShape(op->getOperand(3))),
++          /*source_value=*/op->getOperand(3),
++          /*destination_value=*/op->getOperand(4)));
++    }
+   } else {
+     return InternalError("EmitConvolutionThunk: Unexpected operation");
+   }
 diff --git a/xla/service/gpu/llvm_gpu_backend/BUILD b/xla/service/gpu/llvm_gpu_backend/BUILD
-index c6a4a50aa..73e53dd91 100644
+index 619acb37a..d1abf8fc2 100644
 --- a/xla/service/gpu/llvm_gpu_backend/BUILD
 +++ b/xla/service/gpu/llvm_gpu_backend/BUILD
 @@ -3,6 +3,10 @@ load(
@@ -499,7 +1596,7 @@ index c6a4a50aa..73e53dd91 100644
  )
  
 diff --git a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
-index 32980ae56..bc15fa1f4 100644
+index 20c22245c..dd481c936 100644
 --- a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
 +++ b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
 @@ -73,6 +73,9 @@ limitations under the License.
@@ -512,19 +1609,22 @@ index 32980ae56..bc15fa1f4 100644
  namespace xla {
  namespace gpu {
  namespace {
-@@ -146,8 +149,9 @@ std::unique_ptr<llvm::TargetMachine> GetTargetMachine(
+@@ -149,11 +152,13 @@ std::unique_ptr<llvm::TargetMachine> GetTargetMachine(
    const llvm::Target* target =
        llvm::TargetRegistry::lookupTarget("", triple, error);
    if (target == nullptr) {
--    LOG(FATAL) << "Unable to find Target for triple '" << triple.str() << "'"
--               << " -- " << error;
 +    // SYCL: do not have target machine for spirv
-+    LOG(INFO) << "Unable to find Target for triple '" << triple.str() << "'"
-+              << " -- " << error;
++#if !GOOGLE_SYCL
+     LOG(FATAL) << "Unable to find Target for triple '" << triple.str() << "'"
+                << " -- " << error;
++#endif
      return nullptr;
    }
+-
+   llvm::TargetOptions target_options =
+       llvm::codegen::InitTargetOptionsFromCodeGenFlags(llvm::Triple());
  
-@@ -368,10 +372,15 @@ Status LinkAndOptimizeModule(llvm::Module* module, GpuVersion gpu_version,
+@@ -365,10 +370,15 @@ Status LinkAndOptimizeModule(
    llvm::CGSCCAnalysisManager cgam;
    llvm::ModuleAnalysisManager mam;
  
@@ -542,25 +1642,28 @@ index 32980ae56..bc15fa1f4 100644
    pto.InlinerThreshold = inline_threshold;
  
    llvm::PassInstrumentationCallbacks pic;
-@@ -1017,5 +1026,130 @@ StatusOr<std::vector<uint8_t>> CompileToHsaco(
+@@ -1001,5 +1011,134 @@ StatusOr<std::vector<uint8_t>> CompileToHsaco(
  
  }  // namespace amdgpu
  
 +namespace {
 +std::unique_ptr<llvm::TargetMachine> SPIRGetTargetMachine(
-+    llvm::Triple target_triple, const HloModuleConfig& hlo_module_config) {
++    llvm::Triple target_triple, se::GpuComputeCapability gpu_version,
++    const DebugOptions& debug_options) {
 +  // Actually no Target Machine for spir triple.
-+  return GetTargetMachine(target_triple, "cpu", hlo_module_config, "fs");
++  return GetTargetMachine(target_triple, "cpu", debug_options, "fs");
 +}
 +
-+Status SPIRTargetModuleLinker(llvm::Module* module, GpuVersion gpu_version,
-+                              const HloModuleConfig& hlo_module_config,
++Status SPIRTargetModuleLinker(llvm::Module* module, 
++                              se::GpuComputeCapability gpu_version,
++                              const DebugOptions& debug_options,
 +                              const std::string& device_bitcode_dir_path) {
 +  return OkStatus();
 +}
 +
 +StatusOr<std::string> EmitModuleToSpir(llvm::Module* module,
-+                                       const HloModuleConfig& module_config) {
++                                       se::GpuComputeCapability gpu_version,
++                                       const DebugOptions& debug_options) {
 +  SPIRV::TranslatorOpts::ExtensionsStatusMap ExtensionsStatus;
 +  SPIRV::TranslatorOpts opts(SPIRV::VersionNumber::MaximumVersion,
 +                             ExtensionsStatus);
@@ -577,7 +1680,7 @@ index 32980ae56..bc15fa1f4 100644
 +
 +// One-time module initializer.
 +// Must be called only once -- DO NOT CALL DIRECTLY.
-+void SPIRBackendInit(const HloModuleConfig& hlo_module_config) {
++void SPIRBackendInit(const DebugOptions& debug_options) {
 +  // Feed all customized flags here, so we can override them with llvm_cl_opts
 +  // without redeploy the compiler for development purpose.
 +
@@ -621,7 +1724,7 @@ index 32980ae56..bc15fa1f4 100644
 +  }
 +
 +  llvm_ir::InitializeLLVMCommandLineOptions(
-+      hlo_module_config.debug_options().xla_backend_extra_options());
++      debug_options.xla_backend_extra_options());
 +
 +  // Initialize the LLVM optimization passes.
 +  llvm::PassRegistry* registry = llvm::PassRegistry::getPassRegistry();
@@ -631,11 +1734,11 @@ index 32980ae56..bc15fa1f4 100644
 +
 +namespace spir {
 +StatusOr<std::string> CompileToSpir(llvm::Module* module,
-+                                    GpuVersion gpu_version,
-+                                    const HloModuleConfig& hlo_module_config,
++                                    se::GpuComputeCapability gpu_version,
++                                    const DebugOptions& debug_options,
 +                                    const std::string& libdevice_dir_path) {
 +  static absl::once_flag backend_init_flag;
-+  absl::call_once(backend_init_flag, SPIRBackendInit, hlo_module_config);
++  absl::call_once(backend_init_flag, SPIRBackendInit, debug_options);
 +
 +  std::string spir;
 +  {
@@ -652,20 +1755,21 @@ index 32980ae56..bc15fa1f4 100644
 +    // No SPIR target machine?
 +    llvm::Triple default_target_triple("spir64-unknown-unknown");
 +    std::unique_ptr<llvm::TargetMachine> target_machine =
-+        SPIRGetTargetMachine(default_target_triple, hlo_module_config);
++        SPIRGetTargetMachine(default_target_triple, gpu_version, debug_options);
 +
 +    bool opt = true;
 +    tsl::ReadBoolFromEnvVar("SYCL_LLVM_OPT", true, &opt);
 +    if (opt) {
 +      // Link with libdevice, and optimize the LLVM module.
 +      TF_RETURN_IF_ERROR(LinkAndOptimizeModule(
-+          module, gpu_version, hlo_module_config, libdevice_dir_path,
++          module, gpu_version, debug_options, libdevice_dir_path,
 +          SPIRTargetModuleLinker, default_target_triple, target_machine.get(),
 +          kDefaultInlineThreshold));
 +    }
 +
 +    // Lower optimized LLVM module to SPIR.
-+    TF_ASSIGN_OR_RETURN(spir, EmitModuleToSpir(module, hlo_module_config));
++    TF_ASSIGN_OR_RETURN(spir,
++                        EmitModuleToSpir(module, gpu_version, debug_options));
 +  }
 +  return spir;
 +}
@@ -674,17 +1778,17 @@ index 32980ae56..bc15fa1f4 100644
  }  // namespace gpu
  }  // namespace xla
 diff --git a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
-index 07a3d6a25..b4bb332aa 100644
+index 9ff362c2d..08e37abac 100644
 --- a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
 +++ b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
 @@ -66,6 +66,13 @@ StatusOr<std::vector<uint8_t>> CompileToHsaco(
-     const std::string& rocdl_dir_path);
+     const std::string& module_config_cache_key);
  }  // namespace amdgpu
  
 +namespace spir {
 +StatusOr<std::string> CompileToSpir(llvm::Module* module,
-+                                    GpuVersion gpu_version,
-+                                    const HloModuleConfig& hlo_module_config,
++                                    se::GpuComputeCapability gpu_version,
++                                    const DebugOptions& debug_options,
 +                                    const std::string& libdevice_dir_path);
 +}  // namespace spir
 +
@@ -692,12 +1796,12 @@ index 07a3d6a25..b4bb332aa 100644
  }  // namespace xla
  
 diff --git a/xla/service/gpu/matmul_utils.h b/xla/service/gpu/matmul_utils.h
-index c46ba6922..dedac9e37 100644
+index e6d318df2..59543ed8e 100644
 --- a/xla/service/gpu/matmul_utils.h
 +++ b/xla/service/gpu/matmul_utils.h
-@@ -37,6 +37,23 @@ limitations under the License.
- #include "xla/stream_executor/scratch_allocator.h"
- #endif  // GOOGLE_CUDA
+@@ -40,6 +40,23 @@ limitations under the License.
+ #include "rocm/rocm_config.h"
+ #endif
  
 +namespace stream_executor {
 +namespace cuda {
@@ -719,19 +1823,19 @@ index c46ba6922..dedac9e37 100644
  namespace xla {
  namespace gpu {
  
-@@ -119,6 +136,7 @@ struct GemmConfig {
-   double beta;
-   std::optional<int64_t> algorithm;
-   int64_t compute_precision;
-+  se::cuda::BlasLt::Epilogue epilogue;
+@@ -155,6 +172,7 @@ struct GemmConfig : public se::gpu::GemmConfig {
+         op.getAlgorithm(), compute_precision, /*grad_x=*/false,
+         /*grad_y=*/false);
+   }
++
  };
  
- StatusOr<se::blas::ComputationType> GetBlasComputationType(
+ // Run the given GEMM instruction `gemm` subject to the configuration
 diff --git a/xla/service/gpu/parallel_loop_emitter.cc b/xla/service/gpu/parallel_loop_emitter.cc
-index 7577f166f..857f3cf4e 100644
+index c6b76fd2b..1e85a5259 100644
 --- a/xla/service/gpu/parallel_loop_emitter.cc
 +++ b/xla/service/gpu/parallel_loop_emitter.cc
-@@ -178,9 +178,7 @@ ParallelLoopEmitter::EmitIndexAndSetExitBasicBlock(absl::string_view loop_name,
+@@ -179,9 +179,7 @@ ParallelLoopEmitter::EmitIndexAndSetExitBasicBlock(absl::string_view loop_name,
    // for that dimensions.  This helps LLVM generate vectorized codes
    // in that cases.
    llvm::Value* row_index = nullptr;
@@ -742,7 +1846,7 @@ index 7577f166f..857f3cf4e 100644
      // Simpler index for row computation.
      // This will allow LLVM to vectorize.
      row_index = b_->CreateMul(
-@@ -192,19 +190,19 @@ ParallelLoopEmitter::EmitIndexAndSetExitBasicBlock(absl::string_view loop_name,
+@@ -193,19 +191,19 @@ ParallelLoopEmitter::EmitIndexAndSetExitBasicBlock(absl::string_view loop_name,
      array_indices.emplace_back(linear_index_base, multidim, shape_, b_);
    }
  
@@ -766,11 +1870,846 @@ index 7577f166f..857f3cf4e 100644
      }
    }
  
+diff --git a/xla/service/gpu/runtime3/BUILD b/xla/service/gpu/runtime3/BUILD
+index 6a66dd62f..6865d21aa 100644
+--- a/xla/service/gpu/runtime3/BUILD
++++ b/xla/service/gpu/runtime3/BUILD
+@@ -1,6 +1,7 @@
+ load("//xla/tests:build_defs.bzl", "xla_test")
+ load("//xla/stream_executor:build_defs.bzl", "if_gpu_is_configured")
+ load("@tsl//tsl/platform/default:cuda_build_defs.bzl", "if_cuda_is_configured")
++load("@local_config_sycl//sycl:build_defs.bzl", "if_sycl_is_configured")
+ 
+ package(
+     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
+@@ -176,8 +177,10 @@ cc_library(
+         "//xla/hlo/ir:hlo",
+         "//xla/service:buffer_assignment",
+         "//xla/service/gpu:buffer_allocations",
++        "//xla/service/gpu:cusolver_context",
+         "//xla/service/gpu:thunk",
+         "//xla/stream_executor",
++        "//xla/stream_executor/gpu:gpu_helpers_header",
+         "@com_google_absl//absl/container:flat_hash_map",
+         "@com_google_absl//absl/strings",
+         "@com_google_absl//absl/strings:str_format",
+@@ -194,6 +197,7 @@ cc_library(
+         "@com_google_absl//absl/strings:str_format",
+         "//xla/service/gpu:buffer_allocations",
+         "//xla/service/gpu:precompiled_kernels",
++        "//xla/service/gpu:cusolver_context",
+         "//xla/service/gpu:thunk",
+         "//xla:types",
+         "//xla:util",
+diff --git a/xla/service/gpu/runtime3/cholesky_thunk.cc b/xla/service/gpu/runtime3/cholesky_thunk.cc
+index b00d8ee29..805a2e1ef 100644
+--- a/xla/service/gpu/runtime3/cholesky_thunk.cc
++++ b/xla/service/gpu/runtime3/cholesky_thunk.cc
+@@ -33,7 +33,7 @@ namespace xla {
+ namespace gpu {
+ 
+ namespace {
+-
++#if !GOOGLE_SYCL
+ template <typename T>
+ Status DoPotrfBatched(const se::GpuAsmOpts& asm_opts, CholeskyParams* params,
+                       se::Stream* stream, GpuSolverContext& context) {
+@@ -61,7 +61,36 @@ Status DoPotrfBatched(const se::GpuAsmOpts& asm_opts, CholeskyParams* params,
+   return context.PotrfBatched(params->uplo, params->n, as, params->n, infos,
+                               params->batch_size);
+ }
+-
++#else // !GOOGLE_SYCL
++template <typename T>
++Status DoPotrfBatched(CholeskyParams* params, se::Stream* stream) {
++  auto gpu_stream = stream_executor::gpu::AsGpuStreamValue(stream);
++  T* a_base = static_cast<T*>(params->a_buffer.opaque());
++  T* scratch_data = static_cast<T*>(params->workspace_buffer.opaque());
++  int64_t scratchpad_size = params->workspace_buffer.size() / sizeof(T);
++
++  const int64_t stride_a = params->n * params->n;
++  auto lda = params->n;
++  try {
++    oneapi::mkl::lapack::potrf_batch(*gpu_stream, params->uplo, params->n,
++                                     a_base, lda, stride_a, params->batch_size,
++                                     scratch_data, scratchpad_size);
++  } catch (oneapi::mkl::lapack::batch_error const& be) {
++    int i = 0;
++    auto& ids = be.ids();
++    for (auto const& e : be.exceptions()) {
++      try {
++        std::rethrow_exception(e);
++      } catch (oneapi::mkl::lapack::exception& e) {
++        LOG(ERROR) << "Exception " << ids[i++]
++                   << " in a batch says: " << e.what()
++                   << " (info code: " << e.info() << ")";
++      }
++    }
++  }
++  return OkStatus();
++}
++#endif // !GOOGLE_SYCL
+ }  // namespace
+ 
+ CholeskyThunk::CholeskyThunk(ThunkInfo thunk_info,
+@@ -73,8 +102,12 @@ CholeskyThunk::CholeskyThunk(ThunkInfo thunk_info,
+                              PrimitiveType type, int64_t batch_size, int64_t n)
+     : Thunk(Kind::kCholesky, thunk_info),
+       asm_opts_(asm_opts),
++#if !GOOGLE_SYCL
+       uplo_(options.lower() ? se::blas::UpperLower::kLower
+                             : se::blas::UpperLower::kUpper),
++#else // !GOOGLE_SYCL
++      uplo_(options.lower() ? oneapi::mkl::uplo::L : oneapi::mkl::uplo::U),
++#endif // !GOOGLE_SYCL
+       a_buffer_(a_buffer),
+       workspace_buffer_(workspace_buffer),
+       info_buffer_(info_buffer),
+@@ -84,7 +117,11 @@ CholeskyThunk::CholeskyThunk(ThunkInfo thunk_info,
+ 
+ Status CholeskyThunk::ExecuteOnStream(const ExecuteParams& params) {
+   VLOG(3) << "type=" << PrimitiveType_Name(type_)
++#if !GOOGLE_SYCL
+           << " uplo=" << se::blas::UpperLowerString(uplo_)
++#else // !GOOGLE_SYCL
++          << " uplo=" << UpperLowerString(uplo_)
++#endif // !GOOGLE_SYCL
+           << " batch_size=" << batch_size_ << " n=" << n_
+           << " a=" << a_buffer_.ToString()
+           << " workspace=" << workspace_buffer_.ToString()
+@@ -103,6 +140,7 @@ Status CholeskyThunk::ExecuteOnStream(const ExecuteParams& params) {
+ 
+ Status RunCholesky(const se::GpuAsmOpts& asm_opts, PrimitiveType type,
+                    CholeskyParams* cholesky_params, se::Stream* stream) {
++#if !GOOGLE_SYCL
+   thread_local StatusOr<GpuSolverContext> context = GpuSolverContext::Create();
+   TF_RETURN_IF_ERROR(context.status());
+   TF_RETURN_IF_ERROR(context->SetStream(stream));
+@@ -123,6 +161,21 @@ Status RunCholesky(const se::GpuAsmOpts& asm_opts, PrimitiveType type,
+       return InvalidArgument("Invalid type for cholesky %s",
+                              PrimitiveType_Name(type));
+   }
++#else // !GOOGLE_SYCL
++  switch (type) {
++    case F32:
++      return DoPotrfBatched<float>(cholesky_params, stream);
++    case F64:
++      return DoPotrfBatched<double>(cholesky_params, stream);
++    case C64:
++      return DoPotrfBatched<std::complex<float>>(cholesky_params, stream);
++    case C128:
++      return DoPotrfBatched<std::complex<double>>(cholesky_params, stream);
++    default:
++      return InvalidArgument("Invalid type for cholesky %s",
++                             PrimitiveType_Name(type));
++  }
++#endif // !GOOGLE_SYCL
+ }
+ 
+ }  // namespace gpu
+diff --git a/xla/service/gpu/runtime3/cholesky_thunk.h b/xla/service/gpu/runtime3/cholesky_thunk.h
+index f226a25f7..5c3ce7b75 100644
+--- a/xla/service/gpu/runtime3/cholesky_thunk.h
++++ b/xla/service/gpu/runtime3/cholesky_thunk.h
+@@ -30,6 +30,11 @@ limitations under the License.
+ #include "xla/xla_data.pb.h"
+ #include "tsl/platform/status.h"
+ 
++#if GOOGLE_SYCL
++#include "xla/service/gpu/cusolver_context.h"
++#include "xla/stream_executor/gpu/gpu_stream.h"
++#endif
++
+ namespace xla {
+ namespace gpu {
+ 
+@@ -55,7 +60,11 @@ class CholeskyThunk : public Thunk {
+ 
+  private:
+   se::GpuAsmOpts asm_opts_;
++#if !GOOGLE_SYCL
+   se::blas::UpperLower uplo_;
++#else
++  oneapi::mkl::uplo uplo_;
++#endif
+ 
+   const BufferAllocation::Slice a_buffer_;
+   const BufferAllocation::Slice workspace_buffer_;
+@@ -69,7 +78,11 @@ class CholeskyThunk : public Thunk {
+ struct CholeskyParams {
+   int64_t n;
+   int64_t batch_size;
++#if !GOOGLE_SYCL
+   se::blas::UpperLower uplo;
++#else // !GOOGLE_SYCL
++  oneapi::mkl::uplo uplo;
++#endif // !GOOGLE_SYCL
+   se::DeviceMemoryBase a_buffer;
+   se::DeviceMemoryBase workspace_buffer;
+   se::DeviceMemoryBase info_buffer;
+diff --git a/xla/service/gpu/runtime3/custom_call_thunk.cc b/xla/service/gpu/runtime3/custom_call_thunk.cc
+index b53a258a5..d6471080a 100644
+--- a/xla/service/gpu/runtime3/custom_call_thunk.cc
++++ b/xla/service/gpu/runtime3/custom_call_thunk.cc
+@@ -34,7 +34,7 @@ limitations under the License.
+ #include "xla/stream_executor/device_memory.h"
+ #include "xla/util.h"
+ 
+-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
++#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM || GOOGLE_SYCL
+ #include "xla/stream_executor/gpu/gpu_stream.h"
+ #endif
+ 
+@@ -85,7 +85,7 @@ Status CustomCallThunk::ExecuteCustomCall(const ExecuteParams& params) {
+     }
+   }
+ 
+-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
++#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM || GOOGLE_SYCL
+   auto gpu_stream = se::gpu::AsGpuStreamValue(params.stream);
+   XlaCustomCallStatus custom_call_status;
+   call_target_(gpu_stream, buffers.data(), opaque_.data(), opaque_.size(),
+@@ -96,11 +96,11 @@ Status CustomCallThunk::ExecuteCustomCall(const ExecuteParams& params) {
+   } else {
+     return OkStatus();
+   }
+-#else   //  GOOGLE_CUDA || TENSORFLOW_USE_ROCM
++#else   //  GOOGLE_CUDA || TENSORFLOW_USE_ROCM || GOOGLE_SYCL
+   return Unavailable(
+       "Custom calls on GPU are not supported in this configuration. Please "
+       "build with --config=cuda or --config=rocm");
+-#endif  //   GOOGLE_CUDA || TENSORFLOW_USE_ROCM
++#endif  //   GOOGLE_CUDA || TENSORFLOW_USE_ROCM || GOOGLE_SYCL
+ }
+ 
+ Status CustomCallThunk::ExecuteFfiHandler(const ExecuteParams& params) {
+diff --git a/xla/service/gpu/runtime3/custom_call_thunk.h b/xla/service/gpu/runtime3/custom_call_thunk.h
+index f544485ed..44868f856 100644
+--- a/xla/service/gpu/runtime3/custom_call_thunk.h
++++ b/xla/service/gpu/runtime3/custom_call_thunk.h
+@@ -32,7 +32,7 @@ limitations under the License.
+ #include "xla/shape.h"
+ #include "xla/status.h"
+ 
+-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
++#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM || GOOGLE_SYCL
+ #include "xla/stream_executor/gpu/gpu_types.h"
+ #endif
+ 
+@@ -52,11 +52,11 @@ namespace gpu {
+ // compiler is allowed to create.
+ class CustomCallThunk : public Thunk {
+  public:
+-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
++#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM || GOOGLE_SYCL
+   using Stream = stream_executor::gpu::GpuStreamHandle;
+-#else   //  GOOGLE_CUDA || TENSORFLOW_USE_ROCM
++#else   //  GOOGLE_CUDA || TENSORFLOW_USE_ROCM || GOOGLE_SYCL
+   using Stream = void*;
+-#endif  //  GOOGLE_CUDA || TENSORFLOW_USE_ROCM
++#endif  //  GOOGLE_CUDA || TENSORFLOW_USE_ROCM || GOOGLE_SYCL
+ 
+   using CustomCallTarget = std::function<void(Stream, void**, const char*,
+                                               size_t, XlaCustomCallStatus*)>;
+diff --git a/xla/service/gpu/runtime3/fft_thunk.cc b/xla/service/gpu/runtime3/fft_thunk.cc
+index 711ae9907..37075a15f 100644
+--- a/xla/service/gpu/runtime3/fft_thunk.cc
++++ b/xla/service/gpu/runtime3/fft_thunk.cc
+@@ -65,6 +65,42 @@ std::string FftTypeToString(se::fft::Type type) {
+   }
+ }
+ 
++#if GOOGLE_SYCL
++template <typename T>
++class XLAFillCongugateSymmetry;
++
++template <typename T>
++void LaunchXLAFillConjugateSymmetry(se::Stream* stream, T* tensor_ptr,
++                                    T* tmp_tensor_ptr, int64_t stride,
++                                    int64_t tmp_stride, int64_t tensor_size) {
++  auto gpu_stream = stream_executor::gpu::AsGpuStreamValue(stream);
++  const auto num_elements = tensor_size / stride;
++  const int work_group_size =
++      (*gpu_stream)
++          .get_device()
++          .template get_info<sycl::info::device::max_work_group_size>();
++  const auto num_work_groups =
++      (num_elements + work_group_size - 1) / work_group_size;
++
++  gpu_stream->submit([&](sycl::handler& cgh) {
++    cgh.parallel_for<XLAFillCongugateSymmetry<T>>(
++        sycl::nd_range<1>(sycl::range<1>(num_work_groups * work_group_size),
++                          sycl::range<1>(work_group_size)),
++        [=](sycl::nd_item<1> item) {
++          auto idx = item.get_global_linear_id();
++          if (idx >= num_elements) {
++            return;
++          }
++
++          T* tensor_begin = tensor_ptr + idx * stride;
++          T* tmp_tensor_begin = tmp_tensor_ptr + idx * tmp_stride;
++          for (int i = 0; i < stride; ++i) {
++            tensor_begin[i] = tmp_tensor_begin[i];
++          }
++        });
++  });
++}
++#endif // GOOGLE_SYCL
+ }  // namespace
+ 
+ FftThunk::FftThunk(ThunkInfo thunk_info, FftType fft_type,
+@@ -82,6 +118,283 @@ FftThunk::FftThunk(ThunkInfo thunk_info, FftType fft_type,
+       input_shape_(input_shape),
+       output_shape_(output_shape) {}
+ 
++#if GOOGLE_SYCL
++Status FftThunk::ExecuteOnStream(const ExecuteParams& params) {
++  se::Stream* stream = params.stream;
++  auto& buffer_allocations = *params.buffer_allocations;
++
++  VLOG(3) << "FFT type: " << FftTypeToString(fft_type_);
++  VLOG(3) << "Input shape: " << ShapeUtil::HumanStringWithLayout(input_shape_);
++  VLOG(3) << "Output shape: "
++          << ShapeUtil::HumanStringWithLayout(output_shape_);
++
++  se::OwningScratchAllocator<> scratch_allocator(
++      buffer_allocations.device_ordinal(),
++      buffer_allocations.memory_allocator());
++
++  switch (fft_type_) {
++    case se::fft::Type::kC2CForward:
++    case se::fft::Type::kC2CInverse: {
++      se::DeviceMemory<complex64> input_data(
++          buffer_allocations.GetDeviceAddress(input_buffer_));
++      se::DeviceMemory<complex64> output_data(
++          buffer_allocations.GetDeviceAddress(output_buffer_));
++      float* in = reinterpret_cast<float*>(
++          stream_executor::gpu::GpuMemoryMutable(&input_data));
++      float* out = reinterpret_cast<float*>(
++          stream_executor::gpu::GpuMemoryMutable(&output_data));
++      DoFFTInternal<oneapi::mkl::dft::precision::SINGLE,
++                    oneapi::mkl::dft::domain::COMPLEX, float>(
++          stream, in, out, scratch_allocator);
++      break;
++    }
++    case se::fft::Type::kZ2ZForward:
++    case se::fft::Type::kZ2ZInverse: {
++      se::DeviceMemory<complex128> input_data(
++          buffer_allocations.GetDeviceAddress(input_buffer_));
++      se::DeviceMemory<complex128> output_data(
++          buffer_allocations.GetDeviceAddress(output_buffer_));
++      double* in = reinterpret_cast<double*>(
++          stream_executor::gpu::GpuMemoryMutable(&input_data));
++      double* out = reinterpret_cast<double*>(
++          stream_executor::gpu::GpuMemoryMutable(&output_data));
++      DoFFTInternal<oneapi::mkl::dft::precision::DOUBLE,
++                    oneapi::mkl::dft::domain::COMPLEX, double>(
++          stream, in, out, scratch_allocator);
++      break;
++    }
++    case se::fft::Type::kR2C: {
++      se::DeviceMemory<float> input_data(
++          buffer_allocations.GetDeviceAddress(input_buffer_));
++      se::DeviceMemory<complex64> output_data(
++          buffer_allocations.GetDeviceAddress(output_buffer_));
++      float* in = reinterpret_cast<float*>(
++          stream_executor::gpu::GpuMemoryMutable(&input_data));
++      float* out = reinterpret_cast<float*>(
++          stream_executor::gpu::GpuMemoryMutable(&output_data));
++      DoFFTInternal<oneapi::mkl::dft::precision::SINGLE,
++                    oneapi::mkl::dft::domain::REAL, float>(stream, in, out,
++                                                           scratch_allocator);
++      break;
++    }
++    case se::fft::Type::kC2R: {
++      se::DeviceMemory<complex64> input_data(
++          buffer_allocations.GetDeviceAddress(input_buffer_));
++      se::DeviceMemory<float> output_data(
++          buffer_allocations.GetDeviceAddress(output_buffer_));
++      float* in = reinterpret_cast<float*>(
++          stream_executor::gpu::GpuMemoryMutable(&input_data));
++      float* out = reinterpret_cast<float*>(
++          stream_executor::gpu::GpuMemoryMutable(&output_data));
++      DoFFTInternal<oneapi::mkl::dft::precision::SINGLE,
++                    oneapi::mkl::dft::domain::REAL, float>(stream, in, out,
++                                                           scratch_allocator);
++      break;
++    }
++    case se::fft::Type::kD2Z: {
++      se::DeviceMemory<double> input_data(
++          buffer_allocations.GetDeviceAddress(input_buffer_));
++      se::DeviceMemory<complex128> output_data(
++          buffer_allocations.GetDeviceAddress(output_buffer_));
++      double* in = reinterpret_cast<double*>(
++          stream_executor::gpu::GpuMemoryMutable(&input_data));
++      double* out = reinterpret_cast<double*>(
++          stream_executor::gpu::GpuMemoryMutable(&output_data));
++      DoFFTInternal<oneapi::mkl::dft::precision::DOUBLE,
++                    oneapi::mkl::dft::domain::REAL, double>(stream, in, out,
++                                                            scratch_allocator);
++      break;
++    }
++    case se::fft::Type::kZ2D: {
++      se::DeviceMemory<complex128> input_data(
++          buffer_allocations.GetDeviceAddress(input_buffer_));
++      se::DeviceMemory<double> output_data(
++          buffer_allocations.GetDeviceAddress(output_buffer_));
++      double* in = reinterpret_cast<double*>(
++          stream_executor::gpu::GpuMemoryMutable(&input_data));
++      double* out = reinterpret_cast<double*>(
++          stream_executor::gpu::GpuMemoryMutable(&output_data));
++      DoFFTInternal<oneapi::mkl::dft::precision::DOUBLE,
++                    oneapi::mkl::dft::domain::REAL, double>(stream, in, out,
++                                                            scratch_allocator);
++      break;
++    }
++    default:
++      LOG(FATAL) << "unsupported fft type";
++  }
++  return OkStatus();
++}
++
++template <oneapi::mkl::dft::precision P, oneapi::mkl::dft::domain D, typename T>
++Status FftThunk::DoFFTInternal(se::Stream* stream, T* in_buffer, T* out_buffer,
++                               se::ScratchAllocator& allocator) {
++  const int64_t fft_rank = fft_length_.size();
++  CHECK_LE(fft_rank, 3);
++
++  int64_t fft_length[3];
++  int64_t input_embed[3];
++  const uint64_t input_stride = 1;
++  uint64_t input_distance = 1;
++  int64_t output_embed[3];
++  const uint64_t output_stride = 1;
++  uint64_t output_distance = 1;
++
++  for (int i = 0; i < fft_rank; ++i) {
++    auto dim_offset = input_shape_.dimensions_size() - fft_rank + i;
++    fft_length[i] = fft_length_[i];
++    input_embed[i] = input_shape_.dimensions(dim_offset);
++    input_distance *= input_shape_.dimensions(dim_offset);
++    output_embed[i] = output_shape_.dimensions(dim_offset);
++    output_distance *= output_shape_.dimensions(dim_offset);
++  }
++
++  int batch_size = 1;
++  for (int i = 0; i < input_shape_.dimensions_size() - fft_rank; ++i) {
++    batch_size *= input_shape_.dimensions(i);
++  }
++  bool is_input_complex = false;
++  bool is_output_complex = false;
++  bool is_forward = false;
++  bool is_real = false;
++
++  switch (fft_type_) {
++    case se::fft::Type::kC2CForward:
++    case se::fft::Type::kZ2ZForward: {
++      is_forward = true;
++      is_real = false;
++      break;
++    }
++    case se::fft::Type::kR2C:
++    case se::fft::Type::kD2Z: {
++      is_forward = true;
++      is_real = true;
++      break;
++    }
++    case se::fft::Type::kC2CInverse:
++    case se::fft::Type::kZ2ZInverse: {
++      is_forward = false;
++      is_real = false;
++      break;
++    }
++    case se::fft::Type::kC2R:
++    case se::fft::Type::kZ2D: {
++      is_forward = false;
++      is_real = true;
++      break;
++    }
++    default:
++      LOG(FATAL) << "unsupported fft type";
++  }
++
++  double scale_factor;
++  std::vector<std::int64_t> dims_vec(fft_rank, 0);
++  switch (fft_type_) {
++    case se::fft::Type::kC2CForward:
++    case se::fft::Type::kZ2ZForward:
++    case se::fft::Type::kR2C:
++    case se::fft::Type::kD2Z: {
++      scale_factor = 1.0 / input_distance;
++      for (int i = 0; i < fft_rank; ++i) {
++        dims_vec[i] = input_embed[i];
++      }
++      break;
++    }
++    case se::fft::Type::kC2CInverse:
++    case se::fft::Type::kZ2ZInverse:
++    case se::fft::Type::kC2R:
++    case se::fft::Type::kZ2D: {
++      scale_factor = 1.0 / output_distance;
++      for (int i = 0; i < fft_rank; ++i) {
++        dims_vec[i] = output_embed[i];
++      }
++      break;
++    }
++    default:
++      LOG(FATAL) << "unsupported fft type";
++  }
++
++  oneapi::mkl::dft::descriptor<P, D> desc(dims_vec);
++  desc.set_value(oneapi::mkl::dft::config_param::PLACEMENT, DFTI_NOT_INPLACE);
++  desc.set_value(oneapi::mkl::dft::config_param::NUMBER_OF_TRANSFORMS,
++                 batch_size);
++
++  if (is_real) {
++    std::vector<int64_t> mkl_istrides(1 + fft_rank, 0);
++    std::vector<int64_t> mkl_ostrides(1 + fft_rank, 0);
++    desc.set_value(oneapi::mkl::dft::config_param::CONJUGATE_EVEN_STORAGE,
++                   DFTI_COMPLEX_COMPLEX);
++
++    int64_t tmp_istride = 1, tmp_ostride = 1;
++    for (int64_t i = fft_rank; i > 0; --i) {
++      if (is_input_complex && !is_output_complex) {
++        if (i == (fft_rank - 1)) {
++          tmp_istride = input_embed[i];
++          tmp_ostride = (output_embed[i] / 2 + 1) * 2;
++        }
++      }
++      mkl_istrides[i] = tmp_istride;
++      mkl_ostrides[i] = tmp_ostride;
++      tmp_istride *= input_embed[i - 1];
++      tmp_ostride *= output_embed[i - 1];
++    }
++    desc.set_value(oneapi::mkl::dft::config_param::INPUT_STRIDES,
++                   mkl_istrides.data());
++    desc.set_value(oneapi::mkl::dft::config_param::OUTPUT_STRIDES,
++                   mkl_ostrides.data());
++    if (is_forward) {
++      desc.set_value(oneapi::mkl::dft::config_param::FWD_DISTANCE, tmp_istride);
++      desc.set_value(oneapi::mkl::dft::config_param::BWD_DISTANCE, tmp_ostride);
++    } else {
++      desc.set_value(oneapi::mkl::dft::config_param::FWD_DISTANCE, tmp_ostride);
++      desc.set_value(oneapi::mkl::dft::config_param::BWD_DISTANCE, tmp_istride);
++      desc.set_value(oneapi::mkl::dft::config_param::BACKWARD_SCALE,
++                     static_cast<T>(scale_factor));
++    }
++  } else {
++    desc.set_value(oneapi::mkl::dft::config_param::FWD_DISTANCE,
++                   input_distance);
++    desc.set_value(oneapi::mkl::dft::config_param::BWD_DISTANCE,
++                   output_distance);
++    desc.set_value(oneapi::mkl::dft::config_param::BACKWARD_SCALE,
++                   static_cast<T>(scale_factor));
++  }
++
++  desc.commit(*stream_executor::gpu::AsGpuStreamValue(stream));
++
++  sycl::event fft_event;
++  if (is_forward) {
++    fft_event = oneapi::mkl::dft::compute_forward(desc, in_buffer, out_buffer);
++  } else {
++    if (is_input_complex && !is_output_complex && fft_rank > 1) {
++      int workspace_size = 1;
++      for (int i = 0; i < output_shape_.dimensions_size() - 1; ++i) {
++        workspace_size *= output_shape_.dimensions(i);
++      }
++      int out_size = workspace_size * output_shape_.dimensions(
++                                          output_shape_.dimensions_size() - 1);
++      workspace_size =
++          workspace_size * (output_embed[fft_rank - 1] / 2 + 1) * 2;
++
++      TF_ASSIGN_OR_RETURN(stream_executor::DeviceMemory<tsl::uint8> workspace_bytes,
++                          allocator.AllocateBytes(workspace_size * sizeof(T)));
++      void* workspace = static_cast<void*>(workspace_bytes.opaque());
++      T* tmp_out_buffer = reinterpret_cast<T*>(workspace);
++
++      fft_event =
++          oneapi::mkl::dft::compute_backward(desc, in_buffer, tmp_out_buffer);
++      LaunchXLAFillConjugateSymmetry<T>(
++          stream, out_buffer, tmp_out_buffer,
++          output_shape_.dimensions(output_shape_.dimensions_size() - 1),
++          (output_embed[fft_rank - 1] / 2 + 1) * 2, out_size);
++    } else {
++      fft_event =
++          oneapi::mkl::dft::compute_backward(desc, in_buffer, out_buffer);
++    }
++  }
++  fft_event.wait();
++  return OkStatus();
++}
++#else // GOOGLE_SYCL
+ Status FftThunk::ExecuteOnStream(const ExecuteParams& params) {
+   auto& buffer_allocations = *params.buffer_allocations;
+ 
+@@ -242,6 +555,6 @@ Status RunFft(se::DeviceMemoryBase input, const Shape& input_shape,
+   return InternalError("Unable to launch fft with type %s",
+                        FftTypeToString(fft_type));
+ }
+-
++#endif // GOOGLE_SYCL
+ }  // namespace gpu
+ }  // namespace xla
+diff --git a/xla/service/gpu/runtime3/fft_thunk.h b/xla/service/gpu/runtime3/fft_thunk.h
+index 4e0de39e1..14ae7fdf5 100644
+--- a/xla/service/gpu/runtime3/fft_thunk.h
++++ b/xla/service/gpu/runtime3/fft_thunk.h
+@@ -28,6 +28,12 @@ limitations under the License.
+ #include "xla/xla_data.pb.h"
+ #include "tsl/platform/status.h"
+ 
++#if GOOGLE_SYCL
++#include "xla/service/gpu/cusolver_context.h"
++#include "xla/stream_executor/gpu/gpu_stream.h"
++#include "xla/stream_executor/gpu/gpu_helpers.h"
++#endif
++
+ namespace xla {
+ namespace gpu {
+ 
+@@ -76,6 +82,13 @@ class FftThunk : public Thunk {
+   Status ExecuteOnStream(const ExecuteParams& params) override;
+ 
+  private:
++#if GOOGLE_SYCL
++  template <oneapi::mkl::dft::precision P, oneapi::mkl::dft::domain D,
++            typename T>
++  Status DoFFTInternal(se::Stream* stream, T* in_buffer, T* out_buffer,
++                       se::ScratchAllocator& allocator);
++#endif  // GOOGLE_SYCL
++
+   const se::fft::Type fft_type_;
+   const std::vector<int64_t> fft_length_;
+ 
+diff --git a/xla/service/gpu/runtime3/triangular_solve_thunk.cc b/xla/service/gpu/runtime3/triangular_solve_thunk.cc
+index 36794b866..c8c0204f7 100644
+--- a/xla/service/gpu/runtime3/triangular_solve_thunk.cc
++++ b/xla/service/gpu/runtime3/triangular_solve_thunk.cc
+@@ -38,12 +38,19 @@ TriangularSolveThunk::TriangularSolveThunk(
+     int64_t a_batch_stride, int64_t b_batch_stride)
+     : Thunk(Kind::kTriangularSolve, thunk_info),
+       asm_opts_(asm_opts),
++#if !GOOGLE_SYCL
+       uplo_(options.lower() ? se::blas::UpperLower::kLower
+                             : se::blas::UpperLower::kUpper),
+       side_(options.left_side() ? se::blas::Side::kLeft
+                                 : se::blas::Side::kRight),
+       unit_diagonal_(options.unit_diagonal() ? se::blas::Diagonal::kUnit
+                                              : se::blas::Diagonal::kNonUnit),
++#else
++      uplo_(options.lower() ? oneapi::mkl::uplo::L : oneapi::mkl::uplo::U),
++      side_(options.left_side() ? oneapi::mkl::side::L : oneapi::mkl::side::R),
++      unit_diagonal_(options.unit_diagonal() ? oneapi::mkl::diag::U
++                                             : oneapi::mkl::diag::N),
++#endif
+       a_buffer_(a_buffer),
+       b_buffer_(b_buffer),
+       temp_buffer_(temp_buffer),
+@@ -55,6 +62,7 @@ TriangularSolveThunk::TriangularSolveThunk(
+       b_batch_stride_(b_batch_stride) {
+   transpose_a_ = [&] {
+     switch (options.transpose_a()) {
++#if !GOOGLE_SYCL
+       case TriangularSolveOptions::NO_TRANSPOSE:
+         return se::blas::Transpose::kNoTranspose;
+       case TriangularSolveOptions::TRANSPOSE:
+@@ -65,6 +73,18 @@ TriangularSolveThunk::TriangularSolveThunk(
+         LOG(ERROR) << "Invalid triangular solve transpose value "
+                    << options.transpose_a();
+         return se::blas::Transpose::kNoTranspose;
++#else
++      case TriangularSolveOptions::NO_TRANSPOSE:
++        return oneapi::mkl::transpose::N;
++      case TriangularSolveOptions::TRANSPOSE:
++        return oneapi::mkl::transpose::T;
++      case TriangularSolveOptions::ADJOINT:
++        return oneapi::mkl::transpose::C;
++      default:
++        LOG(ERROR) << "Invalid triangular solve transpose value "
++                   << options.transpose_a();
++        return oneapi::mkl::transpose::N;
++#endif
+     }
+   }();
+ }
+@@ -78,7 +98,7 @@ Status TriangularSolveThunk::ExecuteOnStream(const ExecuteParams& params) {
+                             transpose_a_, type_, batch_size_, m_, n_,
+                             a_batch_stride_, b_batch_stride_, params.stream);
+ }
+-
++#if !GOOGLE_SYCL
+ Status RunTriangularSolve(se::DeviceMemoryBase a_data,
+                           se::DeviceMemoryBase b_data,
+                           se::DeviceMemoryBase temp_data,
+@@ -218,6 +238,101 @@ Status RunTriangularSolve(se::DeviceMemoryBase a_data,
+   }
+   return OkStatus();
+ }
++#else // !GOOGLE_SYCL
++Status RunTriangularSolve(se::DeviceMemoryBase a_data,
++                          se::DeviceMemoryBase b_data,
++                          se::DeviceMemoryBase temp_data,
++                          se::GpuAsmOpts asm_opts, oneapi::mkl::uplo uplo,
++                          oneapi::mkl::side side, oneapi::mkl::diag unit_diagonal,
++                          oneapi::mkl::transpose transpose_a, PrimitiveType type,
++                          int64_t batch_size, int64_t m, int64_t n,
++                          int64_t a_batch_stride, int64_t b_batch_stride,
++                          se::Stream* stream) {
++  VLOG(3) << "uplo=" << UpperLowerString(uplo) << " side=" << SideString(side)
++          << " diagonal=" << DiagonalString(unit_diagonal)
++          << " batch_size=" << batch_size << " m=" << m << " n=" << n
++          << " a_batch_stride=" << a_batch_stride
++          << " b_batch_stride=" << b_batch_stride;
++
++  const int lda = side == oneapi::mkl::side::L ? m : n;
++  const int ldb = m;
++  const int stride_a = lda * lda;
++  const int stride_b = m * n;
++
++  auto gpu_stream = stream_executor::gpu::AsGpuStreamValue(stream);
++  if (batch_size == 1) {
++    switch (type) {
++      case F32: {
++        oneapi::mkl::blas::trsm(*gpu_stream, side, uplo, transpose_a,
++                                unit_diagonal, m, n, 1.0f,
++                                static_cast<float*>(a_data.opaque()), lda,
++                                static_cast<float*>(b_data.opaque()), ldb);
++        break;
++      }
++      case F64: {
++        oneapi::mkl::blas::trsm(*gpu_stream, side, uplo, transpose_a,
++                                unit_diagonal, m, n, 1.0f,
++                                static_cast<double*>(a_data.opaque()), lda,
++                                static_cast<double*>(b_data.opaque()), ldb);
++        break;
++      }
++      case C64: {
++        oneapi::mkl::blas::trsm(
++            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
++            1.0f, static_cast<std::complex<float>*>(a_data.opaque()), lda,
++            static_cast<std::complex<float>*>(b_data.opaque()), ldb);
++        break;
++      }
++      case C128: {
++        oneapi::mkl::blas::trsm(
++            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
++            1.0f, static_cast<std::complex<double>*>(a_data.opaque()), lda,
++            static_cast<std::complex<double>*>(b_data.opaque()), ldb);
++        break;
++      }
++      default:
++        return InvalidArgument("Invalid type for triangular solve %d", type);
++    }
++  } else {
++    switch (type) {
++      case F32: {
++        oneapi::mkl::blas::trsm_batch(
++            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
++            1.0f, static_cast<float*>(a_data.opaque()), lda, stride_a,
++            static_cast<float*>(b_data.opaque()), ldb, stride_b, batch_size);
++        break;
++      }
++      case F64: {
++        oneapi::mkl::blas::trsm_batch(
++            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
++            1.0f, static_cast<double*>(a_data.opaque()), lda, stride_a,
++            static_cast<double*>(b_data.opaque()), ldb, stride_b, batch_size);
++        break;
++      }
++      case C64: {
++        oneapi::mkl::blas::trsm_batch(
++            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
++            1.0f, static_cast<std::complex<float>*>(a_data.opaque()), lda,
++            stride_a, static_cast<std::complex<float>*>(b_data.opaque()), ldb,
++            stride_b, batch_size);
++        break;
++      }
++      case C128: {
++        oneapi::mkl::blas::trsm_batch(
++            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
++            1.0f, static_cast<std::complex<double>*>(a_data.opaque()), lda,
++            stride_a, static_cast<std::complex<double>*>(b_data.opaque()), ldb,
++            stride_b, batch_size);
++        break;
++      }
++      default:
++        return InvalidArgument("Invalid type for triangular solve %d", type);
++    }
++  }
++
++  return OkStatus();
++}
++#endif // !GOOGLE_SYCL
+ 
+ }  // namespace gpu
+ }  // namespace xla
+diff --git a/xla/service/gpu/runtime3/triangular_solve_thunk.h b/xla/service/gpu/runtime3/triangular_solve_thunk.h
+index 8f582db16..417550119 100644
+--- a/xla/service/gpu/runtime3/triangular_solve_thunk.h
++++ b/xla/service/gpu/runtime3/triangular_solve_thunk.h
+@@ -29,6 +29,11 @@ limitations under the License.
+ #include "xla/xla_data.pb.h"
+ #include "tsl/platform/status.h"
+ 
++#if GOOGLE_SYCL
++#include "xla/service/gpu/cusolver_context.h"
++#include "xla/stream_executor/gpu/gpu_stream.h"
++#endif
++
+ namespace xla {
+ namespace gpu {
+ 
+@@ -55,10 +60,17 @@ class TriangularSolveThunk : public Thunk {
+ 
+  private:
+   se::GpuAsmOpts asm_opts_;
++#if !GOOGLE_SYCL
+   const se::blas::UpperLower uplo_;
+   const se::blas::Side side_;
+   const se::blas::Diagonal unit_diagonal_;
+   se::blas::Transpose transpose_a_;
++#else
++  const oneapi::mkl::uplo uplo_;
++  const oneapi::mkl::side side_;
++  const oneapi::mkl::diag unit_diagonal_;
++  oneapi::mkl::transpose transpose_a_;
++#endif
+ 
+   const BufferAllocation::Slice a_buffer_;
+   const BufferAllocation::Slice b_buffer_;
+@@ -71,7 +83,7 @@ class TriangularSolveThunk : public Thunk {
+   const int64_t a_batch_stride_;
+   const int64_t b_batch_stride_;
+ };
+-
++#if !GOOGLE_SYCL
+ Status RunTriangularSolve(se::DeviceMemoryBase a_data,
+                           se::DeviceMemoryBase b_data,
+                           se::DeviceMemoryBase temp_data,
+@@ -81,7 +93,17 @@ Status RunTriangularSolve(se::DeviceMemoryBase a_data,
+                           int64_t batch_size, int64_t m, int64_t n,
+                           int64_t a_batch_stride, int64_t b_batch_stride,
+                           se::Stream* stream);
+-
++#else
++Status RunTriangularSolve(se::DeviceMemoryBase a_data,
++                          se::DeviceMemoryBase b_data,
++                          se::DeviceMemoryBase temp_data,
++                          se::GpuAsmOpts asm_opts, oneapi::mkl::uplo uplo,
++                          oneapi::mkl::side side, oneapi::mkl::diag unit_diagonal,
++                          oneapi::mkl::transpose transpose_a, PrimitiveType type,
++                          int64_t batch_size, int64_t m, int64_t n,
++                          int64_t a_batch_stride, int64_t b_batch_stride,
++                          se::Stream* stream);
++#endif
+ }  // namespace gpu
+ }  // namespace xla
+ 
 diff --git a/xla/service/gpu/stream_executor_util.cc b/xla/service/gpu/stream_executor_util.cc
-index fb042054f..04121065f 100644
+index 7904e6d5e..1d8305c04 100644
 --- a/xla/service/gpu/stream_executor_util.cc
 +++ b/xla/service/gpu/stream_executor_util.cc
-@@ -140,6 +140,13 @@ StreamExecutorConvLayoutsToXlaLayouts(const ConvolutionDimensionNumbers& dnums,
+@@ -139,6 +139,13 @@ StreamExecutorConvLayoutsToXlaLayouts(const ConvolutionDimensionNumbers& dnums,
                             dnums.kernel_spatial_dimensions().end());
        filter_layout.push_back(dnums.kernel_input_feature_dimension());
        break;
@@ -784,7 +2723,7 @@ index fb042054f..04121065f 100644
      default:
        return InternalError("Invalid filter layout %s for conv with dnums %s,",
                             FilterLayoutString(filter),
-@@ -177,7 +184,7 @@ XlaConvShapesToStreamExecutorLayouts(const ConvolutionDimensionNumbers& dnums,
+@@ -176,7 +183,7 @@ XlaConvShapesToStreamExecutorLayouts(const ConvolutionDimensionNumbers& dnums,
    Layout nhwc_input, nhwc_filter, nhwc_output;
    std::tie(nhwc_input, nhwc_filter, nhwc_output) =
        StreamExecutorConvLayoutsToXlaLayouts(dnums, DataLayout::kBatchYXDepth,
@@ -793,7 +2732,7 @@ index fb042054f..04121065f 100644
                                              DataLayout::kBatchYXDepth)
            .value();
  
-@@ -226,7 +233,7 @@ XlaConvShapesToStreamExecutorLayouts(const ConvolutionDimensionNumbers& dnums,
+@@ -225,7 +232,7 @@ XlaConvShapesToStreamExecutorLayouts(const ConvolutionDimensionNumbers& dnums,
            ConvolutionDimensionNumbersToString(dnums), vect_size);
      }
    } else if (LayoutUtil::Equal(filter.layout(), nhwc_filter)) {
@@ -802,7 +2741,7 @@ index fb042054f..04121065f 100644
    } else {
      return InternalError(
          "Invalid filter layout %s for conv with dnums %s, expected one of (%s, "
-@@ -329,7 +336,8 @@ StatusOr<std::unique_ptr<se::KernelBase>> CreateKernel(
+@@ -328,7 +335,8 @@ StatusOr<std::unique_ptr<se::KernelBase>> CreateKernel(
  
    if (!cubin_data.empty()) {
      loader_spec.AddCudaCubinInMemory(
@@ -812,19 +2751,6 @@ index fb042054f..04121065f 100644
    }
  
    auto kernel_base = std::make_unique<se::KernelBase>(stream_exec);
-diff --git a/xla/service/gpu/stream_executor_util.h b/xla/service/gpu/stream_executor_util.h
-index 4ba827110..0c2167edd 100644
---- a/xla/service/gpu/stream_executor_util.h
-+++ b/xla/service/gpu/stream_executor_util.h
-@@ -106,6 +106,8 @@ StatusOr<se::dnn::FusedMHAKind> GetDNNFusedMHAKindFromCudnnfMHAKind(
-     CudnnfMHAKind kind);
- 
- StatusOr<se::dnn::DataType> GetDNNDataTypeFromPrimitiveType(PrimitiveType type);
-+StatusOr<se::dnn::FusedMHAKind> GetDNNFusedMHAKindFromCudnnfMHAKind(
-+    CudnnfMHAKind kind);
- 
- // Returns result with the smallest time which has not failed.
- // If deterministic output is requested, returns first (not failing) result.
 diff --git a/xla/service/gpu/target_constants.h b/xla/service/gpu/target_constants.h
 index 92f31a6c1..ff12c19d9 100644
 --- a/xla/service/gpu/target_constants.h
@@ -859,7 +2785,7 @@ index 92f31a6c1..ff12c19d9 100644
  }  // namespace xla
  
 diff --git a/xla/service/gpu/target_util.cc b/xla/service/gpu/target_util.cc
-index 97ca63888..d7fd1fb11 100644
+index 12b12b3f1..0be1b1432 100644
 --- a/xla/service/gpu/target_util.cc
 +++ b/xla/service/gpu/target_util.cc
 @@ -23,12 +23,12 @@ limitations under the License.
@@ -976,7 +2902,7 @@ index 97ca63888..d7fd1fb11 100644
 +                return EmitDeviceFunctionCall(
 +                    "__builtin_spirv_OpControlBarrier_i32_i32_i32",
 +                    {b_->getInt32(2), b_->getInt32(2), b_->getInt32(272)},
-+                    {U32, U32, U32}, VOID,
++                    {U32, U32, U32}, U32,
 +                    llvm::AttrBuilder(b_->getContext())
 +                        .addAttribute(llvm::Attribute::Convergent),
 +                    b_);
@@ -1028,7 +2954,7 @@ index 97ca63888..d7fd1fb11 100644
 +                return EmitDeviceFunctionCall(
 +                    "__builtin_spirv_OpControlBarrier_i32_i32_i32",
 +                    {b_->getInt32(2), b_->getInt32(2), b_->getInt32(272)},
-+                    {U32, U32, U32}, VOID,
++                    {U32, U32, U32}, U32,
 +                    llvm::AttrBuilder(b_->getContext())
 +                        .addAttribute(llvm::Attribute::Convergent),
 +                    b_);
@@ -1044,7 +2970,7 @@ index 97ca63888..d7fd1fb11 100644
  };
  
  // Gets the device function name on different platforms (NVPTX, AMDGPU)
-@@ -122,55 +202,55 @@ struct TargetDeviceFunction GetDeviceFunctionRoot(
+@@ -122,49 +202,49 @@ struct TargetDeviceFunction GetDeviceFunctionRoot(
      TargetDeviceFunctionID func_id) {
    switch (func_id) {
      case TargetDeviceFunctionID::kAtan2: {
@@ -1054,10 +2980,6 @@ index 97ca63888..d7fd1fb11 100644
      case TargetDeviceFunctionID::kCos: {
 -      return {"__nv_cos", "__ocml_cos"};
 +      return {"__nv_cos", "__ocml_cos", "__builtin_spirv_OpenCL_cos"};
-     }
-     case TargetDeviceFunctionID::kErfcinv: {
--      return {"__nv_erfcinv", "__ocml_erfcinv"};
-+      return {"__nv_erfcinv", "__ocml_erfcinv", "__imf_erfcinv"};
      }
      case TargetDeviceFunctionID::kExp: {
 -      return {"__nv_exp", "__ocml_exp"};
@@ -1087,10 +3009,6 @@ index 97ca63888..d7fd1fb11 100644
 -      return {"__nv_pow", "__ocml_pow"};
 +      return {"__nv_pow", "__ocml_pow", "__builtin_spirv_OpenCL_pow"};
      }
-     case TargetDeviceFunctionID::kRound: {
--      return {"__nv_round", "__ocml_round"};
-+      return {"__nv_round", "__ocml_round", "__builtin_spirv_OpenCL_round"};
-     }
      case TargetDeviceFunctionID::kRsqrt: {
 -      return {"__nv_rsqrt", "__ocml_rsqrt"};
 +      return {"__nv_rsqrt", "__ocml_rsqrt", "__builtin_spirv_OpenCL_rsqrt"};
@@ -1117,7 +3035,7 @@ index 97ca63888..d7fd1fb11 100644
      }
    }
  }
-@@ -235,6 +315,28 @@ std::string ObtainDeviceFunctionName(TargetDeviceFunctionID func_id,
+@@ -231,6 +311,28 @@ std::string ObtainDeviceFunctionName(TargetDeviceFunctionID func_id,
      } else {
        LOG(FATAL) << "Unexpected type while getting device function name.";
      }
@@ -1146,7 +3064,7 @@ index 97ca63888..d7fd1fb11 100644
    } else {
      LOG(FATAL) << "Invalid triple " << target_triple.str();
    }
-@@ -247,6 +349,7 @@ llvm::CallInst* EmitDeviceFunctionCall(
+@@ -243,6 +345,7 @@ llvm::CallInst* EmitDeviceFunctionCall(
      absl::string_view name) {
    std::vector<llvm::Type*> ir_input_types;
    llvm::Module* module = b->GetInsertBlock()->getModule();
@@ -1154,7 +3072,7 @@ index 97ca63888..d7fd1fb11 100644
    for (PrimitiveType input_type : input_types) {
      ir_input_types.push_back(
          llvm_ir::PrimitiveTypeToIrType(input_type, module));
-@@ -264,6 +367,9 @@ llvm::CallInst* EmitDeviceFunctionCall(
+@@ -260,6 +363,9 @@ llvm::CallInst* EmitDeviceFunctionCall(
            .getCallee());
  
    callee->addFnAttrs(attributes);
@@ -1164,7 +3082,7 @@ index 97ca63888..d7fd1fb11 100644
  
    return b->CreateCall(callee, llvm_ir::AsArrayRef(operands), name.data());
  }
-@@ -289,6 +395,18 @@ llvm::CallInst* EmitCallToTargetIntrinsic(
+@@ -285,6 +391,18 @@ llvm::CallInst* EmitCallToTargetIntrinsic(
                &gpu_intrinsic_id.amdgpu_intrinsic_or_function);
        return (*builder_func)(b);
      }
@@ -1183,7 +3101,7 @@ index 97ca63888..d7fd1fb11 100644
    } else {
      LOG(FATAL) << "Invalid triple " << target_triple.str();
    }
-@@ -316,6 +434,8 @@ void AnnotateFunctionAsGpuKernel(llvm::Module* module, llvm::Function* func,
+@@ -312,6 +430,8 @@ void AnnotateFunctionAsGpuKernel(llvm::Module* module, llvm::Function* func,
      // Attach information so AMDGPU can recognize function as a AMDGPU kernel.
      func->setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
      func->addFnAttr("amdgpu-flat-work-group-size", "1, 1024");
@@ -1192,226 +3110,6 @@ index 97ca63888..d7fd1fb11 100644
    } else {
      LOG(FATAL) << "Invalid triple " << target_triple.str();
    }
-diff --git a/xla/service/gpu/thunk.cc b/xla/service/gpu/thunk.cc
-index e94af57c6..6ba4429b2 100644
---- a/xla/service/gpu/thunk.cc
-+++ b/xla/service/gpu/thunk.cc
-@@ -75,6 +75,7 @@ Thunk::ExecuteParams::ExecuteParams(
-     CASE(kTriangularSolve);
-     CASE(kWhile);
-     CASE(kFusedMHA);
-+    CASE(kFusedQKV);
-   }
- }
- 
-diff --git a/xla/service/gpu/thunk.h b/xla/service/gpu/thunk.h
-index 25803cf7d..c24f8158d 100644
---- a/xla/service/gpu/thunk.h
-+++ b/xla/service/gpu/thunk.h
-@@ -84,7 +84,8 @@ class Thunk {
-     kSequential,
-     kTriangularSolve,
-     kWhile,
--    kFusedMHA
-+    kFusedMHA,
-+    kFusedQKV
-   };
- 
-   struct ThunkInfo {
-diff --git a/xla/service/layout_normalization.cc b/xla/service/layout_normalization.cc
-index 59475870b..b62196e2c 100644
---- a/xla/service/layout_normalization.cc
-+++ b/xla/service/layout_normalization.cc
-@@ -59,19 +59,18 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-   // To handle a constant, just give the literal data a new layout.
-   Status HandleConstant(HloInstruction* hlo) override {
-     Literal& literal = *Cast<HloConstantInstruction>(hlo)->mutable_literal();
--    const Shape& shape = hlo->shape();
-     if (literal.shape().IsTuple()) {
-       // TODO(cheshire): Tuple constants.
-       return OkStatus();
-     }
- 
--    Shape normalized_shape = Normalize(hlo->shape());
-+    const Shape& shape = hlo->shape();
-+    Shape normalized_shape = Normalize(shape);
-     *literal.mutable_shape_do_not_use() = normalized_shape;
--
--    HloInstruction* normalized = hlo->parent()->AddInstruction(
--        HloInstruction::CreateConstant(std::move(literal)), &hlo->metadata());
--    HloInstruction* bc_to_orig = MakeBitcastHlo(normalized, shape);
--    TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-+    HloInstruction* bc_to_orig = MakeBitcastHlo(hlo, shape);
-+    *hlo->mutable_shape() = normalized_shape;
-+    TF_RETURN_IF_ERROR(hlo->ReplaceAllUsesWithDifferentShape(bc_to_orig));
-+    MarkAsChanged();
-     return OkStatus();
-   }
- 
-@@ -101,6 +100,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-                                      &hlo->metadata()));
-     *normalized_slice->mutable_shape()->mutable_layout() =
-         normalized_input->shape().layout();
-+    SetVisited(*normalized_slice);
-     HloInstruction* bc_to_orig = MakeBitcastHlo(normalized_slice, s);
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-     return OkStatus();
-@@ -126,6 +126,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
- 
-     auto normalized_shape = Normalize(shape);
-     auto bc_to_normalized = MakeBitcastHlo(hlo, normalized_shape);
-+    SetVisited(*bc_to_normalized);
-     auto bc_to_orig = MakeBitcastHlo(bc_to_normalized, shape);
-     TF_RETURN_IF_ERROR(hlo->ReplaceUsesWith(users, bc_to_orig));
-     MarkAsChanged();
-@@ -152,6 +153,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-     auto normalized_concat =
-         hlo->AddInstruction(HloInstruction::CreateConcatenate(
-             normalized_shape, normalized_inputs, normalized_concat_dim));
-+    SetVisited(*normalized_concat);
-     auto bc_to_orig = MakeBitcastHlo(normalized_concat, hlo->shape());
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-     return OkStatus();
-@@ -187,6 +189,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-         MakeReduceWindowHlo(normalized_input, hlo->mutable_operand(1),
-                             new_window, hlo->called_computations()[0],
-                             &hlo->metadata()));
-+    SetVisited(*rw);
- 
-     HloInstruction* bc_to_orig = MakeBitcastHlo(rw, hlo->shape());
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-@@ -221,6 +224,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-     }
-     auto normalized_broadcast = MakeBroadcastHlo(
-         normalized_input, br_dimensions, normalized_shape, &hlo->metadata());
-+    SetVisited(*normalized_broadcast);
-     VLOG(3) << "Generated broadcast: " << normalized_broadcast->ToString();
-     auto bc_to_orig = MakeBitcastHlo(normalized_broadcast, s);
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-@@ -275,6 +279,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-           new_unary,
-           MakeUnaryHlo(hlo->opcode(), normalized_input, &hlo->metadata()));
-     }
-+    SetVisited(*new_unary);
-     auto bc_to_orig = MakeBitcastHlo(new_unary, s);
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-     return OkStatus();
-@@ -312,6 +317,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-       TF_ASSIGN_OR_RETURN(
-           new_binary, MakeBinaryHlo(hlo->opcode(), a0, b0, &hlo->metadata()));
-     }
-+    SetVisited(*new_binary);
-     auto bc_to_orig = MakeBitcastHlo(new_binary, s);
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-     return OkStatus();
-@@ -334,6 +340,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-     auto normalized_reshape_s = Normalize(s);
-     TF_ASSIGN_OR_RETURN(auto new_reshape,
-                         MakeReshapeHlo(normalized_reshape_s, a0));
-+    SetVisited(*new_reshape);
-     auto bc_to_orig = MakeBitcastHlo(new_reshape, s);
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-     return OkStatus();
-@@ -380,6 +387,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-       auto dimensions = ComposePermutations(t, l_perm);
-       auto normalized_transpose = hlo->AddInstruction(
-           HloInstruction::CreateTranspose(normalized_shape, a0, dimensions));
-+      SetVisited(*normalized_transpose);
-       VLOG(3) << "Generated normalized physical transpose: "
-               << normalized_transpose->ToString();
-       auto bc_to_orig = MakeBitcastHlo(normalized_transpose, s);
-@@ -415,6 +423,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-     auto dimensions = ComposePermutations(l0_perm, l_perm);
-     auto t = hlo->AddInstruction(
-         HloInstruction::CreateTranspose(s_normalized, a0, dimensions));
-+    SetVisited(*t);
-     auto bc_to_orig = MakeBitcastHlo(t, s);
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-     return OkStatus();
-@@ -435,6 +444,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-     absl::c_sort(new_dimensions);
-     auto normalized_reverse = hlo->AddInstruction(
-         HloInstruction::CreateReverse(a0->shape(), a0, new_dimensions));
-+    SetVisited(*normalized_reverse);
-     auto bc_to_orig = MakeBitcastHlo(normalized_reverse, s);
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-     return OkStatus();
-@@ -466,6 +476,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
- 
-     auto padded_normalized = hlo->AddInstruction(HloInstruction::CreatePad(
-         s_normalized, normalized_input, padded_by, new_padding));
-+    SetVisited(*padded_normalized);
-     auto bc_to_orig = MakeBitcastHlo(padded_normalized, s);
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-     return OkStatus();
-@@ -477,6 +488,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-           std::optional<HloInstruction*> transformed_custom_call,
-           custom_call_transformer_(Cast<HloCustomCallInstruction>(hlo)));
-       if (transformed_custom_call) {
-+        SetVisited(*(*transformed_custom_call)->operand(0));
-         TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, *transformed_custom_call));
-         return OkStatus();
-       }
-@@ -519,6 +531,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-                             &hlo->metadata()));
-     *normalized_dynamic_slice->mutable_shape()->mutable_layout() =
-         normalized_input->shape().layout();
-+    SetVisited(*normalized_dynamic_slice);
-     HloInstruction* bc_to_orig = MakeBitcastHlo(normalized_dynamic_slice, s);
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-     return OkStatus();
-@@ -545,6 +558,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-         MakeDynamicUpdateSliceHlo(new_operand, new_update, new_start_indices,
-                                   &hlo->metadata()));
-     *new_dus->mutable_shape()->mutable_layout() = new_operand->shape().layout();
-+    SetVisited(*new_dus);
- 
-     HloInstruction* bc_to_orig = MakeBitcastHlo(new_dus, s);
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-@@ -578,6 +592,7 @@ class LayoutNormalizationVisitor : public DfsHloRewriteVisitor {
-     HloInstruction* normalized = hlo->parent()->AddInstruction(
-         HloInstruction::CreateTernary(new_shape, opcode, p_0, i1_0, i2_0));
-     hlo->SetupDerivedInstruction(normalized);
-+    SetVisited(*normalized);
- 
-     HloInstruction* bc_to_orig = MakeBitcastHlo(normalized, s);
-     TF_RETURN_IF_ERROR(ReplaceInstruction(hlo, bc_to_orig));
-diff --git a/xla/service/layout_normalization_test.cc b/xla/service/layout_normalization_test.cc
-index 3f01cc5a3..7c972ebef 100644
---- a/xla/service/layout_normalization_test.cc
-+++ b/xla/service/layout_normalization_test.cc
-@@ -555,6 +555,31 @@ ENTRY main {
-   )");
- }
- 
-+TEST_F(LayoutNormalizationTest, ConstantAvoidRevisitOfUser) {
-+  const char* hlo = R"(
-+HloModule module
-+
-+ENTRY main {
-+  c = f32[5,4]{0,1} constant({...})
-+  s = f32[5,4]{0,1} sine(c)
-+  t = f32[5,4]{0,1} tanh(s)
-+  ROOT o = f32[5,4]{0,1} add(s, t)
-+}
-+)";
-+  // If we allowed visiting the normalized user 's' of the constant, we would
-+  // run into a CHECK failure, because the constant was normalized in-place and
-+  // therefore would not be revisited.
-+  CheckLayoutNormalization(hlo, R"(
-+// CHECK: [[constant_2:%[^ ]+]] = f32[4,5]{1,0} constant({...})
-+// CHECK-NEXT: [[sine:%[^ ]+]] = f32[4,5]{1,0} sine([[constant_2]])
-+// CHECK-NEXT: [[bitcast_1:%[^ ]+]] = f32[5,4]{0,1} bitcast([[sine]])
-+// CHECK-NEXT: [[bitcast_2:%[^ ]+]] = f32[4,5]{1,0} bitcast([[bitcast_1]])
-+// CHECK-NEXT: [[tanh:%[^ ]+]] = f32[4,5]{1,0} tanh([[bitcast_2]])
-+// CHECK-NEXT: [[add_3:%[^ ]+]] = f32[4,5]{1,0} add([[bitcast_2]], [[tanh]])
-+// CHECK-NEXT: ROOT [[bitcast_3_4:%[^ ]+]] = f32[5,4]{0,1} bitcast([[add_3]])
-+  )");
-+}
-+
- TEST_F(LayoutNormalizationTest, Slice) {
-   const char* hlo = R"(
- HloModule module
 diff --git a/xla/service/llvm_ir/fused_ir_emitter.cc b/xla/service/llvm_ir/fused_ir_emitter.cc
 index 006020e41..0add8fbe3 100644
 --- a/xla/service/llvm_ir/fused_ir_emitter.cc
@@ -1426,18 +3124,18 @@ index 006020e41..0add8fbe3 100644
    global->setUnnamedAddr(llvm::GlobalVariable::UnnamedAddr::Global);
  
 diff --git a/xla/service/llvm_ir/ir_array.cc b/xla/service/llvm_ir/ir_array.cc
-index 7708db56e..6be405a23 100644
+index fa6ca3fff..c5a7ae782 100644
 --- a/xla/service/llvm_ir/ir_array.cc
 +++ b/xla/service/llvm_ir/ir_array.cc
-@@ -24,6 +24,7 @@ limitations under the License.
+@@ -25,6 +25,7 @@ limitations under the License.
  #include "llvm/IR/Constants.h"
  #include "llvm/IR/Instructions.h"
  #include "llvm/IR/Value.h"
 +#include "tsl/platform/logging.h"
  #include "xla/layout_util.h"
  #include "xla/permutation_util.h"
- #include "xla/service/llvm_ir/llvm_type_conversion_util.h"
-@@ -32,7 +33,6 @@ limitations under the License.
+ #include "xla/primitive_util.h"
+@@ -34,7 +35,6 @@ limitations under the License.
  #include "xla/statusor.h"
  #include "xla/util.h"
  #include "xla/xla_data.pb.h"
@@ -1445,14 +3143,13 @@ index 7708db56e..6be405a23 100644
  
  namespace xla {
  namespace llvm_ir {
-@@ -494,9 +494,24 @@ llvm::Value* IrArray::EmitArrayElementAddress(const IrArray::Index& index,
-   if (use_linear_index && index.LinearValidOnShape(shape_)) {
-     llvm::Module* module = b->GetInsertBlock()->getParent()->getParent();
-     llvm::Type* type = PrimitiveTypeToIrType(shape_.element_type(), module);
+@@ -548,9 +548,23 @@ llvm::Value* IrArray::EmitLinearArrayElementAddress(
+   llvm::Module* module = b->GetInsertBlock()->getParent()->getParent();
+   llvm::Type* type = PrimitiveTypeToIrType(shape_.element_type(), module);
+   if (!primitive_util::Is4BitType(shape_.element_type())) {
 -    return b->CreateInBoundsGEP(
 -        type, b->CreateBitCast(base_ptr_, type->getPointerTo()), index.linear(),
 -        llvm_ir::AsStringRef(name));
-+    
 +    auto linear_index = dyn_cast<llvm::BinaryOperator>(index.linear());
 +    // only separate const offset when having add
 +    if (linear_index && (linear_index->getOpcode() == llvm::Instruction::Add)) {
@@ -1472,21 +3169,12 @@ index 7708db56e..6be405a23 100644
 +    }
    }
  
-   std::vector<llvm::Value*> actual_index;
+   // Handle int4 case by dividing index by 2. Int4 arrays are represented in
 diff --git a/xla/service/llvm_ir/llvm_util.cc b/xla/service/llvm_ir/llvm_util.cc
-index 97e6b63e3..a38e2a08c 100644
+index b3f6e7aac..a4f94b449 100644
 --- a/xla/service/llvm_ir/llvm_util.cc
 +++ b/xla/service/llvm_ir/llvm_util.cc
-@@ -235,6 +235,8 @@ llvm::Type* PrimitiveTypeToIrType(PrimitiveType element_type,
-       // Tokens do not have a physical representation, but the compiler needs
-       // some placeholder type, so use int8_t*.
-       return llvm::Type::getInt8PtrTy(module->getContext());
-+    case VOID:
-+      return llvm::Type::getVoidTy(module->getContext());
-     default:
-       LOG(FATAL) << "unsupported type " << element_type;
-   }
-@@ -317,8 +319,9 @@ llvm::AllocaInst* EmitAllocaAtFunctionEntryWithCount(llvm::Type* type,
+@@ -380,8 +380,9 @@ llvm::AllocaInst* EmitAllocaAtFunctionEntryWithCount(llvm::Type* type,
    llvm::Function* function = b->GetInsertBlock()->getParent();
    b->SetInsertPoint(&function->getEntryBlock(),
                      function->getEntryBlock().getFirstInsertionPt());
@@ -1497,7 +3185,7 @@ index 97e6b63e3..a38e2a08c 100644
    if (alignment != 0) {
      alloca->setAlignment(llvm::Align(alignment));
    }
-@@ -437,6 +440,7 @@ void SetDereferenceableMetadataForLoad(llvm::LoadInst* load,
+@@ -500,6 +501,7 @@ void SetDereferenceableMetadataForLoad(llvm::LoadInst* load,
  
  llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
                                      llvm::Instruction* inst) {
@@ -1505,7 +3193,7 @@ index 97e6b63e3..a38e2a08c 100644
    llvm::LLVMContext& context = inst->getParent()->getContext();
    llvm::IntegerType* i32 = llvm::Type::getInt32Ty(context);
    inst->setMetadata(
-@@ -445,6 +449,7 @@ llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
+@@ -508,6 +510,7 @@ llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
            context,
            {llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i32, lower)),
             llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i32, upper))}));
@@ -1514,17 +3202,18 @@ index 97e6b63e3..a38e2a08c 100644
  }
  
 diff --git a/xla/stream_executor/build_defs.bzl b/xla/stream_executor/build_defs.bzl
-index 1f0fd03d3..b2dd37acc 100644
+index 960502a5c..62557b984 100644
 --- a/xla/stream_executor/build_defs.bzl
 +++ b/xla/stream_executor/build_defs.bzl
-@@ -1,5 +1,6 @@
+@@ -2,6 +2,7 @@
+ 
  load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda_is_configured")
  load("@local_config_rocm//rocm:build_defs.bzl", "if_rocm_is_configured")
 +load("@local_config_sycl//sycl:build_defs.bzl", "if_sycl_is_configured")
  
  def stream_executor_friends():
      return ["//..."]
-@@ -22,7 +23,7 @@ def tf_additional_cudnn_plugin_copts():
+@@ -21,7 +22,7 @@ def tf_additional_cudnn_plugin_copts():
  
  # Returns whether any GPU backend is configuered.
  def if_gpu_is_configured(x):
@@ -1534,10 +3223,10 @@ index 1f0fd03d3..b2dd37acc 100644
  def if_cuda_or_rocm(x):
      return if_gpu_is_configured(x)
 diff --git a/xla/stream_executor/cuda/cuda_driver.cc b/xla/stream_executor/cuda/cuda_driver.cc
-index 3d9264374..c8a9b0a35 100644
+index bf16b27f5..c045c2030 100644
 --- a/xla/stream_executor/cuda/cuda_driver.cc
 +++ b/xla/stream_executor/cuda/cuda_driver.cc
-@@ -576,6 +576,14 @@ bool DeviceOptionsToContextFlags(const DeviceOptions& device_options,
+@@ -942,6 +942,14 @@ GpuDriver::GraphNodeGetType(CUgraphNode node) {
        "Feature not supported on CUDA platform (LoadHsaco)");
  }
  
@@ -1552,11 +3241,11 @@ index 3d9264374..c8a9b0a35 100644
  /* static */ tsl::Status GpuDriver::SynchronousMemsetUint8(GpuContext* context,
                                                             CUdeviceptr location,
                                                             uint8_t value,
-diff --git a/xla/stream_executor/cuda/cuda_gpu_executor.cc b/xla/stream_executor/cuda/cuda_gpu_executor.cc
-index 3e171c793..6cad72bf2 100644
---- a/xla/stream_executor/cuda/cuda_gpu_executor.cc
-+++ b/xla/stream_executor/cuda/cuda_gpu_executor.cc
-@@ -182,6 +182,12 @@ tsl::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,
+diff --git a/xla/stream_executor/cuda/cuda_executor.cc b/xla/stream_executor/cuda/cuda_executor.cc
+index 534ef26aa..43a4511c6 100644
+--- a/xla/stream_executor/cuda/cuda_executor.cc
++++ b/xla/stream_executor/cuda/cuda_executor.cc
+@@ -173,6 +173,12 @@ tsl::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,
        "Feature not supported on CUDA platform (LoadModuleFromHsaco)");
  }
  
@@ -1570,7 +3259,7 @@ index 3e171c793..6cad72bf2 100644
                                     KernelBase* kernel) {
    GpuKernel* cuda_kernel = AsGpuKernel(kernel);
 diff --git a/xla/stream_executor/gpu/BUILD b/xla/stream_executor/gpu/BUILD
-index 84a92809e..8951c0686 100644
+index 827c01adf..dfaaaa6a0 100644
 --- a/xla/stream_executor/gpu/BUILD
 +++ b/xla/stream_executor/gpu/BUILD
 @@ -9,6 +9,10 @@ load(
@@ -1584,22 +3273,20 @@ index 84a92809e..8951c0686 100644
  load(
      "@tsl//tsl:tsl.bzl",
      "if_libtpu",
-@@ -269,7 +273,9 @@ cc_library(
+@@ -290,6 +294,8 @@ cc_library(
          "@local_config_cuda//cuda:cuda_headers",
      ]) + if_rocm_is_configured([
          "@local_config_rocm//rocm:rocm_headers",
--    ]),
 +    ]) + if_sycl_is_configured([
 +        "@local_config_sycl//sycl:sycl_headers",
-+    ])
+     ]),
  )
  
- cc_library(
 diff --git a/xla/stream_executor/gpu/gpu_driver.h b/xla/stream_executor/gpu/gpu_driver.h
-index 9fce9d68d..4badb209b 100644
+index ef5280ac9..0411f8ac3 100644
 --- a/xla/stream_executor/gpu/gpu_driver.h
 +++ b/xla/stream_executor/gpu/gpu_driver.h
-@@ -295,6 +295,9 @@ class GpuDriver {
+@@ -475,6 +475,9 @@ class GpuDriver {
    // (supported on ROCm only)
    static tsl::Status LoadHsaco(GpuContext* context, const char* hsaco_contents,
                                 GpuModuleHandle* module);
@@ -1610,7 +3297,7 @@ index 9fce9d68d..4badb209b 100644
    // Retrieves a named kernel from a loaded module, and places the resulting
    // handle into function (outparam) on success. Neither kernel_name nor
 diff --git a/xla/stream_executor/gpu/gpu_executor.h b/xla/stream_executor/gpu/gpu_executor.h
-index dba3e08a3..14f694069 100644
+index b5fdb64ab..89e81a613 100644
 --- a/xla/stream_executor/gpu/gpu_executor.h
 +++ b/xla/stream_executor/gpu/gpu_executor.h
 @@ -320,6 +320,11 @@ class GpuExecutor : public internal::StreamExecutorInterface {
@@ -1625,18 +3312,39 @@ index dba3e08a3..14f694069 100644
    bool UnloadGpuBinary(const void* gpu_binary)
        TF_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
  
+diff --git a/xla/stream_executor/gpu/gpu_helpers.h b/xla/stream_executor/gpu/gpu_helpers.h
+index cefd0a6af..5f2f78caf 100644
+--- a/xla/stream_executor/gpu/gpu_helpers.h
++++ b/xla/stream_executor/gpu/gpu_helpers.h
+@@ -52,14 +52,18 @@ T* GpuMemoryMutable(DeviceMemory<T>* mem) {
+ static_assert(
+     sizeof(std::complex<float>) == sizeof(GpuComplexType),
+     "std::complex<float> and GpuComplexType should have the same size");
++#if !GOOGLE_SYCL
+ static_assert(offsetof(GpuComplexType, x) == 0,
+               "The real part of GpuComplexType should appear first.");
++#endif // !GOOGLE_SYCL
+ static_assert(
+     sizeof(std::complex<double>) == sizeof(GpuDoubleComplexType),
+     "std::complex<double> and GpuDoubleComplexType should have the same "
+     "size");
++#if !GOOGLE_SYCL
+ static_assert(offsetof(GpuDoubleComplexType, x) == 0,
+               "The real part of GpuDoubleComplexType should appear first.");
++#endif // !GOOGLE_SYCL
+ 
+ // Type traits to get CUDA complex types from std::complex<>.
+ 
 diff --git a/xla/stream_executor/gpu/gpu_types.h b/xla/stream_executor/gpu/gpu_types.h
-index 94337c729..656d1195a 100644
+index dea81d66a..af1f89180 100644
 --- a/xla/stream_executor/gpu/gpu_types.h
 +++ b/xla/stream_executor/gpu/gpu_types.h
-@@ -18,7 +18,20 @@ limitations under the License.
+@@ -18,7 +18,18 @@ limitations under the License.
  #ifndef XLA_STREAM_EXECUTOR_GPU_GPU_TYPES_H_
  #define XLA_STREAM_EXECUTOR_GPU_GPU_TYPES_H_
  
 -#if TENSORFLOW_USE_ROCM
-+#define TENSORFLOW_USE_SYCL 1
-+
-+#if TENSORFLOW_USE_SYCL
++#if GOOGLE_SYCL
 +
 +#if __has_include(<sycl/sycl.hpp>)
 +#include <sycl/sycl.hpp>
@@ -1651,12 +3359,12 @@ index 94337c729..656d1195a 100644
  
  #define __HIP_DISABLE_CPP_FUNCTIONS__
  
-@@ -42,7 +55,26 @@ typedef struct curandGenerator_st* curandGenerator_t;
+@@ -36,7 +47,29 @@ limitations under the License.
  namespace stream_executor {
  namespace gpu {
  
 -#if TENSORFLOW_USE_ROCM
-+#if TENSORFLOW_USE_SYCL
++#if GOOGLE_SYCL
 +
 +using GpuContextHandle = const void*;
 +using GpuStreamHandle = ::sycl::queue*;
@@ -1671,52 +3379,55 @@ index 94337c729..656d1195a 100644
 +using GpuStatus = const void*;
 +using GpuFuncCachePreference = const void*;
 +using GpuSharedMemConfig = const void*;
-+using GpuComplexType = const void*;
-+using GpuDoubleComplexType = const void*;
++using GpuComplexType = std::complex<float>;
++using GpuDoubleComplexType = std::complex<double>;
 +using GpuRngHandle = const void*;
++using GpuGraphHandle = const void*;
++using GpuGraphExecHandle = const void*;
++using GpuGraphNodeHandle = const void*;
 +
 +#elif TENSORFLOW_USE_ROCM
  
  using GpuContextHandle = hipCtx_t;
  using GpuStreamHandle = hipStream_t;
 diff --git a/xla/stream_executor/kernel_spec.cc b/xla/stream_executor/kernel_spec.cc
-index a8efbb398..878316ae5 100644
+index f0fabf44d..583d043b9 100644
 --- a/xla/stream_executor/kernel_spec.cc
 +++ b/xla/stream_executor/kernel_spec.cc
-@@ -34,9 +34,9 @@ CudaCubinOnDisk::CudaCubinOnDisk(absl::string_view filename,
-                                  absl::string_view kernelname)
-     : OnDiskKernelLoaderSpec(filename, kernelname) {}
+@@ -43,9 +43,9 @@ CudaCubinOnDisk::CudaCubinOnDisk(absl::string_view filename,
+                                  absl::string_view kernel_name)
+     : OnDiskKernelLoaderSpec(filename, kernel_name) {}
  
 -CudaCubinInMemory::CudaCubinInMemory(const char *bytes,
 +CudaCubinInMemory::CudaCubinInMemory(const char *bytes, int size,
-                                      absl::string_view kernelname)
--    : KernelLoaderSpec(kernelname), bytes_(bytes) {}
-+    : KernelLoaderSpec(kernelname), size_(size), bytes_(bytes) {}
+                                      absl::string_view kernel_name)
+-    : KernelLoaderSpec(kernel_name), bytes_(bytes) {}
++    : KernelLoaderSpec(kernel_name), size_(size), bytes_(bytes) {}
  
  bool CompareComputeCapability(const std::tuple<int, int> &lhs,
                                const std::tuple<int, int> &rhs) {
-@@ -198,9 +198,9 @@ MultiKernelLoaderSpec *MultiKernelLoaderSpec::AddCudaPtxOnDisk(
+@@ -174,9 +174,9 @@ MultiKernelLoaderSpec *MultiKernelLoaderSpec::AddCudaPtxOnDisk(
  }
  
  MultiKernelLoaderSpec *MultiKernelLoaderSpec::AddCudaCubinInMemory(
--    const char *bytes, absl::string_view kernelname) {
-+    const char *bytes, int size, absl::string_view kernelname) {
+-    const char *bytes, absl::string_view kernel_name) {
++    const char *bytes, int size, absl::string_view kernel_name) {
    CHECK(cuda_cubin_in_memory_ == nullptr);
--  cuda_cubin_in_memory_.reset(new CudaCubinInMemory{bytes, kernelname});
-+  cuda_cubin_in_memory_.reset(new CudaCubinInMemory{bytes, size, kernelname});
+-  cuda_cubin_in_memory_.reset(new CudaCubinInMemory{bytes, kernel_name});
++  cuda_cubin_in_memory_.reset(new CudaCubinInMemory{bytes, size, kernel_name});
    return this;
  }
  
 diff --git a/xla/stream_executor/kernel_spec.h b/xla/stream_executor/kernel_spec.h
-index 8b33a5fe8..9c3ae880b 100644
+index 68f45a0ee..a05ed6da6 100644
 --- a/xla/stream_executor/kernel_spec.h
 +++ b/xla/stream_executor/kernel_spec.h
-@@ -258,13 +258,16 @@ class OpenCLTextInMemory : public KernelLoaderSpec {
+@@ -224,13 +224,16 @@ class CudaPtxInMemory : public KernelLoaderSpec {
  // Kernel loader specification for a CUBIN blob that resides in memory.
  class CudaCubinInMemory : public KernelLoaderSpec {
   public:
--  CudaCubinInMemory(const char *bytes, absl::string_view kernelname);
-+  CudaCubinInMemory(const char *bytes, int size, absl::string_view kernelname);
+-  CudaCubinInMemory(const char *bytes, absl::string_view kernel_name);
++  CudaCubinInMemory(const char *bytes, int size, absl::string_view kernel_name);
    ~CudaCubinInMemory() override {}
  
    const char *bytes() const { return bytes_; }
@@ -1727,22 +3438,22 @@ index 8b33a5fe8..9c3ae880b 100644
 +  // SYCL: this is needed only for SPIRV
 +  int size_;
  
-   SE_DISALLOW_COPY_AND_ASSIGN(CudaCubinInMemory);
- };
-@@ -338,7 +341,7 @@ class MultiKernelLoaderSpec {
-                                           absl::string_view kernelname);
+   CudaCubinInMemory(const CudaCubinInMemory &) = delete;
+   void operator=(const CudaCubinInMemory &) = delete;
+@@ -282,7 +285,7 @@ class MultiKernelLoaderSpec {
+                                           absl::string_view kernel_name);
    MultiKernelLoaderSpec *AddCudaCubinOnDisk(absl::string_view filename,
-                                             absl::string_view kernelname);
+                                             absl::string_view kernel_name);
 -  MultiKernelLoaderSpec *AddCudaCubinInMemory(const char *cubin_bytes,
 +  MultiKernelLoaderSpec *AddCudaCubinInMemory(const char *cubin_bytes, int size,
-                                               absl::string_view kernelname);
+                                               absl::string_view kernel_name);
    MultiKernelLoaderSpec *AddCudaPtxInMemory(absl::string_view ptx,
-                                             absl::string_view kernelname);
+                                             absl::string_view kernel_name);
 diff --git a/xla/stream_executor/rocm/rocm_driver.cc b/xla/stream_executor/rocm/rocm_driver.cc
-index a65f5e87b..267b0fe39 100644
+index 0941efa5b..265344f65 100644
 --- a/xla/stream_executor/rocm/rocm_driver.cc
 +++ b/xla/stream_executor/rocm/rocm_driver.cc
-@@ -457,6 +457,14 @@ GpuDriver::ContextGetSharedMemConfig(GpuContext* context) {
+@@ -821,6 +821,14 @@ GpuDriver::GraphNodeGetType(hipGraphNode_t node) {
    return ret;
  }
  
@@ -1758,10 +3469,10 @@ index a65f5e87b..267b0fe39 100644
      GpuContext* context, hipDeviceptr_t location, uint8 value, size_t size) {
    ScopedActivateContext activation{context};
 diff --git a/xla/stream_executor/rocm/rocm_gpu_executor.cc b/xla/stream_executor/rocm/rocm_gpu_executor.cc
-index 105fadf78..a756b8170 100644
+index 76864db70..a1a234e66 100644
 --- a/xla/stream_executor/rocm/rocm_gpu_executor.cc
 +++ b/xla/stream_executor/rocm/rocm_gpu_executor.cc
-@@ -368,6 +368,11 @@ tsl::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,
+@@ -389,6 +389,11 @@ tsl::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,
    return tsl::OkStatus();
  }
  
@@ -1774,10 +3485,10 @@ index 105fadf78..a756b8170 100644
  // logging an error. It's nearly certain that in case of failures, we'd never
  // get here in the first place; these are very low-impact routines.
 diff --git a/xla/stream_executor/stream_executor_pimpl.h b/xla/stream_executor/stream_executor_pimpl.h
-index c2bb16bce..41a1e3f89 100644
+index dc15118bb..89ab74d54 100644
 --- a/xla/stream_executor/stream_executor_pimpl.h
 +++ b/xla/stream_executor/stream_executor_pimpl.h
-@@ -812,7 +812,8 @@ StreamExecutor::CreateTypedKernel(absl::string_view kernel_name,
+@@ -701,7 +701,8 @@ StreamExecutor::CreateTypedKernel(absl::string_view kernel_name,
  
    if (!cubin_data.empty()) {
      loader_spec.AddCudaCubinInMemory(
@@ -1787,109 +3498,3 @@ index c2bb16bce..41a1e3f89 100644
    }
  
    TF_RETURN_IF_ERROR(GetKernel(loader_spec, kernel_base.get()));
-diff --git a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
-index 397e7707d..18cdbbb6c 100644
---- a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
-+++ b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
-@@ -760,6 +760,10 @@ tsl::StatusOr<mlir::Operation*> LhloDialectEmitter::EmitCustomCallOp(
-     return EmitDnnfMHA(custom_call_instr);
-   }
- 
-+  if (xla::gpu::IsCustomCallTofQKV(*instr)) {
-+    return EmitDnnfQKV(custom_call_instr);
-+  }
-+
-   // For custom call, if there are any token operands or results, they will not
-   // be represented in LHLO so we need to remember the mapping. First create
-   // operands where each token is replaced with a null Value.
-@@ -930,6 +934,8 @@ tsl::StatusOr<lmhlo_gpu::FusedMhaDagSignature> AsLhloFusedMhaDagSignature(
-       return lmhlo_gpu::FusedMhaDagSignature::SoftmaxDropout;
-     case xla::gpu::CudnnfMHAKind::kSoftmax:
-       return lmhlo_gpu::FusedMhaDagSignature::Softmax;
-+    case xla::gpu::CudnnfMHAKind::kScaleSoftmax:
-+      return lmhlo_gpu::FusedMhaDagSignature::ScaleSoftmax;
-     case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmax:
-       return lmhlo_gpu::FusedMhaDagSignature::ScaleBiasSoftmax;
-     case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmaxDropout:
-@@ -1354,12 +1360,16 @@ tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHA(
-       TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-       auto fmha_default =
-           CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAOp>(custom_call, operands);
-+      fmha_default.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-       return set_common_fmha_attributes(fmha_default);
-     }
-     case xla::gpu::CudnnfMHAKind::kSoftmaxDropout: {
-       TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-       auto fmha_softmax_dropout =
-           CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAOp>(custom_call, operands);
-+      fmha_softmax_dropout.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-       fmha_softmax_dropout.setDropoutRateAttr(
-           builder_.getF64FloatAttr(config.dropout_rate()));
-       fmha_softmax_dropout.setSeedAttr(
-@@ -1443,9 +1453,39 @@ tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHA(
-           builder_.getF64FloatAttr(config.fmha_scale()));
-       return set_common_fmha_attributes(fmha_bias_softmax);
-     }
-+    case xla::gpu::CudnnfMHAKind::kScaleSoftmax: {
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-+      auto fmha_softmax =
-+          CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAOp>(custom_call, operands);
-+      fmha_softmax.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-+      return set_common_fmha_attributes(fmha_softmax);
-+    }
-   }
- }
- 
-+tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfQKV(
-+    const HloCustomCallInstruction* custom_call) {
-+  
-+  TF_ASSIGN_OR_RETURN(
-+      auto const config,
-+      custom_call->backend_config<xla::gpu::GemmBackendConfig>());
-+
-+  if (custom_call->operand_count() != 2) {
-+    return xla::InvalidArgument("GEMM custom call should have 2 operands");
-+  }
-+
-+  // QKV GEMM have two operands.
-+  TF_ASSIGN_OR_RETURN(
-+      lmhlo_gpu::fusedQKVOp op,
-+      CreateOpWithoutAttrs<lmhlo_gpu::fusedQKVOp>(custom_call,
-+                                              /*num_operands=*/2));
-+  op.setDotDimensionNumbersAttr(
-+      GetDotDimensionNumbersAttr(builder_, config.dot_dimension_numbers()));
-+  
-+  return op.getOperation();
-+}
-+
- // Convert an XLA HLO constant to a global_memref + get_global_memref pair.
- tsl::StatusOr<mlir::memref::GetGlobalOp> LhloDialectEmitter::EmitConstant(
-     const HloInstruction* instr) {
-diff --git a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
-index 7022b416d..8e0fa63eb 100644
---- a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
-+++ b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
-@@ -84,6 +84,8 @@ class LhloDialectEmitter : public xla::ConstDfsHloVisitorWithDefault {
-       const xla::HloCustomCallInstruction* custom_call);
-   xla::StatusOr<Operation*> EmitDnnfMHA(
-       const xla::HloCustomCallInstruction* custom_call);
-+  xla::StatusOr<Operation*> EmitDnnfQKV(
-+      const xla::HloCustomCallInstruction* custom_call);    
- 
-   tsl::StatusOr<memref::GetGlobalOp> EmitConstant(
-       const xla::HloInstruction* instr);
-diff --git a/xla/xla_data.proto b/xla/xla_data.proto
-index c4c0f97d2..33b7e98ed 100644
---- a/xla/xla_data.proto
-+++ b/xla/xla_data.proto
-@@ -28,6 +28,7 @@ enum PrimitiveType {
-   // Invalid primitive type to serve as default.
-   PRIMITIVE_TYPE_INVALID = 0;
- 
-+  VOID = 100;
-   // Predicates are two-state booleans.
-   PRED = 1;
- 

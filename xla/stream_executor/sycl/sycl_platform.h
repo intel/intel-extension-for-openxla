@@ -19,24 +19,23 @@ limitations under the License.
 #define XLA_STREAM_EXECUTOR_SYCL_SYCL_PLATFORM_H_
 
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
-#include "tsl/platform/statusor.h"
 #include "xla/stream_executor/executor_cache.h"
 #include "xla/stream_executor/multi_platform_manager.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/platform/port.h"
+#include "xla/stream_executor/stream_executor.h"
 #include "xla/stream_executor/stream_executor_internal.h"
-#include "xla/stream_executor/stream_executor_pimpl.h"
 #include "xla/stream_executor/trace_listener.h"
+#include "tsl/platform/statusor.h"
 
 namespace stream_executor {
 namespace sycl {
-// Opaque and unique identifier for the CUDA platform plugin.
+// Opaque and unique identifier for the SYCL platform plugin.
 // This is needed so that plugins can refer to/identify this platform without
-// instantiating a CudaPlatform object.
+// instantiating a SyclPlatform object.
 extern const Platform::Id kSyclPlatformId;
 }  // namespace sycl
 
@@ -48,7 +47,7 @@ class SyclPlatform : public Platform {
   SyclPlatform();
   ~SyclPlatform() override;
 
-  // CudaPlatform-specific functionality
+  // SyclPlatform-specific functionality
   // Returns the number of distinct buses / NUMA nodes on the machine.
   int BusCount();
 
@@ -72,18 +71,11 @@ class SyclPlatform : public Platform {
 
   tsl::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) override;
 
-  tsl::StatusOr<StreamExecutor*> ExecutorForDeviceWithPluginConfig(
-      int ordinal, const PluginConfig& config) override;
-
   tsl::StatusOr<StreamExecutor*> GetExecutor(
       const StreamExecutorConfig& config) override;
 
   tsl::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
       const StreamExecutorConfig& config) override;
-
-  void RegisterTraceListener(std::unique_ptr<TraceListener> listener) override;
-
-  void UnregisterTraceListener(TraceListener* listener) override;
 
  private:
   // Determines the number of NUMA nodes and the assignment of executor to each.
@@ -104,7 +96,8 @@ class SyclPlatform : public Platform {
   // manager.
   int limit_numa_node_;
 
-  SE_DISALLOW_COPY_AND_ASSIGN(SyclPlatform);
+  SyclPlatform(const SyclPlatform&) = delete;
+  void operator=(const SyclPlatform&) = delete;
 };
 
 }  // namespace gpu

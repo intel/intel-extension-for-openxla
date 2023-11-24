@@ -39,17 +39,17 @@ using mlir::lmhlo_gpu::AllToAllStartOp;
 
 namespace impl {
 template <typename OpT>
-CclAllToAllConfig GetCclAllToAllConfig(OpT op) {
-  CclAllToAllConfig config;
+NcclAllToAllConfig GetNcclAllToAllConfig(OpT op) {
+  NcclAllToAllConfig config;
   // FIXME(b/180174349): LMHLO AllToAll incorrectly has use_global_device_ids
   // attribute and it should be removed.
-  config.config = GetCclCollectiveConfigForMlir(op, std::nullopt);
+  config.config = GetNcclCollectiveConfigForMlir(op, std::nullopt);
   config.has_split_dimension = op.getSplitDimension().has_value();
   return config;
 }
 
 Status CheckImplementable(AllToAllStartOp op) {
-  TF_RETURN_IF_ERROR(CclCollectiveThunk::CheckImplementable());
+  TF_RETURN_IF_ERROR(NcclCollectiveThunk::CheckImplementable());
   std::optional<uint64_t> split_dim = op.getSplitDimension();
   for (mlir::Value operand : op.getInputs()) {
     TF_RETURN_IF_ERROR(IsValidOperand(operand, Thunk::kNcclAllToAll));
@@ -66,36 +66,37 @@ Status CheckImplementable(AllToAllStartOp op) {
 
 }  // namespace impl
 
-CclAllToAllStartThunk::CclAllToAllStartThunk(
+NcclAllToAllStartThunk::NcclAllToAllStartThunk(
     ThunkInfo thunk_info, AllToAllStartOp op,
-    std::vector<CclCollectiveThunk::Buffer> buffers)
-    : CclCollectiveThunk(Thunk::kNcclAllToAllStart, thunk_info, op.getIsSync()),
-      config_(impl::GetCclAllToAllConfig(op)),
+    std::vector<NcclCollectiveThunk::Buffer> buffers)
+    : NcclCollectiveThunk(Thunk::kNcclAllToAllStart, thunk_info,
+                          op.getIsSync()),
+      config_(impl::GetNcclAllToAllConfig(op)),
       buffers_(std::move(buffers)) {
   CHECK_EQ(config_.config.operand_count, buffers_.size());
 }
 
-/*static*/ Status CclAllToAllStartThunk::CheckImplementable(
+/*static*/ Status NcclAllToAllStartThunk::CheckImplementable(
     AllToAllStartOp op, int64_t replica_count, int64_t partition_count) {
-  return AddOpDescription<CclAllToAllStartThunk>(
+  return AddOpDescription<NcclAllToAllStartThunk>(
       impl::CheckImplementable(op), op, replica_count, partition_count);
 }
 
-/*static*/ bool CclAllToAllStartThunk::IsDegenerate(
+/*static*/ bool NcclAllToAllStartThunk::IsDegenerate(
     mlir::lmhlo_gpu::AllToAllStartOp op, int64_t replica_count,
     int64_t partition_count) {
-  return impl::GetCclAllToAllConfig(op).config.IsDegenerate(replica_count,
-                                                            partition_count);
+  return impl::GetNcclAllToAllConfig(op).config.IsDegenerate(replica_count,
+                                                             partition_count);
 }
 
-/*static*/ CollectiveOpGroupMode CclAllToAllStartThunk::GetGroupMode(
+/*static*/ CollectiveOpGroupMode NcclAllToAllStartThunk::GetGroupMode(
     mlir::lmhlo_gpu::AllToAllStartOp op) {
-  return impl::GetCclAllToAllConfig(op).config.group_mode;
+  return impl::GetNcclAllToAllConfig(op).config.group_mode;
 }
 
-Status CclAllToAllStartThunk::RunCclCollective(const ExecuteParams& params,
-                                               se::Stream& stream,
-                                               ncclComm_t comm) {
+Status NcclAllToAllStartThunk::RunNcclCollective(const ExecuteParams& params,
+                                                 se::Stream& stream,
+                                                 ncclComm_t comm) {
   TF_ASSIGN_OR_RETURN(
       std::vector<DeviceBufferPair> device_buffers,
       ConvertToDeviceBuffers(params, buffers_,
@@ -104,9 +105,9 @@ Status CclAllToAllStartThunk::RunCclCollective(const ExecuteParams& params,
                                stream, comm);
 }
 
-CclAllToAllDoneThunk::CclAllToAllDoneThunk(
-    ThunkInfo thunk_info, CclCollectiveThunk::AsyncExecutor& async)
-    : CclCollectiveDoneThunk(Thunk::kNcclAllToAllDone, thunk_info, async) {}
+NcclAllToAllDoneThunk::NcclAllToAllDoneThunk(
+    ThunkInfo thunk_info, NcclCollectiveThunk::AsyncExecutor& async)
+    : NcclCollectiveDoneThunk(Thunk::kNcclAllToAllDone, thunk_info, async) {}
 
 Status RunAllToAll(bool has_split_dimension,
                    std::vector<DeviceBufferPair>& buffers, se::Stream& stream,
@@ -122,6 +123,10 @@ Status RunAllToAll(bool has_split_dimension,
   // (here, we only support dimension 0), or it takes a list of inputs
   // and produces a tuple of outputs.
   if (has_split_dimension) {
+    int element_count = -1;
+    PrimitiveType element_type = buffers[0].element_type;
+    std::vector<const void*> send_buffers;
+    std::vector<void*> recv_buffers;
     for (size_t i = 0; i < buffers.size(); ++i) {
       DeviceBufferPair& buffer = buffers[i];
       const uint8_t* send_buffer =
@@ -129,18 +134,19 @@ Status RunAllToAll(bool has_split_dimension,
       uint8_t* recv_buffer =
           static_cast<uint8_t*>(buffer.destination_buffer.opaque());
 
-      PrimitiveType element_type = buffer.element_type;
-      int element_count = buffers[0].element_count *
-                          (primitive_util::IsComplexType(element_type) ? 2 : 1);
+      element_count = buffers[0].element_count *
+                      (primitive_util::IsComplexType(element_type) ? 2 : 1);
 
       TF_RET_CHECK(element_count % num_participants == 0)
           << "Buffer was not an exact multiple of the number of participants.";
       size_t chunk_elements = element_count / num_participants;
       size_t chunk_bytes = chunk_elements * ShapeUtil::ByteSizeOfPrimitiveType(
                                                 buffer.element_type);
-
-      return Unimplemented("AllToAll has_split_dimension is not supported.");
+      send_buffers.push_back(send_buffer);
+      recv_buffers.push_back(recv_buffer);
     }
+    sycl_alltoall_split(send_buffers, recv_buffers, element_count, element_type,
+                        gpu_stream, comm);
   } else {
     TF_RET_CHECK(buffers.size() == num_participants)
         << "Number of inputs didn't match the number of participants.";
