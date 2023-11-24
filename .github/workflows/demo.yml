@@ -27,57 +27,59 @@ jobs:
               conda create -n ${CONDA_ENV} python=3.10 -y
               conda activate ${CONDA_ENV}
           fi
-          pip install jax==0.4.13 jaxlib==0.4.13
+          pip install jax==0.4.20 jaxlib==0.4.20
           pip install numpy
           conda install libstdcxx-ng==12.2.0 -c conda-forge
           pip install absl-py
           pip list | grep numpy
           pip list | grep jax
 
-      # - name: Build openXLA
-      #   run: |
-      #     set +e
-      #     CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-      #     source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
-      #     which bazel
-      #     if [ $? -eq 1 ]; then
-      #       wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
-      #       bash bazel-5.3.0-installer-linux-x86_64.sh --user
-      #     fi
-      #     export PATH=$PATH:/home/sdp/bin
-      #     source /home/sdp/.bazel/bin/bazel-complete.bash
-      #     bazel --version
-      #     pip list | grep numpy
-      #     pip install numpy
-      #     basekit_path=/home/sdp
-      #     complier_path=${basekit_path}/intel/oneapi/compiler/latest/linux
-      #     mkl_path=${basekit_path}/intel/oneapi/mkl/latest
-      #     cp /home/sdp/openXLA_demoxla_auto_configure_mkl.exp .
-      #     ls
-      #     python --version
-      #     chmod +x ./openXLA_demoxla_auto_configure_mkl.exp
-      #     ./openXLA_demoxla_auto_configure_mkl.exp $complier_path $mkl_path
-      #     bazel clean --expunge --async
-      #     bazel build //xla/tools/pip_package:build_pip_package
-      #     ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-      #     build_result=${PIPESTATUS[0]}
-      #     echo $build_result
-      #     if [ "$build_result" = "0" ];then
-      #         echo "Build successful"
-      #         pip install *.whl
-      #     else
-      #         echo "Build Failed"
-      #         exit 1
-      #     fi
+       - name: Build openXLA
+         run: |
+           set +e
+           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
+           source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+           which bazel
+           if [ $? -eq 1 ]; then
+             wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
+             bash bazel-5.3.0-installer-linux-x86_64.sh --user
+           fi
+           export PATH=$PATH:/home/sdp/bin
+           source /home/sdp/.bazel/bin/bazel-complete.bash
+           bazel --version
+           pip list | grep numpy
+           pip install numpy
+           basekit_path=/home/sdp
+           complier_path=${basekit_path}/intel/oneapi/compiler/latest/linux
+           mkl_path=${basekit_path}/intel/oneapi/mkl/latest
+           cp /home/sdp/openXLA_demoxla_auto_configure_mkl.exp .
+           ls
+           python --version
+           chmod +x ./openXLA_demoxla_auto_configure_mkl.exp
+           ./openXLA_demoxla_auto_configure_mkl.exp $complier_path $mkl_path
+           bazel clean --expunge --async
+           bazel build //xla/tools/pip_package:build_pip_package
+           ./bazel-bin/xla/tools/pip_package/build_pip_package ./
+           build_result=${PIPESTATUS[0]}
+           echo $build_result
+           if [ "$build_result" = "0" ];then
+               echo "Build successful"
+               pip install *.whl
+           else
+               echo "Build Failed"
+               exit 1
+           fi
+
      - name: UT testing
        run: |
         CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
         source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+        # install requirement from https://github.com/intel-innersource/frameworks.ai.infrastructure.intel-extension-for-tensorflow.jax/blob/yang/jax-v0.4.20/build/test-requirements.txt
+        pip install -r /home/sdp/xuming/test-requirements.txt 
         basekit_path=/home/sdp
         source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
         source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
-        folder_path="/home/sdp/xuming/ut"
-        pip install absl-py
+        folder_path="/home/sdp/xuming/ut_4"
         # Loop through all Python files in the folder and execute them
         dev_num=4 #IDC have 4 1100 pvc card
         # Create a pipe and bind the file descriptor 6
