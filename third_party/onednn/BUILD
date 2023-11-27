@@ -18,73 +18,9 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
-config_setting(
-    name = "build_with_onednn_graph",
-    define_values = {
-        "build_with_onednn_graph": "true",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "build_with_tbb",
-    define_values = {
-        "build_with_tbb": "true",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "onednn_v3_and_gpu",
-    define_values = {
-        "device": "gpu",
-        "onednn_version": "3",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "onednn_v2_and_gpu",
-    define_values = {
-        "device": "gpu",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "onednn_v3_and_cpu",
-    define_values = {
-        "device": "cpu",
-        "onednn_version": "3",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "onednn_v2_and_cpu",
-    define_values = {
-        "device": "cpu",
-    },
-    visibility = ["//visibility:public"],
-)
-
 bzl_library(
     name = "build_defs_bzl",
     srcs = ["build_defs.bzl"],
-)
-
-cc_library(
-    name = "intel_binary_blob",
-    visibility = ["//visibility:public"],
-    deps = select({
-        "@intel_extension_for_openxla//itex:linux_x86_64": [
-            "@onednn_cpu//:onednn_libs_linux",
-        ],
-        "//conditions:default": [],
-    }) + select({
-        ":build_with_tbb": ["@oneTBB//:tbb"],
-        "//conditions:default": [],
-    }),
 )
 
 py_binary(
@@ -102,20 +38,4 @@ py_binary(
         "@onednn_cpu//:__subpackages__",
         "@onednn_gpu//:__subpackages__",
     ],
-)
-
-config_setting(
-    name = "build_with_llga_debug",
-    define_values = {
-        "build_with_llga_debug": "true",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "build_with_graph_compiler",
-    define_values = {
-        "build_with_graph_compiler": "true",
-    },
-    visibility = ["//visibility:public"],
 )
