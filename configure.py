@@ -50,6 +50,8 @@ _ITEX_CURRENT_BAZEL_VERSION = None
 
 _DENY_PATH_LIST = ['..', ';', '|', '$', "'", '%', '*', '&', ':', '?', '<', '>', 'http', 'ftp'] # pylint: disable=line-too-long
 
+
+
 def path_filter(path):
   for p in _DENY_PATH_LIST:
     if p in path:
