@@ -70,12 +70,6 @@ _CMAKE_COMMON_LIST = {
     "#cmakedefine01 BUILD_XEHP": "#define BUILD_XEHP 0",
 }
 
-_CMAKE_ONEDNN_GRAPH_LIST = {
-    "#cmakedefine ONEDNN_BUILD_GRAPH": "#define ONEDNN_BUILD_GRAPH",
-}
-
-_CMAKE_ONEDNN_GRAPH_LIST.update(_CMAKE_COMMON_LIST)
-
 _CMAKE_WITHOUT_ONEDNN_GRAPH_LIST = {
     "#cmakedefine ONEDNN_BUILD_GRAPH": "#undef ONEDNN_BUILD_GRAPH",
 }
@@ -86,10 +80,7 @@ template_rule(
     name = "dnnl_config_h",
     src = "include/oneapi/dnnl/dnnl_config.h.in",
     out = "include/oneapi/dnnl/dnnl_config.h",
-    substitutions = select({
-        "@intel_extension_for_openxla//third_party/onednn:build_with_onednn_graph": _CMAKE_ONEDNN_GRAPH_LIST,
-        "//conditions:default": _CMAKE_WITHOUT_ONEDNN_GRAPH_LIST,
-    }),
+    substitutions = _CMAKE_WITHOUT_ONEDNN_GRAPH_LIST,
 )
 
 convert_cl_to_cpp(
@@ -166,73 +157,4 @@ cc_library(
     #nocopts = "-fno-exceptions",
     visibility = ["//visibility:public"],
     deps = ["@intel_extension_for_openxla//xla/stream_executor/sycl:sycl_gpu_header"],
-)
-
-load("@intel_extension_for_openxla//third_party/onednn:build_defs.bzl", "if_graph_compiler", "if_llga_debug")
-
-_GRAPH_COPTS_GPU_LIST = [
-    "-Wall",
-    "-Wno-unknown-pragmas",
-    "-Wno-deprecated-declarations",
-    "-ffp-model=precise",
-    "-fno-reciprocal-math",
-    "-fvisibility-inlines-hidden",
-    "-Wno-sign-compare",
-    "-Wno-pass-failed",
-    "-Wno-tautological-compare",
-    "-fPIC",
-    "-fvisibility=hidden",
-    "-dpcpp_compile",
-    "-DDNNL_ENABLE_GRAPH_DUMP",
-] + if_llga_debug([
-    "-DDNNL_GRAPH_LAYOUT_DEBUG",
-])
-
-_GRAPH_SRCS_LIST = glob(
-    [
-        "src/graph/interface/*.cpp",
-        "src/graph/backend/*.cpp",
-        "src/graph/backend/dnnl/*.cpp",
-        "src/graph/backend/fake/*.cpp",
-        "src/graph/backend/dnnl/passes/*.cpp",
-        "src/graph/backend/dnnl/patterns/*.cpp",
-        "src/graph/backend/dnnl/kernels/*.cpp",
-        "src/graph/utils/*.cpp",
-        "src/graph/utils/pm/*.cpp",
-    ],
-)
-
-_GRAPH_HDRS_LIST = glob(
-    [
-        "include/oneapi/dnnl/*",
-        "src/graph/interface/*.hpp",
-        "src/graph/backend/*.hpp",
-        "src/graph/backend/dnnl/*.hpp",
-        "src/graph/backend/fake/*.hpp",
-        "src/graph/backend/dnnl/passes/*.hpp",
-        "src/graph/backend/dnnl/patterns/*.hpp",
-        "src/graph/backend/dnnl/kernels/*.hpp",
-        "src/graph/utils/*.hpp",
-        "src/graph/utils/pm/*.hpp",
-    ],
-)
-
-_GRAPH_INCLUDES_LIST = [
-    "include",
-    "src/graph",
-]
-
-_GRAPH_DEPS_LIST = [
-    ":onednn_gpu",
-]
-
-cc_library(
-    name = "onednn_graph_gpu",
-    srcs = _GRAPH_SRCS_LIST,
-    hdrs = _GRAPH_HDRS_LIST,
-    copts = _GRAPH_COPTS_GPU_LIST,
-    includes = _GRAPH_INCLUDES_LIST,
-    visibility = ["//visibility:public"],
-    deps = _GRAPH_DEPS_LIST,
-    alwayslink = True,
 )
