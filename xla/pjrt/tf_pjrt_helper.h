@@ -185,6 +185,17 @@ struct PJRT_CopyToDeviceStream {
   std::unique_ptr<xla::CopyToDeviceStream> stream;
 };
 
+// expose C api for third party libraries like Horovod which needs to get stream
+// and pjrt_buffer.
+extern "C" {
+typedef struct PjRtBuffer_Info PjRtBuffer_Info;
+void* C_ITEXOpaqueDataPointerFromPjRtBuffer(PJRT_Buffer* pjrt_c_buffer);
+PJRT_Buffer* C_ITEXCreatePjRtBuffer(int device_id,
+                                    PjRtBuffer_Info* pjrt_buffer_info,
+                                    PJRT_Client* pjrt_c_client);
+void* C_ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client);
+}
+
 namespace pjrt {
 // C API definitions
 

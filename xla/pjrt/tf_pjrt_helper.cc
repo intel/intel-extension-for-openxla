@@ -102,6 +102,30 @@ void* ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client) {
   return stream;
 }
 
+extern "C" {
+struct PjRtBuffer_Info {
+  std::string datatype;
+  std::vector<int64_t> dimensions;
+  std::vector<int64_t> layout;
+};
+
+void* C_ITEXOpaqueDataPointerFromPjRtBuffer(PJRT_Buffer* pjrt_c_buffer) {
+  return ITEXOpaqueDataPointerFromPjRtBuffer(pjrt_c_buffer);
+}
+
+PJRT_Buffer* C_ITEXCreatePjRtBuffer(int device_id,
+                                    PjRtBuffer_Info* pjrt_buffer_info,
+                                    PJRT_Client* pjrt_c_client) {
+  return ITEXCreatePjRtBuffer(device_id, pjrt_buffer_info->datatype,
+                              pjrt_buffer_info->dimensions,
+                              pjrt_buffer_info->layout, pjrt_c_client);
+}
+
+void* C_ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client) {
+  return ITEXGetStreamFromPjRtDevice(device_id, pjrt_c_client);
+}
+}
+
 namespace xla {
 
 // Ensures that it is safe to deallocate any buffers that have been enqueued in
