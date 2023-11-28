@@ -4,17 +4,17 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_r
 def workspace(path_prefix = "", tf_repo_name = ""):
     dpcpp_configure(name = "local_config_dpcpp")
 
-    new_git_repository(
-        name = "onednn_gpu",
-        # rls-v3.4-pc
-        commit = "9e08782",
-        remote = "https://github.com/oneapi-src/oneDNN.git",
-        build_file = "//third_party/onednn:onednn_gpu.BUILD",
-        verbose = True,
-        patch_cmds = [
-            "git log -1 --format=%H > COMMIT",
-        ],
-    )
+    #new_git_repository(
+    #    name = "onednn_gpu",
+    #    # rls-v3.4-pc
+    #    commit = "9e08782",
+    #    remote = "https://github.com/oneapi-src/oneDNN.git",
+    #    build_file = "//third_party/onednn:onednn_gpu.BUILD",
+    #    verbose = True,
+    #    patch_cmds = [
+    #        "git log -1 --format=%H > COMMIT",
+    #    ],
+    #)
 
     git_repository(
         name = "spir_headers",
