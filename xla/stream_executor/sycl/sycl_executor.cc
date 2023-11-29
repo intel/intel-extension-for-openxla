@@ -549,18 +549,14 @@ void GpuExecutor::DeallocateStream(Stream* stream) {
 }
 
 bool GpuExecutor::CreateStreamDependency(Stream* dependent, Stream* other) {
-  sycl::event* other_completed_event = *AsGpuStream(other)->completed_event();
-  bool ok = GpuDriver::RecordEvent(context_, other_completed_event,
-                                   AsGpuStreamValue(other))
-                .ok();
-  if (!ok) {
-    LOG(ERROR) << "failed to record completion event; "
-                  "therefore, failed to create inter-stream dependency";
-    return false;
+  if (IsMultipleStreamEnabled()) {
+    // For thread safe, event should be thread local.
+    auto event = AsGpuStreamValue(other)->ext_oneapi_submit_barrier();
+    AsGpuStreamValue(dependent)->ext_oneapi_submit_barrier({std::move(event)});
+  } else {
+    AsGpuStreamValue(dependent)->wait();
   }
-
-  return GpuDriver::WaitStreamOnEvent(context_, AsGpuStreamValue(dependent),
-                                      other_completed_event);
+  return true;
 }
 
 tsl::Status GpuExecutor::BlockHostUntilDone(Stream* stream) {
