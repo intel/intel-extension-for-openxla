@@ -76,19 +76,16 @@ PJRT_Buffer* ITEXCopyFromPjRtBuffer(PJRT_Buffer* src, int device_id,
       reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(src->buffer.get())
           ->GetBufferWithExternalReference();
   auto src_tracked_buffer = src_scoped_hold.buffer();
-  auto delete_callback = [src_tracked_buffer]() {
-    auto buffer = const_cast<std::shared_ptr<xla::TrackedDeviceBuffer>&>(
-        src_tracked_buffer);
-    buffer.reset();
-  };
   auto device_ptr = src_tracked_buffer->device_memory().front().opaque();
   auto pjrt_client = reinterpret_cast<xla::PjRtStreamExecutorClient*>(
       pjrt_c_client->client.get());
   return new PJRT_Buffer{
-      std::move(pjrt_client
-                    ->CreateViewOfDeviceBuffer(device_ptr, shape, pjrt_device,
-                                               delete_callback, {})
-                    .value()),
+      std::move(
+          pjrt_client
+              ->CreateViewOfDeviceBuffer(
+                  device_ptr, shape, pjrt_device,
+                  [src_tracked_buffer{std::move(src_tracked_buffer)}]() {}, {})
+              .value()),
       pjrt_c_client};
 }
 
