@@ -35,7 +35,7 @@ except ImportError:
 # pylint: enable=g-import-not-at-top
 
 
-_DEFAULT_SYCL_TOOLKIT_PATH = '/opt/intel/oneapi/compiler/latest/linux'
+_DEFAULT_SYCL_TOOLKIT_PATH = '/opt/intel/oneapi/compiler/latest'
 _DEFAULT_AOT_CONFIG = ''
 _DEFAULT_GCC_TOOLCHAIN_PATH = ''
 _DEFAULT_GCC_TOOLCHAIN_TARGET = ''
