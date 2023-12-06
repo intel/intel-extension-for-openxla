@@ -11,5 +11,5 @@ fi
 CONFIGURE_DIR=$(dirname "$0")
 "$PYTHON_BIN_PATH" "${CONFIGURE_DIR}/configure.py" "$@"
 
+echo "Auto configured oneMKL path"
 echo "Configuration finished"
-

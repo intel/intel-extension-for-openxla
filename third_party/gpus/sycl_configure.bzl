@@ -220,7 +220,7 @@ def _select_sycl_lib_paths(repository_ctx, libs_paths, bash_bin):
                 selected_path = path
             i = i + 1
         if selected_path == None:
-            auto_configure_fail("Cannot find sycl library %s" % name)
+            auto_configure_fail("Cannot find sycl library %s in %s" % (name, path))
 
         libs[name] = struct(file_name = selected_path.basename, path = realpath(repository_ctx, selected_path, bash_bin))
 
