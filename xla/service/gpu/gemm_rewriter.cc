@@ -1213,6 +1213,8 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
     // There are four users of the gemm output within the GELU calculation.
     bool has_aux = gemm->user_count() > 4;
 
+    if (has_aux) return OkStatus();
+
     TF_ASSIGN_OR_RETURN(auto config, gemm->backend_config<GemmBackendConfig>());
     if (config.epilogue() == GemmBackendConfig::DEFAULT) {
       config.set_epilogue(has_aux ? GemmBackendConfig::GELU_AUX
