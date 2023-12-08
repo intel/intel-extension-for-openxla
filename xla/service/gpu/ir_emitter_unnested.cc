@@ -889,6 +889,7 @@ Status IrEmitterUnnested::EmitGemmThunk(mlir::Operation* op) {
       ir_emitter_context_->debug_options().xla_gpu_deterministic_ops();
 
   TF_ASSIGN_OR_RETURN(GemmConfig config, GemmConfig::For(gemm));
+  config.epilogue = se::cuda::BlasLt::Epilogue::kDefault;
   auto thunk =
       std::make_unique<GemmThunk>(GetThunkInfo(op), std::move(config), a, b, c);
 
