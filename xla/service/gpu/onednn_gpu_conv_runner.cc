@@ -467,6 +467,8 @@ Status CreateOneDnnPrimitive(
            onednn_primitive->bias_memory});
     }
     if (conv_descriptor.kind == CudnnConvKind::kForwardActivation) {
+      float leakyrelu_alpha =
+            static_cast<float>(backend_config.leakyrelu_alpha());
       switch (conv_descriptor.backend_config.activation_mode()) {
         case stream_executor::dnn::kSigmoid:
           po.append_eltwise(dnnl::algorithm::eltwise_logistic, 1, 0);
@@ -479,6 +481,12 @@ Status CreateOneDnnPrimitive(
           break;
         case stream_executor::dnn::kTanh:
           po.append_eltwise(dnnl::algorithm::eltwise_tanh, 0, 0);
+          break;
+        case stream_executor::dnn::kElu:
+          po.append_eltwise(dnnl::algorithm::eltwise_elu, 1, 0);
+          break;
+        case stream_executor::dnn::kLeakyRelu:
+          po.append_eltwise(dnnl::algorithm::eltwise_relu, leakyrelu_alpha, 0);
           break;
         case stream_executor::dnn::kNone:
           break;
