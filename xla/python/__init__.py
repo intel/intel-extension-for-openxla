@@ -20,6 +20,7 @@ import platform
 import sys
 
 import jax._src.xla_bridge as xb
+from jax._src.lib import xla_client
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,18 @@ def initialize():
         f"WARNING: Native library {path} does not exist. "
         f"This most likely indicates an issue with how {__package__} "
         f"was built or installed.")
-  xb.register_plugin("xpu",
+  c_api = xb.register_plugin("xpu",
                      priority=500,
                      library_path=str(path))
+  
+  try:
+    import functools
+    from .python import xpu_plugin_extension
+    xla_client.register_custom_call_handler(
+        "SYCL",
+        functools.partial(
+            xpu_plugin_extension.register_custom_call_target, c_api
+        ),
+    )
+  except:
+    raise RuntimeError("Fail to load xpu_plugin_extension.so.")

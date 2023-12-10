@@ -146,7 +146,7 @@ PJRT_Error* PJRT_Gpu_Register_Custom_Call(
       PJRT_Gpu_Register_Custom_Call_Args_STRUCT_SIZE, args->struct_size));
   std::string function_name(args->function_name, args->function_name_size);
   xla::CustomCallTargetRegistry::Global()->Register(
-      function_name, args->custom_call_function, "XPU");
+      function_name, args->custom_call_function, "SYCL");
   return nullptr;
 }
 
