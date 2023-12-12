@@ -62,33 +62,6 @@ PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
       pjrt_c_client};
 }
 
-PJRT_Buffer* ITEXCopyFromPjRtBuffer(PJRT_Buffer* src, int device_id,
-                                    std::string data_type,
-                                    std::vector<int64_t> dimentions,
-                                    std::vector<int64_t> layout,
-                                    PJRT_Client* pjrt_c_client) {
-  xla::PjRtDevice* pjrt_device =
-      pjrt_c_client->client->LookupDevice(device_id).value();
-  xla::PrimitiveType type = XlaDataTypeFromString(data_type);
-  xla::Shape shape =
-      xla::ShapeUtil::MakeShapeWithDenseLayout(type, dimentions, layout);
-  auto src_scoped_hold =
-      reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(src->buffer.get())
-          ->GetBufferWithExternalReference();
-  auto src_tracked_buffer = src_scoped_hold.buffer();
-  auto device_ptr = src_tracked_buffer->device_memory().front().opaque();
-  auto pjrt_client = reinterpret_cast<xla::PjRtStreamExecutorClient*>(
-      pjrt_c_client->client.get());
-  return new PJRT_Buffer{
-      std::move(
-          pjrt_client
-              ->CreateViewOfDeviceBuffer(
-                  device_ptr, shape, pjrt_device,
-                  [src_tracked_buffer{std::move(src_tracked_buffer)}]() {}, {})
-              .value()),
-      pjrt_c_client};
-}
-
 void* ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client) {
   xla::PjRtDevice* pjrt_device =
       std::move(pjrt_c_client->client->LookupDevice(device_id).value());
