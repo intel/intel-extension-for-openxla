@@ -15,8 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_SERVICE_GPU_REDUNDANT_BITCAST_MOVER_H_
-#define XLA_SERVICE_GPU_REDUNDANT_BITCAST_MOVER_H_
+#ifndef XLA_SERVICE_GPU_REDUNDANT_CONVERT_MOVER_H_
+#define XLA_SERVICE_GPU_REDUNDANT_CONVERT_MOVER_H_
 
 #include <functional>
 #include <utility>
@@ -26,11 +26,11 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-class RedundantBitcastMover : public HloModulePass {
+class RedundantConvertMover : public HloModulePass {
  public:
-  RedundantBitcastMover() = default;
+  RedundantConvertMover() = default;
 
-  absl::string_view name() const override { return "redundant-bitcast-mover"; }
+  absl::string_view name() const override { return "redundant-convert-mover"; }
   StatusOr<bool> Run(
       HloModule* module,
       const absl::flat_hash_set<absl::string_view>& execution_threads) override;
@@ -39,4 +39,4 @@ class RedundantBitcastMover : public HloModulePass {
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_REDUNDANT_BITCAST_MOVER_H_
+#endif  // XLA_SERVICE_GPU_REDUNDANT_CONVERT_MOVER_H_

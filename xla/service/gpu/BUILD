@@ -275,7 +275,7 @@ cc_library(
         ":gemm_rewriter",
         ":gpu_executable",
         ":ir_emitter",
-        ":redundant_bitcast_mover",
+        ":redundant_convert_mover",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:variant",
         "@llvm-project//llvm:AsmParser",
@@ -1087,9 +1087,9 @@ cc_library(
 )
 
 cc_library(
-    name = "redundant_bitcast_mover",
-    srcs = ["redundant_bitcast_mover.cc"],
-    hdrs = ["redundant_bitcast_mover.h"],
+    name = "redundant_convert_mover",
+    srcs = ["redundant_convert_mover.cc"],
+    hdrs = ["redundant_convert_mover.h"],
     deps = [
         "@tsl//tsl/platform:errors",
         "@tsl//tsl/platform:statusor",
