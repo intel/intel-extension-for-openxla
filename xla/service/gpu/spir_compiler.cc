@@ -159,7 +159,8 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
     HloPassPipeline mha_fusion_pipeline("multi-headed attention fusion");
     // Rewrite Multi-Headed Attention modules to Fused MHA custom-calls.
     mha_fusion_pipeline.AddPass<RedundantConvertMover>();
-    AlgebraicSimplifierOptions algebraic_simplifier_options({}, {});
+    AlgebraicSimplifierOptions alg_sim_options({}, {});
+    mha_fusion_pipeline.AddPass<AlgebraicSimplifier>(alg_sim_options);
     mha_fusion_pipeline.AddPass<HloDCE>();
     mha_fusion_pipeline.AddPass<FusedMHARewriter>();
     mha_fusion_pipeline.AddPass<HloDCE>();
@@ -177,7 +178,8 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
     // Rewrite 3 gemm modules to Fused QKV custom-calls.
     qkv_fusion_pipeline.AddPass<FusedQKVRewriter>(
         gpu_target_config.gpu_device_info, cuda_compute_capability);
-    AlgebraicSimplifierOptions algebraic_simplifier_options({}, {});
+    AlgebraicSimplifierOptions alg_sim_options({}, {});
+    qkv_fusion_pipeline.AddPass<AlgebraicSimplifier>(alg_sim_options);
     qkv_fusion_pipeline.AddPass<HloDCE>();
 
     TF_RETURN_IF_ERROR(qkv_fusion_pipeline.Run(hlo_module).status());

@@ -25,9 +25,17 @@ namespace gpu {
 namespace {
 namespace m = match;
 
+bool IsBitcastAsReshape(const HloInstruction* instr) {
+  DCHECK(instr->opcode() == HloOpcode::kBitcast);
+  return instr->shape().element_type() ==
+         instr->operand(0)->shape().element_type();
+}
+
 template <typename Pattern>
 auto OptionalBitcast(Pattern pattern) {
-  return m::AnyOf<HloInstruction>(m::Bitcast(pattern), std::move(pattern));
+  return m::AnyOf<HloInstruction>(
+      m::Bitcast(pattern).WithPredicate(IsBitcastAsReshape),
+      std::move(pattern));
 }
 
 bool IsConvert(const HloInstruction* instr) {
@@ -35,21 +43,18 @@ bool IsConvert(const HloInstruction* instr) {
 }
 
 bool MatchDuplicateConvertPatterns(HloInstruction* instr,
-                                   HloInstruction** bitcast_input,
-                                   HloInstruction** convert_2) {
+                                   HloInstruction** bitcast_input) {
   // try to match convert(optionalbitcast(convert(optionalbitcast(input))))
   // where input's shape and element type is same as the final output
   auto default_duplicate_convert_pattern =
-      m::Op(convert_2).WithPredicate(IsConvert).WithOneUse().WithOperand(
+      m::Op().WithPredicate(IsConvert).WithOneUse().WithOperand(
           0, OptionalBitcast(
                  m::Op()
                      .WithOperand(0, OptionalBitcast(m::Op(bitcast_input)))
                      .WithPredicate(IsConvert)
                      .WithOneUse()));
   if (Match(instr, default_duplicate_convert_pattern) &&
-      (*convert_2)->shape() == (*bitcast_input)->shape() &&
-      (*convert_2)->shape().element_type() ==
-          (*bitcast_input)->shape().element_type()) {
+      instr->shape() == (*bitcast_input)->shape()) {
     return true;
   }
   return false;
@@ -57,9 +62,9 @@ bool MatchDuplicateConvertPatterns(HloInstruction* instr,
 
 StatusOr<bool> RemoveRedundantConversion(HloInstruction* instr) {
   HloInstruction* bitcast_input = nullptr;
-  HloInstruction* convert_2 = nullptr;
-  if (MatchDuplicateConvertPatterns(instr, &bitcast_input, &convert_2)) {
-    instr->ReplaceOperandWith(0, bitcast_input);
+  if (MatchDuplicateConvertPatterns(instr, &bitcast_input)) {
+    TF_RETURN_IF_ERROR(
+        instr->parent()->ReplaceInstruction(instr, bitcast_input));
     return true;
   }
   return false;
