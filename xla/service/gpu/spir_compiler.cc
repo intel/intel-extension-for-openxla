@@ -44,7 +44,7 @@ limitations under the License.
 #include "xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h"
 #include "xla/service/gpu/mkl_rewriter.h"
 #include "xla/service/gpu/onednn_fused_conv_rewriter.h"
-#include "xla/service/gpu/redundant_convert_mover.h"
+#include "xla/service/gpu/redundant_bitcast_mover.h"
 #include "xla/service/gpu/target_constants.h"
 #include "xla/service/gpu/triangular_solve_rewriter.h"
 #include "xla/service/hlo_constant_folding.h"
@@ -158,8 +158,10 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
         gpu_target_config.gpu_device_info.gpu_compute_capability());
     HloPassPipeline mha_fusion_pipeline("multi-headed attention fusion");
     // Rewrite Multi-Headed Attention modules to Fused MHA custom-calls.
-    mha_fusion_pipeline.AddPass<RedundantConvertMover>();
+    mha_fusion_pipeline.AddPass<RedundantBitcastMover>();
     AlgebraicSimplifierOptions algebraic_simplifier_options({}, {});
+    mha_fusion_pipeline.AddPass<AlgebraicSimplifier>(
+        algebraic_simplifier_options);
     mha_fusion_pipeline.AddPass<HloDCE>();
     mha_fusion_pipeline.AddPass<FusedMHARewriter>();
     mha_fusion_pipeline.AddPass<HloDCE>();
@@ -178,6 +180,8 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
     qkv_fusion_pipeline.AddPass<FusedQKVRewriter>(
         gpu_target_config.gpu_device_info, cuda_compute_capability);
     AlgebraicSimplifierOptions algebraic_simplifier_options({}, {});
+    qkv_fusion_pipeline.AddPass<AlgebraicSimplifier>(
+        algebraic_simplifier_options);
     qkv_fusion_pipeline.AddPass<HloDCE>();
 
     TF_RETURN_IF_ERROR(qkv_fusion_pipeline.Run(hlo_module).status());
