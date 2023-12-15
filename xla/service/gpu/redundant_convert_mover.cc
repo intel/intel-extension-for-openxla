@@ -16,6 +16,7 @@ limitations under the License.
 #include "xla/service/gpu/redundant_convert_mover.h"
 
 #include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/primitive_util.h"
 #include "xla/service/hlo_creation_utils.h"
 #include "xla/service/pattern_matcher.h"
 
@@ -38,6 +39,12 @@ auto OptionalBitcast(Pattern pattern) {
       std::move(pattern));
 }
 
+bool IsConvertNoLoss(const HloInstruction* instr) {
+  DCHECK(instr->opcode() == HloOpcode::kConvert);
+  return primitive_util::CastPreservesValues(
+      instr->operand(0)->shape().element_type(), instr->shape().element_type());
+}
+
 bool IsConvert(const HloInstruction* instr) {
   return instr->opcode() == HloOpcode::kConvert;
 }
@@ -52,6 +59,7 @@ bool MatchDuplicateConvertPatterns(HloInstruction* instr,
                  m::Op()
                      .WithOperand(0, OptionalBitcast(m::Op(bitcast_input)))
                      .WithPredicate(IsConvert)
+                     .WithPredicate(IsConvertNoLoss)
                      .WithOneUse()));
   if (Match(instr, default_duplicate_convert_pattern) &&
       instr->shape() == (*bitcast_input)->shape()) {
