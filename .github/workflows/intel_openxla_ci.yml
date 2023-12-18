@@ -11,7 +11,7 @@ concurrency:
 
 
 jobs:
-  openXLA-DEMO-CI:
+  openXLA-CI:
     runs-on: Intel_openxla
     steps:
       - name: Check out repository code
