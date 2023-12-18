@@ -191,8 +191,7 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
     mha_fusion_pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
 
     // Rewrite Multi-Headed Attention modules to Fused MHA custom-calls.
-    // SYCL: RedundantConvertMover causes UT failure
-    // mha_fusion_pipeline.AddPass<RedundantConvertMover>();
+    mha_fusion_pipeline.AddPass<RedundantConvertMover>();
     mha_fusion_pipeline.AddPass<HloDCE>();
     mha_fusion_pipeline.AddPass<CudnnFusedMHARewriter>(
         cuda_compute_capability, stream_exec);

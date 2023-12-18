@@ -687,6 +687,7 @@ cc_library(
         "@xla//xla:comparison_util",
         "@xla//xla:literal_util",
         "@xla//xla:permutation_util",
+        "@xla//xla:shape_util",
         "@xla//xla/hlo/ir:hlo",
         "@xla//xla/service:hlo_creation_utils",
         "@xla//xla/service:hlo_pass",
