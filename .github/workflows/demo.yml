@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   openXLA-DEMO-CI:
-    runs-on: IDC_demo
+    runs-on: Intel_openxla
     steps:
       - name: Check out repository code
         uses: actions/checkout@v3
