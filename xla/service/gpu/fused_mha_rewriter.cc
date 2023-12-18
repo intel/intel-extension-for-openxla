@@ -530,6 +530,7 @@ bool MatchBmm1ScaleBiasMaskSoftmaxDropoutBmm2(
     }
     return true;
   }
+  return false;
 }
 
 // We will try to match all the patterns below:
