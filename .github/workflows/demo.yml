@@ -21,7 +21,7 @@ jobs:
         run: |
           set +e
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          source /opt/miniconda/bin/activate ${CONDA_ENV}
           if [ $? -ne 0 ]; then
               echo 'conda env does not exist'
               conda create -n ${CONDA_ENV} python=3.10 -y
@@ -38,7 +38,7 @@ jobs:
         run: |
           set +e
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          source /opt/miniconda/bin/activate ${CONDA_ENV}
           which bazel
           if [ $? -eq 1 ]; then
             wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
@@ -74,7 +74,7 @@ jobs:
         run: |
           set +e
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          source /opt/miniconda/bin/activate ${CONDA_ENV}
           # install requirement from https://github.com/intel-innersource/frameworks.ai.infrastructure.intel-extension-for-tensorflow.jax/blob/yang/jax-v0.4.20/build/test-requirements.txt
           # pip install -e . (install in local )
           basekit_path=/home/sdp
