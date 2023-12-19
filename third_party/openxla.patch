@@ -744,7 +744,7 @@ index 2cd279b68..5b803d065 100644
                          MakeGetTupleElementHlo(new_conv, 0));
      TF_RETURN_IF_ERROR(comp->ReplaceInstruction(instr, new_instr));
 diff --git a/xla/service/gpu/cudnn_fused_mha_rewriter.cc b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
-index 099e6776a..1078de300 100644
+index 099e6776a..1d76a0708 100644
 --- a/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 +++ b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 @@ -295,14 +295,22 @@ bool IsSupportedPrimitiveType(const HloInstruction* bmm) {
@@ -819,7 +819,17 @@ index 099e6776a..1078de300 100644
    } else {
      match_result.has_match = false;
    }
-@@ -1522,12 +1544,14 @@ StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1138,6 +1160,9 @@ StatusOr<HloInstruction*> ChangeCheckedDimToFastest(
+                 rhs_minor_to_major_bmm),
+             operand_bmm, perm),
+         &operand_bmm->metadata());
++#if GOOGLE_SYCL
++    bmm->ReplaceOperandWithDifferentShape(bmm_operand, operand_bmm);
++#endif
+     *((DynCast<HloDotInstruction>(bmm))->mutable_dot_dimension_numbers()) =
+         new_dot_dims_bmm;
+   }
+@@ -1522,12 +1547,14 @@ StatusOr<bool> CudnnFusedMHARewriter::Run(
         module->MakeNonfusionComputations(execution_threads)) {
      const DebugOptions& debug_options =
          comp->parent()->config().debug_options();
@@ -834,7 +844,7 @@ index 099e6776a..1078de300 100644
      for (HloInstruction* instr : comp->MakeInstructionPostOrder()) {
        bool v_transposed = false;
        MatchFwdResult matched_result =
-@@ -1564,6 +1588,7 @@ StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1564,6 +1591,7 @@ StatusOr<bool> CudnnFusedMHARewriter::Run(
                matched_result.is_training, changed, v_transposed));
        any_changed |= changed;
  
@@ -842,7 +852,7 @@ index 099e6776a..1078de300 100644
        if (matched_result.is_training) {
          // if fwd uses mask input, then bwd needs cudnn 8.9.1 to take in a mask
          // input if cudnn version < 8.9.1 we won't lower the bwd pass
-@@ -1636,6 +1661,7 @@ StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1636,6 +1664,7 @@ StatusOr<bool> CudnnFusedMHARewriter::Run(
                  matched_bwd_result.bmm_2_grad_1_need_canonicalization));
          any_changed |= changed;
        }
