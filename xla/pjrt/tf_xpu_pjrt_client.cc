@@ -2167,6 +2167,7 @@ PJRT_Error* PJRT_Client_Create(PJRT_Client_Create_Args* args) {
   // TODO(b/261916900) initializing allocator_config is important as should be
   // passed through the args later.
   xla::GpuAllocatorConfig allocator_config;
+  allocator_config.memory_fraction = 0.9;
   PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
       "PJRT_Client_Create_Args", PJRT_Client_Create_Args_STRUCT_SIZE,
       args->struct_size));
