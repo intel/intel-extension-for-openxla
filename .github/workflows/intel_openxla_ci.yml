@@ -82,8 +82,8 @@ jobs:
           source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
           
           git clone https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
-          cd jax_test && pip install -e .
-          cd openxla
+          cd jax_test/openxla
+          pip install ./tools/*.whl
           mkdir -p ./logs/ut
           pip install -r /home/sdp/xuming/test-requirements.txt
           find ./tests -name "*.py" | sed 's#\./##g' |& tee ut_list.txt
