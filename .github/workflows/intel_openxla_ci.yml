@@ -101,6 +101,11 @@ jobs:
                       echo "'$line' is distribute case"
                       log_name=$(basename "$line" .py)
                       python $line > ./logs/ut/$log_name.log
+                      if [ ${PIPESTATUS[0]} -eq 0 ]; then
+                        echo "run $line successfully" >> ./logs/ut/successful.log
+                      else
+                          echo "run $line failed" >> ./logs/ut/err.log
+                      fi
                   fi
               done < "$file_path"
           else
@@ -136,9 +141,9 @@ jobs:
                   echo "ZE_AFFINITY_MASK=$id python $line"
                   ZE_AFFINITY_MASK=$id python $line > ./logs/ut/$log_name.log
                   if [ ${PIPESTATUS[0]} -eq 0 ]; then
-                    echo "run $line successfully"
+                    echo "run $line successfully" >> ./logs/ut/successful.log
                   else
-                      echo "run $line failed"
+                      echo "run $line failed" >> ./logs/ut/err.log
                   fi
                   # writing one data to the pipe for the next task
                   echo $id >&6
@@ -147,3 +152,12 @@ jobs:
           done < "$file_path"
           wait
           exec 6>&-
+
+          if [ -f "./logs/ut/err.log" ]; then
+            echo "exist fail cases"
+            exit 1 
+          else
+              echo "run successful"
+          fi
+
+          
