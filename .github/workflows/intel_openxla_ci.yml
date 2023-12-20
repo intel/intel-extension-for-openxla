@@ -130,14 +130,14 @@ jobs:
                 else
                   log_name=$(basename "$line" .py)
                   echo "running ut on device-$id"
-                  echo $file
+                  echo $line
                   echo $id
-                  echo "ZE_AFFINITY_MASK=$id python $file"
-                  ZE_AFFINITY_MASK=$id python $file > ./logs/ut/$log_name.log
+                  echo "ZE_AFFINITY_MASK=$id python $line"
+                  ZE_AFFINITY_MASK=$id python $line > ./logs/ut/$log_name.log
                   if [ ${PIPESTATUS[0]} -eq 0 ]; then
-                    echo "run $file successfully"
+                    echo "run $line successfully"
                   else
-                      echo "run $test_case failed"
+                      echo "run $line failed"
                   fi
                   # writing one data to the pipe for the next task
                   echo $id >&6
