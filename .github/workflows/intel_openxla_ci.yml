@@ -127,6 +127,7 @@ jobs:
                 echo "Processing line: $line"
                 if grep -qFx "$line" "$reference_file"; then
                     echo "'$line' is distribute case,skip"
+                    echo $id >&6
                 else
                   log_name=$(basename "$line" .py)
                   echo "running ut on device-$id"
