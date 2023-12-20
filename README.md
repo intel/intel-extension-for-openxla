@@ -30,7 +30,11 @@ Verified Hardware Platforms:
 
 * Intel® Data Center GPU Flex Series 170, Driver Version: [736](https://dgpu-docs.intel.com/releases/stable_736_25_20231031.html)
 
+
+
+
 ### Software Requirements
+
 
 * Ubuntu 22.04 (64-bit)
   * Intel® Data Center GPU Flex Series
