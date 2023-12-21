@@ -20,6 +20,7 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 
+#include "absl/base/call_once.h"
 #include "absl/synchronization/mutex.h"
 #include "tsl/platform/status.h"
 #include "tsl/util/env_var.h"
@@ -199,6 +200,41 @@ DevicePool* DevicePool::GetInstance() {
   return instance_;
 }
 }  // namespace
+
+bool IsMultipleStreamEnabled() {
+  static absl::once_flag init_flag;
+  static bool is_multiple_stream_enabled = false;
+
+  absl::call_once(init_flag, [&]() {
+    const char* env = std::getenv("XLA_ENABLE_MULTIPLE_STREAM");
+
+    if (env != nullptr) {
+      std::string str_value = absl::AsciiStrToLower(env);
+      if (str_value == "0" || str_value == "false") {
+        is_multiple_stream_enabled = false;
+      } else if (str_value == "1" || str_value == "true") {
+        is_multiple_stream_enabled = true;
+      }
+    }
+
+    int count;
+    SYCLError_t error = SYCLGetDeviceCount(&count);
+
+    // Enable multi-stream if found multiple devices.
+    if (error == SYCL_SUCCESS && count != 1) {
+      // Check whether the env setting is consistent with system.
+      if (env != nullptr && !is_multiple_stream_enabled) {
+        LOG(WARNING)
+            << "XLA_ENABLE_MULTIPLE_STREAM=0 will be ingnored since multiple "
+            << "devices are detected";
+      }
+      LOG(INFO) << "Detected " << count << " devices, multi-stream is enabled";
+      is_multiple_stream_enabled = true;
+    }
+  });
+
+  return is_multiple_stream_enabled;
+}
 
 /******************* SYCL context management**************************/
 static sycl::async_handler SYCLAsyncHandler = [](sycl::exception_list eL) {

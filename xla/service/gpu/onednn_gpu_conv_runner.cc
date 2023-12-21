@@ -1,7 +1,5 @@
 /* Copyright (c) 2023 Intel Corporation
 
-Copyright 2017 The TensorFlow Authors. All Rights Reserved.
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -15,28 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "xla/service/gpu/convolution_thunk.h"
+#include "xla/service/gpu/onednn_gpu_conv_runner.h"
 
-#include <memory>
-#include <optional>
 #include <string>
 
-#include "absl/strings/str_cat.h"
-#include "tsl/platform/logging.h"
-#include "tsl/util/env_var.h"
-#include "xla/hlo/ir/hlo_casting_utils.h"
-#include "xla/service/gpu/gpu_conv_runner.h"
-#include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/scratch_allocator.h"
 #include "xla/service/gpu/stream_executor_util.h"
-#include "xla/stream_executor/stream_executor.h"
-#include "xla/stream_executor/sycl/sycl_stream.h"
-#include "xla/types.h"
-#include "xla/util.h"
+#include "xla/stream_executor/gpu/gpu_stream.h"
 
 namespace xla {
 namespace gpu {
-
 using se::DeviceMemory;
 using se::DeviceMemoryBase;
 using se::Stream;
@@ -53,6 +39,8 @@ using ConvFwdPd = dnnl::convolution_forward::primitive_desc;
 using ConvBwdInputPd = dnnl::convolution_backward_data::primitive_desc;
 using ConvBwdFilterPd = dnnl::convolution_backward_weights::primitive_desc;
 using ConvBwdFilterPrimitive = dnnl::convolution_backward_weights;
+
+namespace {
 
 int64_t GetVectCSize(DataLayout layout) {
   switch (layout) {
@@ -479,6 +467,8 @@ Status CreateOneDnnPrimitive(
            onednn_primitive->bias_memory});
     }
     if (conv_descriptor.kind == CudnnConvKind::kForwardActivation) {
+      float leakyrelu_alpha =
+            static_cast<float>(backend_config.leakyrelu_alpha());
       switch (conv_descriptor.backend_config.activation_mode()) {
         case stream_executor::dnn::kSigmoid:
           po.append_eltwise(dnnl::algorithm::eltwise_logistic, 1, 0);
@@ -491,6 +481,12 @@ Status CreateOneDnnPrimitive(
           break;
         case stream_executor::dnn::kTanh:
           po.append_eltwise(dnnl::algorithm::eltwise_tanh, 0, 0);
+          break;
+        case stream_executor::dnn::kElu:
+          po.append_eltwise(dnnl::algorithm::eltwise_elu, 1, 0);
+          break;
+        case stream_executor::dnn::kLeakyRelu:
+          po.append_eltwise(dnnl::algorithm::eltwise_relu, leakyrelu_alpha, 0);
           break;
         case stream_executor::dnn::kNone:
           break;
@@ -542,8 +538,8 @@ Status CreateOneDnnPrimitive(
         onednn_primitive->has_reorder = true;
         size_t reorder_filter_data_size = fwd_pd.weights_desc().get_size();
         void* reorder_filter;
-        TF_RETURN_IF_ERROR(AllocateWorkspace(
-            &reorder_filter, scratch_allocator, reorder_filter_data_size));
+        TF_RETURN_IF_ERROR(AllocateWorkspace(&reorder_filter, scratch_allocator,
+                                             reorder_filter_data_size));
 
         onednn_primitive->internal_filter_memory = dnnl::memory(
             fwd_pd.weights_desc(), onednn_primitive->engine, reorder_filter);
@@ -594,8 +590,8 @@ Status CreateOneDnnPrimitive(
         size_t reorder_filter_data_size =
             bwd_input_pd.weights_desc().get_size();
         void* reorder_filter;
-        TF_RETURN_IF_ERROR(AllocateWorkspace(
-            &reorder_filter, scratch_allocator, reorder_filter_data_size));
+        TF_RETURN_IF_ERROR(AllocateWorkspace(&reorder_filter, scratch_allocator,
+                                             reorder_filter_data_size));
 
         onednn_primitive->internal_filter_memory =
             dnnl::memory(bwd_input_pd.weights_desc(), onednn_primitive->engine,
@@ -694,14 +690,16 @@ Status CreateOneDnnPrimitive(
   }
   return tsl::OkStatus();
 }  // NOLINT
+}  // namespace
 
-StatusOr<OneDnnConvPrimitive> ConvolutionThunk::GetOrCreateOneDnnConvPrimitive(
-    se::Stream* stream,
+StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
+    se::Stream* stream, const GpuConvDescriptor& descriptor,
     const std::vector<se::DeviceMemoryBase>& operand_se_buffers,
-    const se::DeviceMemoryBase& result_buffer, const ExecuteParams& params,
+    const se::DeviceMemoryBase& result_buffer,
+    const Thunk::ExecuteParams& params,
     se::ScratchAllocator* scratch_allocator) {
   OneDnnConvPrimitive primitive;
-  auto status = CreateOneDnnPrimitive(&primitive, descriptor_,
+  auto status = CreateOneDnnPrimitive(&primitive, descriptor,
                                       absl::MakeSpan(operand_se_buffers),
                                       result_buffer, params, scratch_allocator);
   if (TF_PREDICT_FALSE(!status.ok())) {
@@ -710,47 +708,85 @@ StatusOr<OneDnnConvPrimitive> ConvolutionThunk::GetOrCreateOneDnnConvPrimitive(
   return primitive;
 }
 
-ConvolutionThunk::ConvolutionThunk(
-    ThunkInfo thunk_info, GpuConvDescriptor descriptor,
-    std::vector<BufferAllocation::Slice> operand_slices,
-    BufferAllocation::Slice result_slice, BufferAllocation::Slice scratch_slice)
-    : Thunk(Kind::kConvolution, thunk_info),
-      operand_buffers_(std::move(operand_slices)),
-      result_buffer_(result_slice),
-      scratch_buffer_(scratch_slice),
-      descriptor_(std::move(descriptor)) {}
+Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
+                  const GpuConvDescriptor& conv_descriptor,
+                  absl::Span<const se::DeviceMemoryBase> operand_buffers,
+                  se::DeviceMemoryBase result_buffer,
+                  const Thunk::ExecuteParams& params) {
+  void* input_data;
+  void* filter_data;
+  void* output_data;
+  void* bias_data = nullptr;
+  void* side_input_data = nullptr;
 
-Status ConvolutionThunk::ExecuteOnStream(const ExecuteParams& params) {
-  const auto& buffer_allocations = *params.buffer_allocations;
+  switch (conv_descriptor.kind) {
+    case CudnnConvKind::kForward:
+    case CudnnConvKind::kForwardActivation:
+      input_data = const_cast<void*>(operand_buffers[0].opaque());
+      filter_data = const_cast<void*>(operand_buffers[1].opaque());
+      output_data = const_cast<void*>(result_buffer.opaque());
+      break;
+    case CudnnConvKind::kBackwardInput:
+      input_data = const_cast<void*>(result_buffer.opaque());
+      filter_data = const_cast<void*>(operand_buffers[1].opaque());
+      output_data = const_cast<void*>(operand_buffers[0].opaque());
 
-  std::vector<se::DeviceMemoryBase> operand_se_buffers;
-  for (const auto& buffer : operand_buffers_) {
-    operand_se_buffers.push_back(buffer_allocations.GetDeviceAddress(buffer));
+      break;
+    case CudnnConvKind::kBackwardFilter:
+      input_data = const_cast<void*>(operand_buffers[0].opaque());
+      filter_data = const_cast<void*>(result_buffer.opaque());
+      output_data = const_cast<void*>(operand_buffers[1].opaque());
+      break;
+    default:
+      return InternalError("Unkown convolution kind");
   }
 
-  se::DeviceMemoryBase result_buffer =
-      buffer_allocations.GetDeviceAddress(result_buffer_);
+  if (conv_descriptor.kind == CudnnConvKind::kForwardActivation) {
+    bias_data = const_cast<void*>(operand_buffers[2].opaque());
+    if (operand_buffers.size() >= 4) {
+      side_input_data = const_cast<void*>(operand_buffers[3].opaque());
+    }
+  }
+  onednn_primitive.src_memory.set_data_handle(input_data);
+  onednn_primitive.filter_memory.set_data_handle(filter_data);
+  onednn_primitive.dst_memory.set_data_handle(output_data);
+  if (bias_data != nullptr) {
+    onednn_primitive.bias_memory.set_data_handle(bias_data);
+  }
+  try {
+    if (conv_descriptor.kind == CudnnConvKind::kForward ||
+        conv_descriptor.kind == CudnnConvKind::kForwardActivation) {
+      if (onednn_primitive.has_reorder) {
+        onednn_primitive.filter_reorder_primitive.execute(
+            onednn_primitive.stream, onednn_primitive.reorder_args);
+      }
+      onednn_primitive.fwd_primitive.execute(
+          onednn_primitive.stream, onednn_primitive.fwd_primitives_args);
+    } else if (conv_descriptor.kind == CudnnConvKind::kBackwardInput) {
+      if (onednn_primitive.has_reorder) {
+        onednn_primitive.filter_reorder_primitive.execute(
+            onednn_primitive.stream, onednn_primitive.reorder_args);
+      }
+      onednn_primitive.bwd_input_primitive.execute(
+          onednn_primitive.stream, onednn_primitive.bwd_input_primitive_args);
+    } else if (conv_descriptor.kind == CudnnConvKind::kBackwardFilter) {
+      onednn_primitive.bwd_filter_primitive.execute(
+          onednn_primitive.stream, onednn_primitive.bwd_filter_primitive_args);
+      if (onednn_primitive.has_reorder) {
+        onednn_primitive.filter_reorder_primitive.execute(
+            onednn_primitive.stream, onednn_primitive.reorder_args);
+      }
+    } else {
+      return InternalError("Unkown convolutuion kind");
+    }
+  } catch (dnnl::error& e) {
+    std::string error_msg = "Status: " + std::to_string(e.status) +
+                            ", message: " + std::string(e.message) +
+                            ", in file " + std::string(__FILE__) + ":" +
+                            std::to_string(__LINE__);
+    std::cout << error_msg << std::endl;
+  }
 
-  se::DeviceMemoryBase scratch =
-      buffer_allocations.GetDeviceAddress(scratch_buffer_);
-
-  auto stream = params.stream;
-  se::OwningScratchAllocator<2> scratch_allocator(
-      buffer_allocations.device_ordinal(),
-      buffer_allocations.memory_allocator());
-  TF_ASSIGN_OR_RETURN(auto conv_primitive,
-                      GetOrCreateOneDnnConvPrimitive(stream, operand_se_buffers,
-                                                     result_buffer, params, &scratch_allocator));
-
-  TF_RETURN_IF_ERROR(RunGpuConv(conv_primitive, descriptor_,
-                                absl::MakeSpan(operand_se_buffers),
-                                result_buffer, params));
-
-  // Note:: Convolution has a tuple buffer as an output, but we don't need t
-  // populate it as no one should be reading from the tuple directly.
-  //  if (!params.stream->ok()) {
-  //   return InternalError("ConvolutionThunk::ExecuteOnStream failed.");
-  // }
   return tsl::OkStatus();
 }
 

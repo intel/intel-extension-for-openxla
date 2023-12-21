@@ -18,7 +18,7 @@ limitations under the License.
 #include "xla/stream_executor/sycl/sycl_event.h"
 
 #include "tsl/platform/statusor.h"
-#include "xla/stream_executor/sycl/sycl_executor.h"
+// #include "xla/stream_executor/sycl/sycl_executor.h"
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
 

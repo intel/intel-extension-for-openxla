@@ -41,6 +41,11 @@ void sycl_alltoall(std::vector<const void*> send_buffer,
                    PrimitiveType dtype, se::gpu::GpuStreamHandle gpu_stream,
                    ncclComm_t comm);
 
+void sycl_alltoall_split(std::vector<const void*> send_buffer,
+                         std::vector<void*> recv_buffer, int element_count,
+                         PrimitiveType dtype,
+                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
+
 void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                          int element_count, PrimitiveType dtype,
                          ReductionKind reduction_kind,

@@ -660,6 +660,7 @@ def _impl(ctx):
             dbg_feature,
             supports_dynamic_linker_feature,
             supports_pic_feature,
+            unfiltered_compile_flags_feature,
         ]
     sys_inc = [
         "/usr/lib",
@@ -669,7 +670,7 @@ def _impl(ctx):
         # for GPU kernel's header file
         "%{TMP_DIRECTORY}",
     ]
-    include_directories = ctx.attr.builtin_include_directories + ctx.attr.additional_include_directories + sys_inc
+    include_directories = ctx.attr.builtin_include_directories + ctx.attr.additional_include_directories + sys_inc + ctx.attr.cxx_builtin_include_directories
     if (ctx.attr.cpu == "local"):
         tool_paths = [
             tool_path(name = "gcc", path = ctx.attr.compiler_driver),
@@ -721,6 +722,7 @@ cc_toolchain_config = rule(
         "extra_no_canonical_prefixes_flags": attr.string_list(),
         "sycl_compiler_root": attr.string(),
         "compiler_driver": attr.string(),
+        "cxx_builtin_include_directories": attr.string_list(),
         "host_compiler_path": attr.string(),
         "host_compiler_prefix": attr.string(),
         "host_compiler_warnings": attr.string_list(),

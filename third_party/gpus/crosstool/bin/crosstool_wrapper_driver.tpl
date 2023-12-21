@@ -16,7 +16,7 @@ import os
 import subprocess
 import re
 import sys
-import pipes
+import shlex
 
 TMPDIR = "%{TMP_DIRECTORY}"
 
@@ -135,7 +135,7 @@ def main():
   else:
     args, leftover = parser.parse_known_args(sys.argv[1:])
 
-  leftover = [pipes.quote(s) for s in leftover]
+  leftover = [shlex.quote(s) for s in leftover]
   if args.link_stage:
     # link for DPC++ object
     return call_compiler(leftover, link=True, sycl=args.sycl_compile, xetla=args.xetla)

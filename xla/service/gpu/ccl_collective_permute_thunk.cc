@@ -43,10 +43,10 @@ CollectiveOpGroupMode GetGroupMode(CollectivePermuteStartOp op) {
       .value();
 }
 
-CclCollectivePermuteConfig GetCclCollectivePermuteConfig(
+NcclCollectivePermuteConfig GetNcclCollectivePermuteConfig(
     CollectivePermuteStartOp op, int64_t replica_count,
     int64_t partition_count) {
-  CclCollectivePermuteConfig collective_permute_config;
+  NcclCollectivePermuteConfig collective_permute_config;
   auto& config = collective_permute_config.config;
 
   config.operand_count = 1;
@@ -102,47 +102,47 @@ bool IsDegenerate(CollectivePermuteStartOp op, int64_t replica_count,
 }
 
 Status CheckImplementable(CollectivePermuteStartOp op) {
-  TF_RETURN_IF_ERROR(CclCollectiveThunk::CheckImplementable());
+  TF_RETURN_IF_ERROR(NcclCollectiveThunk::CheckImplementable());
   return IsValidOperand(op.getOperand(), Thunk::kNcclCollectivePermute);
 }
 
 }  // namespace impl
 
-CclCollectivePermuteStartThunk::CclCollectivePermuteStartThunk(
+NcclCollectivePermuteStartThunk::NcclCollectivePermuteStartThunk(
     ThunkInfo thunk_info, CollectivePermuteStartOp op, int64_t replica_count,
     int64_t partition_count, const Buffer& buffer)
-    : CclCollectiveThunk(Thunk::kNcclCollectivePermuteStart, thunk_info,
-                         op.getIsSync()),
+    : NcclCollectiveThunk(Thunk::kNcclCollectivePermuteStart, thunk_info,
+                          op.getIsSync()),
       config_(
-          GetCclCollectivePermuteConfig(op, replica_count, partition_count)),
+          GetNcclCollectivePermuteConfig(op, replica_count, partition_count)),
       buffer_(buffer) {}
 
-/*static*/ CclCollectivePermuteConfig
-CclCollectivePermuteStartThunk::GetCclCollectivePermuteConfig(
+/*static*/ NcclCollectivePermuteConfig
+NcclCollectivePermuteStartThunk::GetNcclCollectivePermuteConfig(
     CollectivePermuteStartOp op, int64_t replica_count,
     int64_t partition_count) {
-  return impl::GetCclCollectivePermuteConfig(op, replica_count,
-                                             partition_count);
+  return impl::GetNcclCollectivePermuteConfig(op, replica_count,
+                                              partition_count);
 }
 
-/*static*/ Status CclCollectivePermuteStartThunk::CheckImplementable(
+/*static*/ Status NcclCollectivePermuteStartThunk::CheckImplementable(
     CollectivePermuteStartOp op, int64_t replica_count,
     int64_t partition_count) {
-  return AddOpDescription<CclCollectivePermuteStartThunk>(
+  return AddOpDescription<NcclCollectivePermuteStartThunk>(
       impl::CheckImplementable(op), op, replica_count, partition_count);
 }
 
-/*static*/ bool CclCollectivePermuteStartThunk::IsDegenerate(
+/*static*/ bool NcclCollectivePermuteStartThunk::IsDegenerate(
     CollectivePermuteStartOp op, int64_t replica_count,
     int64_t partition_count) {
   return impl::IsDegenerate(op, replica_count, partition_count);
 }
 
-/*static*/ CollectiveOpGroupMode CclCollectivePermuteStartThunk::GetGroupMode(
+/*static*/ CollectiveOpGroupMode NcclCollectivePermuteStartThunk::GetGroupMode(
     CollectivePermuteStartOp op) {
   return impl::GetGroupMode(op);
 }
-Status CclCollectivePermuteStartThunk::RunCclCollective(
+Status NcclCollectivePermuteStartThunk::RunNcclCollective(
     const ExecuteParams& params, se::Stream& stream, ncclComm_t comm) {
   TF_ASSIGN_OR_RETURN(
       std::vector<DeviceBufferPair> device_buffers,
@@ -161,9 +161,9 @@ Status CclCollectivePermuteStartThunk::RunCclCollective(
           : current_logical_id.computation_id;
   std::string device_string = GetDeviceString(params.nccl_params);
 
-  const CclCollectivePermuteConfig::SourceTargetMapEntry source_target =
-      CclCollectivePermuteConfig::GetSourceTarget(config_.id_to_source_target,
-                                                  current_id);
+  const NcclCollectivePermuteConfig::SourceTargetMapEntry source_target =
+      NcclCollectivePermuteConfig::GetSourceTarget(config_.id_to_source_target,
+                                                   current_id);
 
   return ::xla::gpu::RunCollectivePermute(source_target, device_buffers[0],
                                           stream, comm, device_string,
@@ -171,7 +171,7 @@ Status CclCollectivePermuteStartThunk::RunCclCollective(
 }
 
 Status RunCollectivePermute(
-    CclCollectivePermuteConfig::SourceTargetMapEntry source_target,
+    NcclCollectivePermuteConfig::SourceTargetMapEntry source_target,
     DeviceBufferPair& buffer, se::Stream& stream, ncclComm_t comm,
     absl::string_view device_string, int64_t current_id) {
   // Determine the source and target IDs for this instance. The source ID is the

@@ -403,6 +403,61 @@ void alltoall_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
   }
 }
 
+template <typename T>
+struct AllToAllSplitKernel;
+
+template <typename T>
+void alltoall_split_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
+                          std::vector<AlltoAllParticipant>& participants,
+                          int reduction_size) {
+  const int kLimitedRankSize = MAX_RANK_SIZE / 2;
+  auto group_size =
+      (*stream)
+          .get_device()
+          .template get_info<sycl::info::device::max_work_group_size>();
+  int sub_tensor_size = tensor_size / reduction_size;
+  auto num_workgroup = (sub_tensor_size + group_size - 1) / group_size;
+
+  // clang-format off
+  // Process: send vec -> rev vec
+  // P0: ([a0, a1], [b0, b1], [c0, c1], ...) -> ([a0, d0], [b0, e0], [c0, f0], ...)
+  // P1: ([d0, d1], [e0, e1], [f0, f1], ...) -> ([a1, d1], [b1, e1], [c1, f1], ...)
+  // clang-format on
+  if (reduction_size <= kLimitedRankSize) {
+    stream->submit([&](sycl::handler& cgh) {
+      const T* send[kLimitedRankSize][kLimitedRankSize];  // SYCL: fix size
+      T* recv[kLimitedRankSize][kLimitedRankSize];        // SYCL: fix size
+
+      for (int i = 0; i < reduction_size; ++i) {
+        for (int k = 0; k < reduction_size; ++k) {  // SYCL: fix size
+          send[i][k] = static_cast<const T*>(participants[i].send[k]);
+          recv[i][k] = static_cast<T*>(participants[i].recv[k]);
+        }
+      }
+
+      cgh.parallel_for<AllToAllSplitKernel<T>>(
+          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
+                            sycl::range<1>(group_size)),
+          [=](sycl::nd_item<1> item) {
+            const int index = item.get_global_linear_id();
+            if (index >= sub_tensor_size) return;
+
+            for (int k = 0; k < reduction_size; ++k) {  // SYCL: fix size
+              for (int i = 0; i < reduction_size; ++i) {
+                for (int j = 0; j < reduction_size; ++j) {
+                  recv[i][k][j * sub_tensor_size + index] =
+                      send[j][k][i * sub_tensor_size + index];
+                }
+              }
+            }
+          });
+    });
+  } else {
+    LOG(FATAL) << "Reduction size " << reduction_size
+               << " is not supported in AllToAll.";
+  }
+}
+
 template <typename T, typename Func>
 struct ReduceScatterKernel;
 
@@ -541,6 +596,12 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
         else if (dtype == S64)
           allreduce_dpcpp<int64_t, sycl::plus<int64_t>>(stream, element_count,
                                                         p, comm->nranks);
+        else if (dtype == U32)
+          allreduce_dpcpp<uint32_t, sycl::plus<uint32_t>>(stream, element_count,
+                                                          p, comm->nranks);
+        else if (dtype == U64)
+          allreduce_dpcpp<uint64_t, sycl::plus<uint64_t>>(stream, element_count,
+                                                          p, comm->nranks);
         else if (dtype == C64)
           allreduce_dpcpp<std::complex<float>, sycl::plus<std::complex<float>>>(
               stream, element_count, p, comm->nranks);
@@ -570,6 +631,12 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
               stream, element_count, p, comm->nranks);
         else if (dtype == S64)
           allreduce_dpcpp<int64_t, sycl::multiplies<int64_t>>(
+              stream, element_count, p, comm->nranks);
+        else if (dtype == U32)
+          allreduce_dpcpp<uint32_t, sycl::multiplies<uint32_t>>(
+              stream, element_count, p, comm->nranks);
+        else if (dtype == U64)
+          allreduce_dpcpp<uint64_t, sycl::multiplies<uint64_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == C64)
           allreduce_dpcpp<std::complex<float>,
@@ -602,6 +669,12 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
         else if (dtype == S64)
           allreduce_dpcpp<int64_t, sycl::minimum<int64_t>>(
               stream, element_count, p, comm->nranks);
+        else if (dtype == U32)
+          allreduce_dpcpp<uint32_t, sycl::minimum<uint32_t>>(
+              stream, element_count, p, comm->nranks);
+        else if (dtype == U64)
+          allreduce_dpcpp<uint64_t, sycl::minimum<uint64_t>>(
+              stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
           allreduce_dpcpp<bfloat16, sycl::minimum<float>, float>(
               stream, element_count, p, comm->nranks);
@@ -624,6 +697,12 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
               stream, element_count, p, comm->nranks);
         else if (dtype == S64)
           allreduce_dpcpp<int64_t, sycl::maximum<int64_t>>(
+              stream, element_count, p, comm->nranks);
+        else if (dtype == U32)
+          allreduce_dpcpp<uint32_t, sycl::maximum<uint32_t>>(
+              stream, element_count, p, comm->nranks);
+        else if (dtype == U64)
+          allreduce_dpcpp<uint64_t, sycl::maximum<uint64_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
           allreduce_dpcpp<bfloat16, sycl::maximum<float>, float>(
@@ -686,6 +765,10 @@ void sycl_allgather(const void* send_buffer, void* recv_buffer,
         allgather_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
       else if (dtype == BF16)
         allgather_dpcpp<bfloat16>(stream, element_count, p, comm->nranks);
+      else if (dtype == U32)
+        allgather_dpcpp<uint32_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == U64)
+        allgather_dpcpp<uint64_t>(stream, element_count, p, comm->nranks);
       else
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)
@@ -739,6 +822,66 @@ void sycl_alltoall(std::vector<const void*> send_buffers,
         alltoall_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
       else if (dtype == BF16)
         alltoall_dpcpp<bfloat16>(stream, element_count, p, comm->nranks);
+      else if (dtype == U32)
+        alltoall_dpcpp<uint32_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == U64)
+        alltoall_dpcpp<uint64_t>(stream, element_count, p, comm->nranks);
+      else
+        LOG(FATAL) << "PrimitiveType "
+                   << primitive_util::LowercasePrimitiveTypeName(dtype)
+                   << " is not supported in AllToAll.";
+      streamlist_wait_stream(stream, p);
+
+      Manager::instance().cv.notify_all();
+    }
+  }
+}
+
+void sycl_alltoall_split(std::vector<const void*> send_buffers,
+                         std::vector<void*> recv_buffers, int element_count,
+                         PrimitiveType dtype,
+                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+  std::vector<AlltoAllParticipant> p;
+  {
+    tsl::mutex_lock l(Manager::instance().mu);
+    if (Manager::instance().alltoall_collectives.find(comm->id) ==
+        Manager::instance().alltoall_collectives.end()) {
+      std::vector<AlltoAllParticipant> participants;
+      participants.push_back(
+          {gpu_stream, send_buffers, recv_buffers, comm->rank});
+      Manager::instance().alltoall_collectives[comm->id] = participants;
+      p = participants;
+    } else {
+      Manager::instance().alltoall_collectives[comm->id].push_back(
+          {gpu_stream, send_buffers, recv_buffers, comm->rank});
+      p = Manager::instance().alltoall_collectives[comm->id];
+    }
+
+    if (p.size() != comm->nranks) {
+      Manager::instance().cv.wait(l);
+    } else {
+      Manager::instance().alltoall_collectives.erase(comm->id);
+      std::sort(
+          p.begin(), p.end(),
+          [](const AlltoAllParticipant& a,
+             const AlltoAllParticipant& b) -> bool { return a.rank < b.rank; });
+
+      se::gpu::GpuStreamHandle stream = p[0].stream;
+      stream_wait_streamlist(stream, p);
+      if (dtype == PRED)
+        alltoall_split_dpcpp<bool>(stream, element_count, p, comm->nranks);
+      else if (dtype == F32)
+        alltoall_split_dpcpp<float>(stream, element_count, p, comm->nranks);
+      else if (dtype == F64)
+        alltoall_split_dpcpp<double>(stream, element_count, p, comm->nranks);
+      else if (dtype == S32)
+        alltoall_split_dpcpp<int32_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == S64)
+        alltoall_split_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == U32)
+        alltoall_split_dpcpp<uint32_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == U64)
+        alltoall_split_dpcpp<uint64_t>(stream, element_count, p, comm->nranks);
       else
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)
@@ -799,6 +942,12 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         else if (dtype == S64)
           reducescatter_dpcpp<int64_t, sycl::plus<int64_t>>(
               stream, element_count, p, comm->nranks);
+        else if (dtype == U32)
+          reducescatter_dpcpp<uint32_t, sycl::plus<uint32_t>>(
+              stream, element_count, p, comm->nranks);
+        else if (dtype == U64)
+          reducescatter_dpcpp<uint64_t, sycl::plus<uint64_t>>(
+              stream, element_count, p, comm->nranks);
         else if (dtype == C64)
           reducescatter_dpcpp<std::complex<float>,
                               sycl::plus<std::complex<float>>>(
@@ -829,6 +978,12 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
               stream, element_count, p, comm->nranks);
         else if (dtype == S64)
           reducescatter_dpcpp<int64_t, sycl::multiplies<int64_t>>(
+              stream, element_count, p, comm->nranks);
+        else if (dtype == U32)
+          reducescatter_dpcpp<uint32_t, sycl::multiplies<uint32_t>>(
+              stream, element_count, p, comm->nranks);
+        else if (dtype == U64)
+          reducescatter_dpcpp<uint64_t, sycl::multiplies<uint64_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == C64)
           reducescatter_dpcpp<std::complex<float>,
@@ -864,6 +1019,12 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         else if (dtype == BF16)
           reducescatter_dpcpp<bfloat16, sycl::minimum<float>, float>(
               stream, element_count, p, comm->nranks);
+        else if (dtype == U32)
+          reducescatter_dpcpp<uint32_t, sycl::minimum<uint32_t>>(
+              stream, element_count, p, comm->nranks);
+        else if (dtype == U64)
+          reducescatter_dpcpp<uint64_t, sycl::minimum<uint64_t>>(
+              stream, element_count, p, comm->nranks);
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
@@ -886,6 +1047,12 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
               stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
           reducescatter_dpcpp<bfloat16, sycl::maximum<float>, float>(
+              stream, element_count, p, comm->nranks);
+        else if (dtype == U32)
+          reducescatter_dpcpp<uint32_t, sycl::maximum<uint32_t>>(
+              stream, element_count, p, comm->nranks);
+        else if (dtype == U64)
+          reducescatter_dpcpp<uint64_t, sycl::maximum<uint64_t>>(
               stream, element_count, p, comm->nranks);
         else
           LOG(FATAL) << "PrimitiveType "
@@ -949,6 +1116,10 @@ void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
         permute_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
       else if (dtype == BF16)
         permute_dpcpp<bfloat16>(stream, element_count, p, comm->nranks);
+      else if (dtype == U32)
+        permute_dpcpp<uint32_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == U64)
+        permute_dpcpp<uint64_t>(stream, element_count, p, comm->nranks);
       else
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)

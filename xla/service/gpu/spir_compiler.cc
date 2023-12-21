@@ -30,20 +30,21 @@ limitations under the License.
 #include "xla/service/algebraic_simplifier.h"
 #include "xla/service/call_inliner.h"
 #include "xla/service/convert_mover.h"
+#include "xla/service/dot_dimension_merger.h"
 #include "xla/service/dump.h"
 #include "xla/service/float_normalization.h"
 #include "xla/service/float_support.h"
 #include "xla/service/gpu/backend_configs.pb.h"
+#include "xla/service/gpu/buffer_sharing.h"
 #include "xla/service/gpu/cublas_cudnn.h"
-#include "xla/service/gpu/fused_mha_rewriter.h"
-#include "xla/service/gpu/fused_qkv_rewriter.h"
+#include "xla/service/gpu/cudnn_fused_conv_rewriter.h"
+#include "xla/service/gpu/cudnn_fused_mha_rewriter.h"
+#include "xla/service/gpu/cusolver_rewriter.h"
 #include "xla/service/gpu/gpu_conv_padding_legalization.h"
 #include "xla/service/gpu/gpu_conv_rewriter.h"
 #include "xla/service/gpu/gpu_layout_assignment.h"
 #include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h"
-#include "xla/service/gpu/mkl_rewriter.h"
-#include "xla/service/gpu/onednn_fused_conv_rewriter.h"
 #include "xla/service/gpu/redundant_convert_mover.h"
 #include "xla/service/gpu/target_constants.h"
 #include "xla/service/gpu/triangular_solve_rewriter.h"
@@ -53,7 +54,9 @@ limitations under the License.
 #include "xla/service/hlo_pass_fix.h"
 #include "xla/service/hlo_pass_pipeline.h"
 #include "xla/service/hlo_verifier.h"
+#include "xla/service/layout_normalization.h"
 #include "xla/service/llvm_ir/llvm_util.h"
+#include "xla/service/reshape_decomposer.h"
 #include "xla/service/reshape_mover.h"
 #include "xla/service/tuple_simplifier.h"
 #include "xla/status_macros.h"
@@ -78,13 +81,21 @@ class ConvBfloat16Support : public FloatSupport {
     return (hlo.opcode() != HloOpcode::kConvolution) || is_conv_bf16_supported_;
   }
 
+  bool SupportsMixedPrecisions(const HloInstruction& hlo) const override {
+    // Skip all HLOs other than convolutions.
+    return (hlo.opcode() != HloOpcode::kConvolution);
+  }
+
  private:
   bool is_conv_bf16_supported_;
 };
 
 Status SPIRCompiler::OptimizeHloConvolutionCanonicalization(
-    HloModule* hlo_module, GpuVersion gpu_version,
+    HloModule* hlo_module, se::GpuComputeCapability gpu_version,
+    se::dnn::VersionInfo dnn_version,
     se::DeviceMemoryAllocator* device_allocator) {
+  auto cuda_compute_capability =
+      std::get<se::CudaComputeCapability>(gpu_version);
   // Convert convolutions into CustomCalls to onednn, then canonicalize them
   // (GpuConvPaddingLegalization). Also expand cuSolver calls.
   HloPassPipeline pipeline("conv_canonicalization");
@@ -96,9 +107,9 @@ Status SPIRCompiler::OptimizeHloConvolutionCanonicalization(
   ConvBfloat16Support conv_bf16_support;
   pipeline.AddPass<FloatNormalization>(&conv_bf16_support);
 
-  pipeline.AddPass<MklRewriter>();
+  pipeline.AddPass<GpusolverRewriter>();
   pipeline.AddPass<GpuConvRewriter>();
-  pipeline.AddPass<OnednnFusedConvRewriter>();
+  pipeline.AddPass<CudnnFusedConvRewriter>(cuda_compute_capability);
   pipeline.AddPass<GpuConvPaddingLegalization>();
 
   // The conv padding/vectorization passes which we need to get rid of.  They
@@ -109,11 +120,19 @@ Status SPIRCompiler::OptimizeHloConvolutionCanonicalization(
 
   AlgebraicSimplifierOptions algsimp_options;
   algsimp_options.set_enable_conv_operand_swap(false);
+  algsimp_options.set_enable_unconditional_reduce_of_concat_replacement(false);
   pipeline.AddPass<HloPassFix<AlgebraicSimplifier>>(algsimp_options);
 
   // tf2xla bridge, DepthwiseConvolutionConverter, GpuConvRewriter, and
-  // CudnnSimplifyPadding introduce reshapes and transposes.
-  pipeline.AddPass<HloPassFix<ReshapeMover>>();
+  // CudnnSimplifyPadding introduce reshapes and transposes.  Run ReshapeMover
+  // to a fixed point.  Include algsimp because ReshapeMover relies on it.
+  [&, &pipeline = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+          "reshape_mover_after_conv_canonicalization")] {
+    ReshapeMoverOptions reshape_mover_options;
+    reshape_mover_options.reshape_of_1d_broadcast_is_cheap = true;
+    pipeline.AddPass<HloPassFix<ReshapeMover>>(reshape_mover_options);
+    pipeline.AddPass<AlgebraicSimplifier>(algsimp_options);
+  }();
 
   // The reshapes and transposes can possibly be eliminated using
   // AlgebraicSimplifier. ConvertMover and ReshapeMover fight with each other.
@@ -137,10 +156,53 @@ Status SPIRCompiler::OptimizeHloConvolutionCanonicalization(
 
 Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
     HloModule* hlo_module, se::StreamExecutor* stream_exec,
-    se::DeviceMemoryAllocator* device_allocator,
-    const GpuTargetConfig& gpu_target_config,
-    const AutotuneResults* autotune_results) {
+    const CompileOptions& options, const TargetConfig& gpu_target_config,
+    tsl::thread::ThreadPool* thread_pool) {
   HloPassPipeline pre_pipeline("spir post-layout_assignment part 1");
+
+  // This needs to run before GemmRewriter, which is part of
+  // OptimizeHloPostLayoutAssignment().
+  auto cuda_compute_capability = std::get<se::CudaComputeCapability>(
+      gpu_target_config.device_description.gpu_compute_capability());
+
+  bool use_mha = true;
+  TF_CHECK_OK(tsl::ReadBoolFromEnvVar("MHA", true, &use_mha));
+  if (use_mha) {
+    HloPassPipeline mha_fusion_pipeline("multi-headed attention fusion");
+    const DebugOptions& debug_options = hlo_module->config().debug_options();
+    // The LayoutAssignment pass may leave behind kCopy instructions which are
+    // duplicate or NOPs, so remove them with algebraic simplification and CSE.
+    AlgebraicSimplifierOptions alg_sim_options;
+    alg_sim_options.set_supports_non_canonical_dots(false);
+    alg_sim_options.set_is_layout_sensitive(true);
+    alg_sim_options.set_enable_conv_operand_swap(false);
+    // "slow" minmax means we propagate nan.
+    alg_sim_options.set_minmax_propagate_nan(
+        !hlo_module->config().debug_options().xla_gpu_enable_fast_min_max());
+    alg_sim_options.set_enable_unconditional_reduce_of_concat_replacement(
+        false);
+    if (debug_options.xla_gpu_normalize_layouts()) {
+      mha_fusion_pipeline.AddPass<ReshapeDecomposer>();
+      mha_fusion_pipeline.AddPass<LayoutNormalization>();
+    }
+    mha_fusion_pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
+    mha_fusion_pipeline.AddPass<HloPassFix<AlgebraicSimplifier>>(
+        alg_sim_options);
+    mha_fusion_pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
+
+    // Rewrite Multi-Headed Attention modules to Fused MHA custom-calls.
+    mha_fusion_pipeline.AddPass<RedundantConvertMover>();
+    mha_fusion_pipeline.AddPass<HloDCE>();
+    mha_fusion_pipeline.AddPass<CudnnFusedMHARewriter>(
+        cuda_compute_capability, stream_exec);
+    mha_fusion_pipeline.AddPass<AlgebraicSimplifier>(alg_sim_options);
+    mha_fusion_pipeline.AddPass<HloDCE>();
+    mha_fusion_pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true,
+                                        /*only_fusion_computations*/ false);
+    TF_RETURN_IF_ERROR(mha_fusion_pipeline.Run(hlo_module).status());
+  }
+
+  pre_pipeline.AddPass<DotDimensionMerger>();
 
   // Padding a gemm operand that's a constant results in pad(constant).  Run
   // constant-folding to simplify this into a new constant.
@@ -148,40 +210,7 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
   TF_RETURN_IF_ERROR(pre_pipeline.Run(hlo_module).status());
 
   TF_RETURN_IF_ERROR(GpuCompiler::OptimizeHloPostLayoutAssignment(
-      hlo_module, stream_exec, device_allocator, gpu_target_config,
-      autotune_results));
-
-  bool use_mha = true;
-  TF_CHECK_OK(tsl::ReadBoolFromEnvVar("MHA", true, &use_mha));
-  if (use_mha) {
-    auto cuda_compute_capability =
-        std::get<se::CudaComputeCapability>(gpu_target_config.gpu_version);
-    HloPassPipeline mha_fusion_pipeline("multi-headed attention fusion");
-    // Rewrite Multi-Headed Attention modules to Fused MHA custom-calls.
-    mha_fusion_pipeline.AddPass<RedundantConvertMover>();
-    mha_fusion_pipeline.AddPass<HloDCE>();
-    mha_fusion_pipeline.AddPass<FusedMHARewriter>();
-    mha_fusion_pipeline.AddPass<HloDCE>();
-    mha_fusion_pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true,
-                           /*only_fusion_computations*/ false);
-    TF_RETURN_IF_ERROR(mha_fusion_pipeline.Run(hlo_module).status());
-  }
-
-  bool use_qkv = false;
-  TF_CHECK_OK(tsl::ReadBoolFromEnvVar("OPENXLA_ENABLE_QKV", false, &use_qkv));
-  if (use_qkv) {
-    const GpuDeviceInfo& gpu_device_info = gpu_target_config.gpu_device_info;
-
-    auto cuda_compute_capability =
-        std::get<se::CudaComputeCapability>(gpu_target_config.gpu_version);
-    HloPassPipeline qkv_fusion_pipeline("QKV BatchedGemm fusion");
-    // Rewrite 3 gemm modules to Fused QKV custom-calls.
-    qkv_fusion_pipeline.AddPass<FusedQKVRewriter>(gpu_device_info,
-                                                  cuda_compute_capability);
-    qkv_fusion_pipeline.AddPass<HloDCE>();
-
-    TF_RETURN_IF_ERROR(qkv_fusion_pipeline.Run(hlo_module).status());
-  }
+      hlo_module, stream_exec, options, gpu_target_config, thread_pool));
 
   HloPassPipeline post_pipeline("spir post-layout_assignment part 2");
 
@@ -195,39 +224,6 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
 }
 
 namespace {
-std::optional<bool> CanShareBufferHint(const HloInstruction* user,
-                                       const HloInstruction* operand,
-                                       const ShapeIndex& user_index) {
-  switch (user->opcode()) {
-    case HloOpcode::kAllReduce:
-      // NCCL all-reduce can be performed in-place.
-      return user->operand_count() == 1 ||
-             (user_index.size() == 1 &&
-              user->operand(user_index[0]) == operand);
-    case HloOpcode::kCustomCall:
-      // The matrix bias operand can be overwritten in-place.
-      if (user->custom_call_target() == kCublasLtMatmulCallTarget) {
-        GemmBackendConfig config =
-            std::move(user->backend_config<GemmBackendConfig>()).value();
-        return (config.beta() != 0.) && user->operand(2) == operand;
-      }
-      if (user->custom_call_target() ==
-          kCudnnConvBiasActivationForwardCallTarget) {
-        CudnnConvBackendConfig config =
-            std::move(user->backend_config<CudnnConvBackendConfig>()).value();
-        return (config.side_input_scale() != 0.) &&
-               (user->operand(user->operand_count() - 1) == operand);
-      }
-      // The operand of cholesky can be shared with the first output.
-      if (user->custom_call_target() == kCusolverCholeskyCallTarget) {
-        return user_index.size() == 1 && user_index[0] == 0;
-      }
-      return false;
-    default:
-      return std::nullopt;
-  }
-}
-
 // Try to load textual LLVM IR from files defined in the FLAGS. If
 // successful, return the llvm::Module, otherwise return nullptr.
 std::unique_ptr<llvm::Module> MaybeLoadLLVMFromFile(const HloModule* module,
@@ -277,20 +273,17 @@ SPIRCompiler::SPIRCompiler()
     : GpuCompiler(stream_executor::sycl::kSyclPlatformId, spir::TargetTriple(),
                   spir::DataLayout()) {}
 
-HloDataflowAnalysis::CanShareBuffer SPIRCompiler::GetCanShareBuffer() {
+HloDataflowAnalysis::CanShareBuffer SPIRCompiler::GetCanShareBuffer() const {
   return &CanShareBufferHint;
-}
-
-GpuVersion SPIRCompiler::GetGpuVersion(se::StreamExecutor* stream_exec) {
-  se::CudaComputeCapability version(100, 100);
-  return version;
 }
 
 StatusOr<std::pair<std::string, std::vector<uint8_t>>>
 SPIRCompiler::CompileTargetBinary(const HloModuleConfig& module_config,
                                   llvm::Module* llvm_module,
-                                  GpuVersion gpu_version, bool relocatable,
-                                  const HloModule* debug_module) {
+                                  se::GpuComputeCapability gpu_version,
+                                  bool relocatable,
+                                  const HloModule* debug_module,
+                                  const CompileOptions& options) {
   std::string libdevice_dir;
   VLOG(2) << "Libdevice dir = " << libdevice_dir << "\n";
   std::unique_ptr<llvm::Module> loaded_module =
@@ -305,9 +298,9 @@ SPIRCompiler::CompileTargetBinary(const HloModuleConfig& module_config,
   std::string spir;
   if (debug_module) {
     XLA_SCOPED_LOGGING_TIMER("CompileTargetBinary - CompileToSpir");
-    TF_ASSIGN_OR_RETURN(
-        spir,
-        spir::CompileToSpir(selected_module, gpu_version, module_config, libdevice_dir));
+    TF_ASSIGN_OR_RETURN(spir, spir::CompileToSpir(selected_module, gpu_version,
+                                                  module_config.debug_options(),
+                                                  libdevice_dir));
   }
 
   std::vector<uint8_t> spir_bin(spir.begin(), spir.end());

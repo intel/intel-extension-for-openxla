@@ -1,6 +1,6 @@
 # Quick Start for Stable Diffusion Inference
 
-[Stable Diffusion](https://arxiv.org/abs/2112.10752) is a latent text-to-image diffusion. More details could be found in the [huggingface](https://huggingface.co/CompVis/stable-diffusion).
+[Stable Diffusion](https://arxiv.org/abs/2112.10752) is a latent text-to-image diffusion model. More details could be found in [Stable Diffusion v1](https://github.com/CompVis/stable-diffusion) and [Stable Diffusion v2](https://github.com/Stability-AI/stablediffusion).
 
 ## Requirements
 
@@ -10,12 +10,12 @@ please got the [main page](https://github.com/intel/intel-extension-for-openxla/
 
 ### 2. Install jax
 ```bash
-pip install jax==0.4.13 jaxlib==0.4.13 flax==0.7.0
+pip install jax==0.4.20 jaxlib==0.4.20 flax==0.7.0
 ```
 ### 3. Install huggingface transformers
 
 ```bash
-pip install transformers==4.27.4 diffusers==0.16.1 datasets==2.12.0 msgpack==1.0.7
+pip install transformers==4.32 diffusers==0.23.0 datasets==2.12.0 msgpack==1.0.7
 ```
 ## Run
 
@@ -24,15 +24,18 @@ pip install transformers==4.27.4 diffusers==0.16.1 datasets==2.12.0 msgpack==1.0
 | **ENV** | **Description** | **PVC Platform** | **ATSM/DG2 Platform** | 
 | :---: | :---: | :---: |:---: |
 | ZE_AFFINITY_MASK | Run this model on single GPU tile |export ZE_AFFINITY_MASK=0.0 | export ZE_AFFINITY_MASK=0.0 | 
+| XLA_FLAGS | Customize xla debug options | export XLA_FLAGS="--xla_gpu_force_conv_nhwc" | export XLA_FLAGS="--xla_gpu_force_conv_nhwc" |
 
 ### 2. Inference Command
 
-```
-python jax_stable.py
-```
+| **Model** | **Output Image Resolution** | **Command** | 
+| :---: | :---: | :---: |
+| [CompVis/stable-diffusion-v1-4](https://huggingface.co/CompVis/stable-diffusion-v1-4) | 512x512 | ```python jax_stable.py``` |
+| [stabilityai/stable-diffusion-2](https://huggingface.co/stabilityai/stable-diffusion-2) | 768x768 | ```python jax_stable.py -m stabilityai/stable-diffusion-2``` |
+| [stabilityai/stable-diffusion-2-1](https://huggingface.co/stabilityai/stable-diffusion-2-1) | 768x768 | ```python jax_stable.py -m stabilityai/stable-diffusion-2-1``` |
 
 ## Expected Output
 
 ```
-Latency per image is: 1.003s
+Average Latency per image is: x.xxxs
 ```

@@ -28,16 +28,16 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-struct CclAllGatherConfig {
-  CclCollectiveConfig config;
+struct NcclAllGatherConfig {
+  NcclCollectiveConfig config;
 };
 
 // Thunk that performs a NCCL-based All-Gather among CUDA GPU-based replicas.
-class CclAllGatherStartThunk : public CclCollectiveThunk {
+class NcclAllGatherStartThunk : public NcclCollectiveThunk {
  public:
-  CclAllGatherStartThunk(ThunkInfo thunk_info,
-                         mlir::lmhlo_gpu::AllGatherStartOp op,
-                         std::vector<Buffer> buffers);
+  NcclAllGatherStartThunk(ThunkInfo thunk_info,
+                          mlir::lmhlo_gpu::AllGatherStartOp op,
+                          std::vector<Buffer> buffers);
 
   static const char* GetHloOpName() { return "all-gather-start"; }
 
@@ -50,12 +50,12 @@ class CclAllGatherStartThunk : public CclCollectiveThunk {
       mlir::lmhlo_gpu::AllGatherStartOp op);
 
  protected:
-  const CclCollectiveConfig& config() const override { return config_.config; }
-  Status RunCclCollective(const ExecuteParams& params, se::Stream& stream,
-                          ncclComm_t comm) override;
+  const NcclCollectiveConfig& config() const override { return config_.config; }
+  Status RunNcclCollective(const ExecuteParams& params, se::Stream& stream,
+                           ncclComm_t comm) override;
 
  private:
-  const CclAllGatherConfig config_;
+  const NcclAllGatherConfig config_;
   const std::vector<Buffer> buffers_;
 };
 

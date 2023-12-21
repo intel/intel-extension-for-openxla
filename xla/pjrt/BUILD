@@ -5,9 +5,25 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":pjrt_c_api_wrapper_impl",
-        ":se_xpu_client",
+        ":se_xpu_pjrt_client",
         "@xla//xla/pjrt/c:pjrt_c_api_helpers",
         "@xla//xla/pjrt/c:pjrt_c_api_tpu_hdrs",
+        "@xla//xla/pjrt/c:pjrt_c_api_gpu_extension_hdrs",
+        "@xla//xla/pjrt/c:pjrt_c_api_hdrs",
+        "@xla//xla/pjrt/c:pjrt_c_api_profiler_extension_hdrs",
+        # "@xla//xla/backends/profiler/gpu:device_tracer",  # To register the GPU Tracers with the GPU Plugin".
+        # "@xla//xla/backends/profiler/plugin:plugin_tracer_impl",
+        # "@xla//xla/backends/profiler/plugin:profiler_c_api_hdrs",
+        # "@xla//xla/backends/profiler/plugin:profiler_error",
+        "@xla//xla/pjrt:pjrt_client",
+        "@xla//xla/pjrt:pjrt_common",
+        "@xla//xla/pjrt/gpu:gpu_helpers",
+        "@xla//xla/python:inspect_sharding",  # To register "InspectSharding" custom partitioning handler.
+        "@xla//xla/service:custom_call_target_registry",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings:str_format",
+        "@tsl//tsl/platform:errors",
     ],
 )
 
@@ -30,8 +46,6 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "//xla/service/gpu:gpu_computation_placer",
-        "//xla/service/gpu:gpu_transfer_manager",
         "//xla/service/gpu:spir_compiler",
         "//xla/stream_executor:sycl_platform",
         "@xla//xla:literal",
@@ -45,12 +59,13 @@ cc_library(
         "@xla//xla/pjrt/c:pjrt_c_api_tpu_hdrs",
         "@xla//xla/service:compiler",
         "@xla//xla/service:computation_placer",
+        "@xla//xla/service/gpu:gpu_transfer_manager",
         "@xla//xla/stream_executor/tpu:c_api_conversions",
     ],
 )
 
 cc_library(
-    name = "se_xpu_client",
+    name = "se_xpu_pjrt_client",
     srcs = ["se_xpu_pjrt_client.cc"],
     hdrs = ["se_xpu_pjrt_client.h"],
     deps = [
@@ -81,8 +96,9 @@ cc_library(
         "@xla//xla/pjrt/gpu:gpu_helpers",
         "@xla//xla/service:platform_util",
         "@xla//xla/service/gpu:gpu_executable_run_options",
-        "@xla//xla/stream_executor:device_mem_allocator",
         "@xla//xla/stream_executor:device_memory",
-        "@xla//xla/stream_executor:tf_allocator_adapter",
+        "@xla//xla/stream_executor:stream_executor_internal",
+        "@xla//xla/stream_executor/integrations:device_mem_allocator",
+        "@xla//xla/stream_executor/integrations:tf_allocator_adapter",
     ],
 )

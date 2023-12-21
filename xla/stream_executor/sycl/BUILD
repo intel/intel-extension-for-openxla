@@ -49,18 +49,25 @@ cc_library(
     srcs = ["sycl_driver.cc"],
     deps = [
         ":sycl_gpu_runtime_imp",
+        "@com_google_absl//absl/debugging:leak_check",
         "@com_google_absl//absl/base",
+        "@com_google_absl//absl/container:node_hash_map",
         "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/strings",
-        "@tsl//tsl/platform:env",
-        "@tsl//tsl/platform:numbers",
-        "@tsl//tsl/platform:stacktrace",
-        "@tsl//tsl/platform:static_threadlocal",
-        "@xla//xla/stream_executor:device_options",
         "@xla//xla/stream_executor:stream_executor_headers",
+        "@xla//xla/stream_executor:device_options",
         "@xla//xla/stream_executor/gpu:gpu_driver_header",
         "@xla//xla/stream_executor/platform",
         "@xla//xla/stream_executor/platform:dso_loader",
+        "@tsl//tsl/platform:env",
+        "@tsl//tsl/platform:errors",
+        "@tsl//tsl/platform:logging",
+        "@tsl//tsl/platform:stacktrace",
+        "@tsl//tsl/platform:status",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/synchronization",
     ] + if_sycl_is_configured([
         "@local_config_sycl//sycl:mkl",
     ]),
@@ -85,8 +92,9 @@ cc_library(
             "@xla//xla/stream_executor",  # buildcleaner: keep
             "@xla//xla/stream_executor:executor_cache",
             "@xla//xla/stream_executor:multi_platform_manager",
-            "@xla//xla/stream_executor:stream_executor_pimpl_header",
+            "@xla//xla/stream_executor:stream_executor_headers",
             "@xla//xla/stream_executor/platform",
+            "@xla//xla/stream_executor/gpu:gpu_executor_header",
         ] + [
             "@com_google_absl//absl/base",
             "@com_google_absl//absl/base:core_headers",
@@ -99,25 +107,12 @@ cc_library(
 )
 
 cc_library(
-    name = "sycl_executor_header",
-    textual_hdrs = ["sycl_executor.h"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":sycl_kernel",
-        "@tsl//tsl/platform:fingerprint",
-        "@xla//xla/stream_executor:event",
-        "@xla//xla/stream_executor/platform",
-    ],
-)
-
-cc_library(
     name = "sycl_kernel",
     srcs = ["sycl_kernel.cc"],
     hdrs = ["sycl_kernel.h"],
     deps = [
         ":sycl_gpu_runtime_imp",
-        "@xla//xla/stream_executor:event",
-        "@xla//xla/stream_executor:stream_executor_pimpl_header",
+        "@xla//xla/stream_executor:stream_executor_headers",
         "@xla//xla/stream_executor/gpu:gpu_kernel_header",
         "@xla//xla/stream_executor/platform",
     ],
@@ -129,10 +124,10 @@ cc_library(
     hdrs = ["sycl_event.h"],
     deps = [
         ":sycl_driver",
-        ":sycl_executor_header",
         ":sycl_stream",
         "@xla//xla/stream_executor:stream_executor_headers",
         "@xla//xla/stream_executor/gpu:gpu_event",
+        "@xla//xla/stream_executor/gpu:gpu_stream_header",
     ],
 )
 
@@ -140,7 +135,7 @@ cc_library(
     name = "sycl_stream",
     hdrs = ["sycl_stream.h"],
     deps = [
-        ":sycl_executor_header",
+        ":sycl_driver",
         "@xla//xla/stream_executor:stream_executor_headers",
         "@xla//xla/stream_executor/gpu:gpu_stream",
         "@xla//xla/stream_executor/platform",
@@ -160,8 +155,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@xla//xla/stream_executor:event",
         "@xla//xla/stream_executor:stream_executor_internal",
-        "@xla//xla/stream_executor:stream_executor_pimpl_header",
-        "@xla//xla/stream_executor:timer",
+        "@xla//xla/stream_executor:stream_executor_headers",
         "@xla//xla/stream_executor/platform",
         "@xla//xla/stream_executor/platform:dso_loader",
     ] + [

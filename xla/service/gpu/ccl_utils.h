@@ -48,23 +48,28 @@ namespace xla {
 namespace gpu {
 
 #if ITEX_USE_CCL
-ccl::reduction ToCclReduction(ReductionKind kind);
-StatusOr<std::pair<ccl::datatype, int>> ToCclDataTypeAndCountMultiplier(
+ccl::reduction ToNcclReduction(ReductionKind kind);
+StatusOr<std::pair<ccl::datatype, int>> ToNcclDataTypeAndCountMultiplier(
     PrimitiveType element_type);
 #endif  // ITEX_USE_CCL
 
-bool IsGlobalCclConfig();
-bool IsCclLaunchModeParallel();
+bool IsGlobalNcclConfig();
+bool IsNcclLaunchModeParallel();
 
 size_t GetNumLocalParticipants(
     const std::vector<GlobalDeviceId>& participants,
     const std::vector<GlobalDeviceId>* local_devices);  // may be null
 
-class CclUniqueIdCallback {
+StatusOr<const NcclUniqueIdCallback*> GetNcclUniqueIdCallback(
+    const NcclUniqueIdCallback* unique_id_callback,  // may be null
+    bool is_local);
+
+class CustomNcclUniqueIdCallback {
  public:
-  explicit CclUniqueIdCallback(const std::vector<ReplicaGroup>& replica_groups,
-                               const std::vector<GlobalDeviceId>& participants,
-                               GlobalDeviceId device_id) {
+  explicit CustomNcclUniqueIdCallback(
+      const std::vector<ReplicaGroup>& replica_groups,
+      const std::vector<GlobalDeviceId>& participants,
+      GlobalDeviceId device_id) {
     if (replica_groups.size() == 1) return;
     auto it = std::find(participants.begin(), participants.end(), device_id);
     CHECK(it != participants.end());
@@ -74,7 +79,7 @@ class CclUniqueIdCallback {
     replica_id_ = participants[0].value();
   }
 
-  StatusOr<std::string> operator()(const std::string& run_id) {
+  StatusOr<std::string> operator()(const std::string& run_id) const {
     if (replica_id_ == kMissingId_)
       return run_id;
     else
@@ -120,15 +125,15 @@ class Lockable {
 
 TSL_LIB_GTL_DEFINE_INT_TYPE(OpId, int64_t);
 
-struct CclComm : public Lockable<ccl::communicator*> {
-  explicit CclComm(ccl::communicator* comm) : Lockable(comm) {}
+struct NcclComm : public Lockable<ccl::communicator*> {
+  explicit NcclComm(ccl::communicator* comm) : Lockable(comm) {}
 };
 
-StatusOr<CclComm::Lock> AcquireCclComm(RunId run_id, OpId op_id,
-                                       std::vector<GlobalDeviceId> participants,
-                                       size_t num_local_participants,
-                                       CclUniqueIdCallback& unique_id_callback,
-                                       int rank, int64_t stream_id);
+StatusOr<NcclComm::Lock> AcquireNcclComm(
+    RunId run_id, OpId op_id, std::vector<GlobalDeviceId> participants,
+    size_t num_local_participants,
+    const CustomNcclUniqueIdCallback& unique_id_callback, int rank,
+    int64_t stream_id, bool enable_clique_optimization);
 
 }  // namespace gpu
 }  // namespace xla

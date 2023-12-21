@@ -10,7 +10,7 @@ Please got the [main page](https://github.com/intel/intel-extension-for-openxla/
 
 ### 2. Install jax and flax
 ```bash
-pip install jax==0.4.13 jaxlib==0.4.13
+pip install jax==0.4.20 jaxlib==0.4.20
 ```
 ### 3. Install dependency
 ```bash

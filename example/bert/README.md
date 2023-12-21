@@ -1,6 +1,14 @@
 # Quick Start for fine-tunes BERT on SQuAD
-Fine-tunes BERT model on SQuAD task by [Question Answering examples](https://github.com/huggingface/transformers/tree/v4.27.4/examples/flax/question-answering#question-answering-examples).
+Fine-tunes BERT model on SQuAD task by [Question Answering examples](https://github.com/huggingface/transformers/tree/v4.32.0/examples/flax/question-answering#question-answering-examples).
 This expample is referred from [HuggingFace Transformers](https://github.com/huggingface/transformers). See [Backup](#Backup) for modification details.
+
+
+**IMPORTANT: This example is temporarily unavailable under JAX v0.4.20 with below error due to public issue (https://github.com/huggingface/transformers/issues/27644):**
+```
+AttributeError: 'ArrayImpl' object has no attribute 'split'
+```
+**Will reenable it once it's fixed in community.**
+
 
 ## Requirements
 
@@ -10,7 +18,7 @@ Please got the [main page](https://github.com/intel/intel-extension-for-openxla/
 ### 2. Install dependency
 Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```bash
-pip install jax==0.4.13 jaxlib==0.4.13 flax==0.7.0
+pip install jax==0.4.20 jaxlib==0.4.20 flax==0.7.0
 cd <WORKSPACE>/example/bert
 pip install -r requirements.txt
 ```
@@ -31,7 +39,7 @@ cd -
 ### Running command
 ```bash
 python run_qa.py \
- --model_name_or_path <WORKSPACE>/examples/bert/models \
+ --model_name_or_path <WORKSPACE>/example/bert/models \
  --dataset_name squad \
  --do_train \
  --per_device_train_batch_size 8 \
@@ -62,10 +70,10 @@ Performance... xxx iter/s
 ### Backup
 ```patch
 diff --git a/examples/flax/question-answering/run_qa.py b/examples/flax/question-answering/run_qa.py
-index 230480428..00d901d76 100644
+index a2839539e..a530d8560 100644
 --- a/examples/flax/question-answering/run_qa.py
 +++ b/examples/flax/question-answering/run_qa.py
-@@ -821,7 +821,8 @@ def main():
+@@ -846,7 +846,8 @@ def main():
 
      # region Training steps and logging init
      train_dataset = processed_raw_datasets["train"]
@@ -75,7 +83,7 @@ index 230480428..00d901d76 100644
 
      # Log a few random samples from the training set:
      for index in random.sample(range(len(train_dataset)), 3):
-@@ -931,11 +932,12 @@ def main():
+@@ -957,11 +958,12 @@ def main():
      state = replicate(state)
 
      train_time = 0
@@ -89,7 +97,7 @@ index 230480428..00d901d76 100644
          train_metrics = []
 
          # Create sampling rng
-@@ -956,6 +958,13 @@ def main():
+@@ -982,6 +984,13 @@ def main():
 
              cur_step = epoch * step_per_epoch + step
 
@@ -103,7 +111,7 @@ index 230480428..00d901d76 100644
              if cur_step % training_args.logging_steps == 0 and cur_step > 0:
                  # Save metrics
                  train_metric = unreplicate(train_metric)
-@@ -1022,6 +1031,9 @@ def main():
+@@ -1048,6 +1057,9 @@ def main():
                      if training_args.push_to_hub:
                          repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
          epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"

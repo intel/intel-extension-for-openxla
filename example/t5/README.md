@@ -37,7 +37,7 @@ For benchmarking, you could skip this step because our model script will downloa
 git clone https://github.com/google-research/t5x.git
 bash install_xpu.sh
 pip install --upgrade intel-extension-for-openxla
-pip install jax==0.4.13 jaxlib==0.4.13
+pip install jax==0.4.20 jaxlib==0.4.20
 ```
 ## Inference
 
@@ -48,7 +48,7 @@ To fully utilize the hardware capabilities and achieve the best performance, you
 | ZE_AFFINITY_MASK | Run this model on single GPU tile |export ZE_AFFINITY_MASK=0 | export ZE_AFFINITY_MASK=0 |
 | XETLA_GEMM | Call the [XETLA](https://github.com/intel/xetla) library to run GEMMs, instead of using oneDNN.|export XETLA_GEMM=1 | NA | 
 | LLM | Enable our customized optimization strategies for large language models (LLM) |export LLM=1 | export LLM=1 |
-| XLA_FLAGS | Cutomerlize xla debug options | export XLA_FLAGS="--xla_disable_hlo_passes=dot-merger" | export XLA_FLAGS="--xla_disable_hlo_passes=dot-merger" |
+| XLA_FLAGS | Customize xla debug options | export XLA_FLAGS="--xla_disable_hlo_passes=dot-merger" | export XLA_FLAGS="--xla_disable_hlo_passes=dot-merger" |
 
 ### Command Description
 ```

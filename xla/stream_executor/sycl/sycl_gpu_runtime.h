@@ -39,22 +39,7 @@ enum SYCLError_t {
   SYCL_ERROR_DESTROY_DEFAULT_STREAM,
 };
 
-inline bool IsMultipleStreamEnabled() {
-  bool is_multiple_stream_enabled = false;
-  const char* env = std::getenv("XLA_ENABLE_MULTIPLE_STREAM");
-  if (env == nullptr) {
-    return is_multiple_stream_enabled;
-  }
-
-  std::string str_value = absl::AsciiStrToLower(env);
-  if (str_value == "0" || str_value == "false") {
-    is_multiple_stream_enabled = false;
-  } else if (str_value == "1" || str_value == "true") {
-    is_multiple_stream_enabled = true;
-  }
-
-  return is_multiple_stream_enabled;
-}
+bool IsMultipleStreamEnabled();
 
 const char* ToString(SYCLError_t error);
 
@@ -107,4 +92,5 @@ void* SYCLMallocHost(sycl::device* device, size_t ByteCount);
 void* SYCLMallocShared(sycl::device* device, size_t ByteCount);
 
 void SYCLFree(sycl::device* device, void* ptr);
+
 #endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_GPU_RUNTIME_H_

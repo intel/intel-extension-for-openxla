@@ -220,7 +220,7 @@ def _select_sycl_lib_paths(repository_ctx, libs_paths, bash_bin):
                 selected_path = path
             i = i + 1
         if selected_path == None:
-            auto_configure_fail("Cannot find sycl library %s" % name)
+            auto_configure_fail("Cannot find sycl library %s in %s" % (name, path))
 
         libs[name] = struct(file_name = selected_path.basename, path = realpath(repository_ctx, selected_path, bash_bin))
 
@@ -461,7 +461,6 @@ def _create_local_sycl_repository(repository_ctx):
         #     name = "sycl-include",
         #     src_dir = _sycl_header_path(repository_ctx, sycl_config, bash_bin) + "/include",
         #     out_dir = "sycl/include",
-        #     exceptions = ["gtest", "gmock"],
         # ),
     ]
     copy_rules.append(make_copy_dir_rule(
@@ -469,7 +468,6 @@ def _create_local_sycl_repository(repository_ctx):
         name = "mkl-include",
         src_dir = _mkl_path(sycl_config) + "/include",
         out_dir = "sycl/include",
-        exceptions = ["gtest", "gmock"],
     ))
 
     sycl_libs = _find_libs(repository_ctx, sycl_config, bash_bin)
@@ -523,7 +521,6 @@ def _create_local_sycl_repository(repository_ctx):
         repository_dict,
     )
 
-    additional_cxxflags = []
     additional_linker_flags = []
     builtin_includes = []
     builtin_includes += _sycl_include_path(repository_ctx, sycl_config, bash_bin)
@@ -550,6 +547,7 @@ def _create_local_sycl_repository(repository_ctx):
     sycl_defines["%{sycl_builtin_include_directories}"] = str(builtin_includes)
     sycl_defines["%{extra_no_canonical_prefixes_flags}"] = "\"-fno-canonical-system-headers\""
     sycl_defines["%{unfiltered_compile_flags}"] = to_list_of_strings([
+        "-DGOOGLE_SYCL=1",
         "-DMKL_ILP64",
     ])
     sycl_defines["%{host_compiler}"] = "gcc"
@@ -576,11 +574,6 @@ def _create_local_sycl_repository(repository_ctx):
     else:
         sycl_defines["%{SYCL_ISYSTEM_INC}"] = ""
         sycl_defines["%{SYCL_INTERNAL_INC}"] = ""
-
-    unfiltered_cxx_flags = "" if additional_cxxflags == [] else "unfiltered_cxx_flag: "
-    unfiltered_cxx_flags += "\n  unfiltered_cxx_flag: ".join(additional_cxxflags)
-
-    sycl_defines["%{unfiltered_compile_flags}"] = unfiltered_cxx_flags
 
     linker_flags = "" if additional_linker_flags == [] else "linker_flag: "
     linker_flags += "\n  linker_flag: ".join(additional_linker_flags)

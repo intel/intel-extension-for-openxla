@@ -47,12 +47,12 @@ cc_toolchain_config(
     name = "cc-compiler-local-config",
     cpu = "local",
     compiler_driver = "bin/crosstool_wrapper_driver",
-    builtin_include_directories = %{cxx_builtin_include_directories},
+    cxx_builtin_include_directories = %{cxx_builtin_include_directories},
     additional_include_directories = [%{additional_include_directories}],
     host_compiler_path = "%{host_compiler_path}",
     sycl_compiler_root = "%{sycl_compiler_root}",
     host_compiler_prefix = "%{host_compiler_prefix}",
-    unfiltered_compile_flags = ["%{unfiltered_compile_flags}"],
+    unfiltered_compile_flags = [%{unfiltered_compile_flags}],
     linker_bin_path = "%{linker_bin_path}",
 )
 

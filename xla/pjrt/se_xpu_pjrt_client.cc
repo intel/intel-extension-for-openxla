@@ -29,10 +29,10 @@ limitations under the License.
 #include "xla/service/gpu/gpu_executable_run_options.h"
 #include "xla/service/platform_util.h"
 #include "xla/statusor.h"
-#include "xla/stream_executor/device_host_allocator.h"
-#include "xla/stream_executor/device_mem_allocator.h"
 #include "xla/stream_executor/device_memory.h"
-#include "xla/stream_executor/tf_allocator_adapter.h"
+#include "xla/stream_executor/integrations/device_host_allocator.h"
+#include "xla/stream_executor/integrations/device_mem_allocator.h"
+#include "xla/stream_executor/integrations/tf_allocator_adapter.h"
 
 namespace xla {
 namespace {
@@ -175,7 +175,7 @@ StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorXpuClient(
     std::optional<std::string> platform_name,
     bool should_stage_host_to_device_transfers,
     PjRtClient::KeyValueGetCallback kv_get,
-    PjRtClient::KeyValuePutCallback kv_put) {
+    PjRtClient::KeyValuePutCallback kv_put, bool enable_mock_nccl) {
   TF_ASSIGN_OR_RETURN(LocalClient * xla_client,
                       GetGpuXlaClient(platform_name, allowed_devices));
   std::map<int, std::unique_ptr<LocalDeviceState>> local_device_states;

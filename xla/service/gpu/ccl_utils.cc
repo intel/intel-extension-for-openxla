@@ -40,12 +40,12 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-bool IsGlobalCclConfig() {
+bool IsGlobalNcclConfig() {
   static const bool global_nccl_config = std::getenv("NCCL_COMM_ID") != nullptr;
   return global_nccl_config;
 }
 
-bool IsCclLaunchModeParallel() {
+bool IsNcclLaunchModeParallel() {
   static const bool is_launch_mode_parallel = []() {
     const char* launch_mode = std::getenv("NCCL_LAUNCH_MODE");
     return launch_mode && std::string_view(launch_mode) == "PARALLEL";
@@ -54,7 +54,7 @@ bool IsCclLaunchModeParallel() {
 }
 
 #if ITEX_USE_CCL
-ccl::reduction ToCclReduction(ReductionKind kind) {
+ccl::reduction ToNcclReduction(ReductionKind kind) {
   switch (kind) {
     case ReductionKind::SUM:
       return ccl::reduction::sum;
@@ -73,7 +73,14 @@ StatusOr<std::string> ToNcclUniqueId(const std::string& id_str) {
   return id_str;
 }
 
-struct CclCliqueState {
+StatusOr<std::string> LocalNcclUniqueIdCallback(const NcclCliqueKey&) {
+  // ncclUniqueId id;
+  // XLA_CUDA_RETURN_IF_ERROR(ncclGetUniqueId(&id));
+  // return std::string(id.internal, NCCL_UNIQUE_ID_BYTES);
+  return std::string("");
+}
+
+struct NcclCliqueState {
   std::string unique_id;
   int64_t run_id = -1;
 
@@ -83,26 +90,44 @@ struct CclCliqueState {
   absl::Mutex mu;
   absl::Notification ready;
   Status status;
-  absl::flat_hash_map<int, std::unique_ptr<CclComm>> communicators;
+  absl::flat_hash_map<int, std::unique_ptr<NcclComm>> communicators;
 };
 
-using CclClique = Lockable<CclCliqueState>;
+using NcclClique = Lockable<NcclCliqueState>;
 
-std::shared_ptr<StatusOr<CclClique::Lock>> AcquireCclClique(
+std::shared_ptr<StatusOr<NcclClique::Lock>> AcquireNcclClique(
     RunId run_id, OpId op_id, NcclCliqueKey clique_key,
-    CclUniqueIdCallback& unique_id_callback, size_t num_local_participants) {
-  static auto& cliques = *new ThreadSafeMap<NcclCliqueKey, CclClique>;
+    const CustomNcclUniqueIdCallback& unique_id_callback,
+    size_t num_local_participants, bool may_skip_rendezvous) {
+  static auto& cliques = *new ThreadSafeMap<NcclCliqueKey, NcclClique>;
+
+  VLOG(2) << "AcquireNcclClique Rendezvous key (clique_key:"
+          << clique_key.ToString() << ", run" << run_id.ToString() << ", op"
+          << op_id.value() << ")";
+
+  // RendezvousSingle should only be used to guard nccl communicator
+  // initialization. Return the clique state when we are done with such
+  // initialization.
+  //
+  // TODO(bixia): enable this unconditionally after fixing a deadlock issue.
+  if (may_skip_rendezvous) {
+    // Destruct clique if it hasn't been notified.
+    NcclClique::Lock clique = cliques[clique_key].Acquire();
+    if (clique->ready.HasBeenNotified() && clique->run_id == run_id.ToInt()) {
+      return std::make_shared<StatusOr<NcclClique::Lock>>(std::move(clique));
+    }
+  }
 
   auto rendezvous_key = std::make_tuple(run_id, op_id, std::move(clique_key));
 
   int64_t terminate_timeout = xla::GetDebugOptionsFromFlags()
                                   .xla_gpu_nccl_termination_timeout_seconds();
 
-  return RendezvousSingle<StatusOr<CclClique::Lock>>(
+  return RendezvousSingle<StatusOr<NcclClique::Lock>>(
       rendezvous_key, num_local_participants,
-      [&]() -> StatusOr<CclClique::Lock> {
+      [&]() -> StatusOr<NcclClique::Lock> {
         const NcclCliqueKey& clique_key = std::get<2>(rendezvous_key);
-        CclClique::Lock clique = cliques[clique_key].Acquire();
+        NcclClique::Lock clique = cliques[clique_key].Acquire();
         if (clique->run_id < 0) {
           TF_ASSIGN_OR_RETURN(std::string id,
                               unique_id_callback(run_id.ToString()));
@@ -122,7 +147,7 @@ std::shared_ptr<StatusOr<CclClique::Lock>> AcquireCclClique(
                                : absl::InfiniteDuration());
 }
 #if 0
-void CheckNcclAsyncError(CclComm& lockable_comm) {
+void CheckNcclAsyncError(NcclComm& lockable_comm) {
   ncclComm_t comm = *lockable_comm.Acquire();
   if (comm == nullptr) return;
 
@@ -143,7 +168,7 @@ void CheckNcclAsyncError(CclComm& lockable_comm) {
 #endif
 }  // namespace
 #if ITEX_USE_CCL
-StatusOr<std::pair<ncclDataType_t, int>> ToCclDataTypeAndCountMultiplier(
+StatusOr<std::pair<ncclDataType_t, int>> ToNcclDataTypeAndCountMultiplier(
     PrimitiveType element_type, Thunk::Kind reduction_op) {
   TF_ASSIGN_OR_RETURN(ncclDataType_t dtype,
                       ToNcclDataType(element_type, reduction_op));
@@ -162,26 +187,41 @@ size_t GetNumLocalParticipants(
   });
 }
 
-StatusOr<CclComm::Lock> AcquireCclComm(RunId run_id, OpId op_id,
-                                       std::vector<GlobalDeviceId> participants,
-                                       size_t num_local_participants,
-                                       CclUniqueIdCallback& unique_id_callback,
-                                       int rank, int64_t stream_id) {
+StatusOr<const NcclUniqueIdCallback*> GetNcclUniqueIdCallback(
+    const NcclUniqueIdCallback* unique_id_callback, bool is_local) {
+  if (unique_id_callback != nullptr) return unique_id_callback;
+
+  TF_RET_CHECK(is_local || IsGlobalNcclConfig())
+      << "If non-local devices are taking part of a collective API on "
+         "GPU, the nccl_unique_id_callback must be provided by the client.";
+
+  static auto* local_callback =
+      new NcclUniqueIdCallback(LocalNcclUniqueIdCallback);
+  return local_callback;
+}
+
+StatusOr<NcclComm::Lock> AcquireNcclComm(
+    RunId run_id, OpId op_id, std::vector<GlobalDeviceId> participants,
+    size_t num_local_participants,
+    const CustomNcclUniqueIdCallback& unique_id_callback, int rank,
+    int64_t stream_id, bool enable_clique_optimization) {
   // Ensure that this group of threads have exclusive access to the clique to
   // prevent threads from different groups locking communicators in the clique.
   NcclCliqueKey clique_key(std::move(participants), stream_id);
-  std::shared_ptr<StatusOr<CclClique::Lock>> clique = AcquireCclClique(
-      run_id, op_id, clique_key, unique_id_callback, num_local_participants);
+  std::shared_ptr<StatusOr<NcclClique::Lock>> clique = AcquireNcclClique(
+      run_id, op_id, clique_key, unique_id_callback, num_local_participants,
+      enable_clique_optimization ||
+          stream_id == GetStreamId(true, kAsyncStreamP2P));
 
   if (!clique->ok()) return clique->status();
 
   struct AllCommunicators {
     absl::Mutex mu;
-    std::vector<CclComm*> communicators ABSL_GUARDED_BY(mu);
+    std::vector<NcclComm*> communicators ABSL_GUARDED_BY(mu);
   };
   static auto& all_communicators = *new AllCommunicators;
 
-  CclCliqueState& state = ***clique;
+  NcclCliqueState& state = ***clique;
   if (!state.ready.HasBeenNotified()) {
     int nranks = clique_key.devices().size();
     const std::string& id = state.unique_id;
@@ -194,7 +234,7 @@ StatusOr<CclComm::Lock> AcquireCclComm(RunId run_id, OpId op_id,
     size_t num_initialized = [&] {
       absl::MutexLock lock(&state.mu);
       state.status.Update(status);
-      state.communicators[rank] = std::make_unique<CclComm>(comm);
+      state.communicators[rank] = std::make_unique<NcclComm>(comm);
       return state.communicators.size();
     }();
 

@@ -40,7 +40,7 @@ limitations under the License.
 #include "xla/stream_executor/kernel_cache_config.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/platform/initialize.h"
-#include "xla/stream_executor/platform/logging.h"
+// #include "xla/stream_executor/platform/logging.h"
 #include "xla/stream_executor/platform/port.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor_internal.h"
@@ -139,10 +139,10 @@ tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
                                    KernelBase* kernel) {
   GpuKernel* l0_kernel = AsGpuKernel(kernel);
   ze_module_handle_t module = nullptr;
-  string kernelname;
+  string kernel_name;
 
   if (spec.has_cuda_cubin_in_memory()) {
-    kernelname = spec.cuda_cubin_in_memory().kernelname();
+    kernel_name = spec.cuda_cubin_in_memory().kernel_name();
     const char* spirv = spec.cuda_cubin_in_memory().bytes();
     int size = spec.cuda_cubin_in_memory().size();
     absl::MutexLock lock{&in_memory_modules_mu_};
@@ -154,9 +154,9 @@ tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
         absl::StrFormat("No method of loading SPIR kernel provided"));
   }
 
-  VLOG(2) << "getting function " << kernelname << " from module " << module;
+  VLOG(2) << "getting function " << kernel_name << " from module " << module;
   TF_RETURN_IF_ERROR(GpuDriver::GetModuleFunction(
-      context_, module, kernelname.c_str(), l0_kernel->gpu_function_ptr()));
+      context_, module, kernel_name.c_str(), l0_kernel->gpu_function_ptr()));
 
   // We have to trust the kernel loader spec arity because there doesn't
   // appear to be a way to reflect on the number of expected arguments w/the
@@ -166,7 +166,7 @@ tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
   KernelMetadata kernel_metadata;
   TF_RETURN_IF_ERROR(GetKernelMetadata(l0_kernel, &kernel_metadata));
   kernel->set_metadata(kernel_metadata);
-  kernel->set_name(kernelname);
+  kernel->set_name(kernel_name);
   return ::tsl::OkStatus();
 }
 
@@ -336,6 +336,11 @@ tsl::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
       context_, kernel.name(), sycl_kernel, block_dims.x, block_dims.y,
       block_dims.z, thread_dims.x, thread_dims.y, thread_dims.z,
       args.number_of_shared_bytes(), gpu_stream, nullptr, (void**)&config);
+}
+
+tsl::Status GpuExecutor::Submit(Stream* stream,
+                                const CommandBuffer& command_buffer) {
+  LOG(FATAL) << "Submit is not implemented in sycl_executor";
 }
 
 DeviceMemoryBase GpuExecutor::Allocate(uint64_t size, int64_t memory_space) {
@@ -510,6 +515,18 @@ tsl::Status GpuExecutor::WaitForEvent(Stream* stream, Event* event) {
   }
 }
 
+tsl::Status GpuExecutor::WaitForEventOnExternalStream(std::intptr_t stream,
+                                                      Event* event) {
+  if (GpuDriver::WaitStreamOnEvent(context_,
+                                   absl::bit_cast<GpuStreamHandle>(stream),
+                                   AsGpuEvent(event)->gpu_event())) {
+    return ::tsl::OkStatus();
+  } else {
+    return tsl::Status(absl::StatusCode::kInternal,
+                       "error waiting for SYCL event on external stream");
+  }
+}
+
 Event::Status GpuExecutor::PollForEventStatus(Event* event) {
   return AsGpuEvent(event)->PollForStatus();
 }
@@ -517,14 +534,14 @@ Event::Status GpuExecutor::PollForEventStatus(Event* event) {
 bool GpuExecutor::AllocateStream(Stream* stream) {
   absl::MutexLock l(&alive_gpu_streams_mu_);
   bool out = AsGpuStream(stream)->Init();
-  alive_gpu_streams_[stream->implementation()->GpuStreamHack()] = stream;
+  alive_gpu_streams_[stream->platform_specific_handle().stream] = stream;
   return out;
 }
 
 void GpuExecutor::DeallocateStream(Stream* stream) {
   GpuStream* gpu_stream = AsGpuStream(stream);
   absl::MutexLock l(&alive_gpu_streams_mu_);
-  alive_gpu_streams_.erase(gpu_stream->GpuStreamHack());
+  alive_gpu_streams_.erase(gpu_stream->platform_specific_stream());
   gpu_stream->Destroy();
 }
 
@@ -558,10 +575,6 @@ dnn::DnnSupport* GpuExecutor::CreateDnn() {
 }
 
 fft::FftSupport* GpuExecutor::CreateFft() {
-  return nullptr;
-}
-
-rng::RngSupport* GpuExecutor::CreateRng() {
   return nullptr;
 }
 
@@ -613,14 +626,6 @@ tsl::Status FillBlockDimLimit(GpuDeviceHandle device,
   return tsl::OkStatus();
 }
 
-bool GpuExecutor::SupportsBlas() const { return false; }
-
-bool GpuExecutor::SupportsFft() const { return false; }
-
-bool GpuExecutor::SupportsRng() const { return false; }
-
-bool GpuExecutor::SupportsDnn() const { return true; }
-
 std::unique_ptr<internal::EventInterface>
 GpuExecutor::CreateEventImplementation() {
   return std::unique_ptr<internal::EventInterface>(new GpuEvent(this));
@@ -636,7 +641,12 @@ GpuExecutor::GetStreamImplementation() {
   return std::unique_ptr<internal::StreamInterface>(new GpuStream(this));
 }
 
-void* GpuExecutor::GpuContextHack() { return context_; }
+tsl::StatusOr<std::unique_ptr<internal::CommandBufferInterface>>
+GpuExecutor::GetCommandBufferImplementation(CommandBuffer::Mode mode) {
+  LOG(FATAL) << "GetCommandBufferImplementation is not implemented in sycl_executor";
+}
+
+void* GpuExecutor::platform_specific_context() { return context_; }
 
 GpuContext* GpuExecutor::gpu_context() { return context_; }
 

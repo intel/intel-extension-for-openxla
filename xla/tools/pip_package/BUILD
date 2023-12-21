@@ -10,6 +10,7 @@ COMMON_PIP_DEPS = [
     "README.md",
     "xla_setup.py",
     "//xla:pjrt_plugin_xpu.so",
+    "//xla/python:xpu_plugin_extension.so"
 ]
 
 py_binary(
