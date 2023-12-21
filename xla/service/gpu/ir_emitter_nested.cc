@@ -381,6 +381,14 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
       return true;
     }
 
+    if (target_triple.isSPIR() &&
+        element_type == F32) {
+      builder->CreateAtomicRMW(llvm::AtomicRMWInst::FAdd, output_address,
+                               source, llvm::MaybeAlign(),
+                               llvm::AtomicOrdering::SequentiallyConsistent);
+      return true;
+    }
+
     if (is_atomic_integral) {
       // integral + integral
       builder->CreateAtomicRMW(
