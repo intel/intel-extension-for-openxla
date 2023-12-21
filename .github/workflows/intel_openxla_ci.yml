@@ -1,4 +1,4 @@
-name: openxla CI
+name: openxla ci
 run-name: ${{ github.actor }} is testing out GitHub Action
 on:
   pull_request:
@@ -11,7 +11,7 @@ concurrency:
 
 
 jobs:
-  openXLA-DEMO-CI:
+  openXLA-CI:
     runs-on: Intel_openxla
     steps:
       - name: Check out repository code
