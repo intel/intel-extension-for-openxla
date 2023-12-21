@@ -100,7 +100,7 @@ jobs:
                   if grep -qFx "$line" "$reference_file"; then
                       echo "'$line' is distribute case"
                       log_name=$(basename "$line" .py)
-                      python $line > ./logs/ut/$log_name.log
+                      python $line |& tee ./logs/ut/$log_name.log
                       if [ ${PIPESTATUS[0]} -eq 0 ]; then
                         echo "run $line successfully" >> ./logs/ut/successful.log
                       else
@@ -139,7 +139,7 @@ jobs:
                   echo $line
                   echo $id
                   echo "ZE_AFFINITY_MASK=$id python $line"
-                  ZE_AFFINITY_MASK=$id python $line > ./logs/ut/$log_name.log
+                  ZE_AFFINITY_MASK=$id python $line |& tee ./logs/ut/$log_name.log
                   if [ ${PIPESTATUS[0]} -eq 0 ]; then
                     echo "run $line successfully" >> ./logs/ut/successful.log
                   else
