@@ -167,4 +167,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: XLA-CI-Data
-          path: /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax_test/openxla/logs
+          path: /home/sdp/xuming
