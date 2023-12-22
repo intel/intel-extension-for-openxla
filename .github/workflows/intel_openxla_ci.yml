@@ -21,7 +21,7 @@ jobs:
         run: |
           set +e
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          source /opt/miniconda/bin/activate ${CONDA_ENV}
           if [ $? -ne 0 ]; then
               echo 'conda env does not exist'
               conda create -n ${CONDA_ENV} python=3.10 -y
@@ -33,12 +33,11 @@ jobs:
           pip install absl-py
           pip list | grep numpy
           pip list | grep jax
-
       - name: Build openXLA
         run: |
           set +e
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          source /opt/miniconda/bin/activate ${CONDA_ENV}
           which bazel
           if [ $? -eq 1 ]; then
             wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
@@ -47,13 +46,17 @@ jobs:
           export PATH=$PATH:/home/sdp/bin
           source /home/sdp/.bazel/bin/bazel-complete.bash
           bazel --version
-          pip list | grep numpy
-          pip install numpy
           basekit_path=/home/sdp
           complier_path=${basekit_path}/intel/oneapi/compiler/latest
           mkl_path=${basekit_path}/intel/oneapi/mkl/latest
-          cp /home/sdp/openXLA_demoxla_auto_configure_mkl.exp .
-          ls
+          #get build config
+          if [ -d "jax_test" ]; then
+              echo "jax_test folder already exists. Doing nothing."
+              cp ./jax_test/openxla/config/openXLA_demoxla_auto_configure_mkl.exp .
+          else
+              git clone https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
+              cp ./jax_test/openxla/config/openXLA_demoxla_auto_configure_mkl.exp .
+          fi
           python --version
           chmod +x ./openXLA_demoxla_auto_configure_mkl.exp
           ./openXLA_demoxla_auto_configure_mkl.exp $complier_path $mkl_path
@@ -69,23 +72,26 @@ jobs:
               echo "Build Failed"
               exit 1
           fi
-
       - name: UT testing
         run: |
           set +e
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-          source ${HOME}/miniconda3/bin/activate ${CONDA_ENV}
+          source /opt/miniconda/bin/activate ${CONDA_ENV}
           # install requirement from https://github.com/intel-innersource/frameworks.ai.infrastructure.intel-extension-for-tensorflow.jax/blob/yang/jax-v0.4.20/build/test-requirements.txt
           # pip install -e . (install in local )
           basekit_path=/home/sdp
           source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
           source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
-          
-          git clone https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
-          cd jax_test/openxla/
+          if [ -d "jax_test" ]; then
+              echo "jax_test folder already exists. Doing nothing."
+          else
+              git clone https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
+          fi
+          cd jax_test/openxla
+          pip install ./tools/*.whl
+          pip install -r test-requirements.txt
           mkdir -p ./logs/ut
-          pip install -r /home/sdp/xuming/test-requirements.txt
-          find ./tests -name "*.py" | sed 's#\./##g' > ut_list.txt
+          find ./tests -name "*.py" | sed 's#\./##g' |& tee ut_list.txt
           file_path=./ut_list.txt
           reference_file=./distribute_ut_list.txt
           
@@ -99,14 +105,18 @@ jobs:
                   if grep -qFx "$line" "$reference_file"; then
                       echo "'$line' is distribute case"
                       log_name=$(basename "$line" .py)
-                      python $line > ./logs/ut/$log_name.log
+                      python $line |& tee ./logs/ut/$log_name.log
+                      if [ ${PIPESTATUS[0]} -eq 0 ]; then
+                        echo "$line" >> ./logs/ut/successful.log
+                      else
+                          echo "$line" >> ./logs/ut/err.log
+                      fi
                   fi
               done < "$file_path"
           else
               echo "File not found: $file_path"
               exit
           fi
-
           # Loop through all Python files in the folder and execute them
           dev_num=4 #IDC have 4 1100 pvc card
           # Create a pipe and bind the file descriptor 6
@@ -126,17 +136,18 @@ jobs:
                 echo "Processing line: $line"
                 if grep -qFx "$line" "$reference_file"; then
                     echo "'$line' is distribute case,skip"
+                    echo $id >&6
                 else
                   log_name=$(basename "$line" .py)
                   echo "running ut on device-$id"
-                  echo $file
+                  echo $line
                   echo $id
-                  echo "ZE_AFFINITY_MASK=$id python $file"
-                  ZE_AFFINITY_MASK=$id python $file > ./logs/ut/$log_name.log
+                  echo "ZE_AFFINITY_MASK=$id python $line"
+                  ZE_AFFINITY_MASK=$id python $line |& tee ./logs/ut/$log_name.log
                   if [ ${PIPESTATUS[0]} -eq 0 ]; then
-                    echo "run $file successfully"
+                    echo "$line" >> ./logs/ut/successful.log
                   else
-                      echo "run $test_case failed"
+                      echo "$line" >> ./logs/ut/err.log
                   fi
                   # writing one data to the pipe for the next task
                   echo $id >&6
@@ -144,4 +155,20 @@ jobs:
               } &
           done < "$file_path"
           wait
-          exec 6>&-
+          exec 6>&-    
+      - name: Upload XLA CI Data
+        uses: actions/upload-artifact@v3
+        with:
+          name: XLA-CI-Data
+          path: /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax_test/openxla/logs
+      - name: Test Results Check
+        run: |
+          cd /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax_test/openxla
+          #UT results check
+          if [ -f "./logs/ut/err.log" ]; then
+            echo "exist fail cases"
+            cat ./logs/ut/err.log
+            exit 1 
+          else
+              echo "run successful"
+          fi
