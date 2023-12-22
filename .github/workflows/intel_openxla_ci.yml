@@ -155,21 +155,20 @@ jobs:
               } &
           done < "$file_path"
           wait
-          exec 6>&-
-          
+          exec 6>&-    
       - name: Upload XLA CI Data
         uses: actions/upload-artifact@v3
         with:
           name: XLA-CI-Data
           path: /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax_test/openxla/logs
       - name: Test Results Check
-            run: |
-              cd /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax_test/openxla
-              #UT results check
-              if [ -f "./logs/ut/err.log" ]; then
-                echo "exist fail cases"
-                cat ./logs/ut/err.log
-                exit 1 
-              else
-                  echo "run successful"
-              fi
+        run: |
+          cd /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax_test/openxla
+          #UT results check
+          if [ -f "./logs/ut/err.log" ]; then
+            echo "exist fail cases"
+            cat ./logs/ut/err.log
+            exit 1 
+          else
+              echo "run successful"
+          fi
