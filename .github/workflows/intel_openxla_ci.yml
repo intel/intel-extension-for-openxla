@@ -17,154 +17,159 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v3
 
-      # - name: Prepare Conda Environment
-      #   run: |
-      #     set +e
-      #     CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-      #     source /opt/miniconda/bin/activate ${CONDA_ENV}
-      #     if [ $? -ne 0 ]; then
-      #         echo 'conda env does not exist'
-      #         conda create -n ${CONDA_ENV} python=3.10 -y
-      #         conda activate ${CONDA_ENV}
-      #     fi
-      #     pip install jax==0.4.20 jaxlib==0.4.20
-      #     pip install numpy
-      #     conda install libstdcxx-ng==12.2.0 -c conda-forge
-      #     pip install absl-py
-      #     pip list | grep numpy
-      #     pip list | grep jax
-      # - name: Build openXLA
-      #   run: |
-      #     set +e
-      #     CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-      #     source /opt/miniconda/bin/activate ${CONDA_ENV}
-      #     which bazel
-      #     if [ $? -eq 1 ]; then
-      #       wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
-      #       bash bazel-5.3.0-installer-linux-x86_64.sh --user
-      #     fi
-      #     export PATH=$PATH:/home/sdp/bin
-      #     source /home/sdp/.bazel/bin/bazel-complete.bash
-      #     bazel --version
-      #     basekit_path=/home/sdp
-      #     complier_path=${basekit_path}/intel/oneapi/compiler/latest
-      #     mkl_path=${basekit_path}/intel/oneapi/mkl/latest
-      #     #get build config
-      #     if [ -d "jax_test" ]; then
-      #         echo "jax_test folder already exists. Doing nothing."
-      #         cp ./jax_test/openxla/config/openXLA_demoxla_auto_configure_mkl.exp .
-      #     else
-      #         git clone https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
-      #         cp ./jax_test/openxla/config/openXLA_demoxla_auto_configure_mkl.exp .
-      #     fi
-      #     python --version
-      #     chmod +x ./openXLA_demoxla_auto_configure_mkl.exp
-      #     ./openXLA_demoxla_auto_configure_mkl.exp $complier_path $mkl_path
-      #     bazel clean --expunge --async
-      #     bazel build //xla/tools/pip_package:build_pip_package
-      #     ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-      #     build_result=${PIPESTATUS[0]}
-      #     echo $build_result
-      #     if [ "$build_result" = "0" ];then
-      #         echo "Build successful"
-      #         pip install *.whl
-      #     else
-      #         echo "Build Failed"
-      #         exit 1
-      #     fi
-      # - name: UT testing
-      #   run: |
-      #     set +e
-      #     CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-      #     source /opt/miniconda/bin/activate ${CONDA_ENV}
-      #     # install requirement from https://github.com/intel-innersource/frameworks.ai.infrastructure.intel-extension-for-tensorflow.jax/blob/yang/jax-v0.4.20/build/test-requirements.txt
-      #     # pip install -e . (install in local )
-      #     basekit_path=/home/sdp
-      #     source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
-      #     source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
-      #     if [ -d "jax_test" ]; then
-      #         echo "jax_test folder already exists. Doing nothing."
-      #     else
-      #         git clone https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
-      #     fi
-      #     cd jax_test/openxla
-      #     pip install ./tools/*.whl
-      #     pip install -r test-requirements.txt
-      #     mkdir -p ./logs/ut
-      #     find ./tests -name "*.py" | sed 's#\./##g' |& tee ut_list.txt
-      #     file_path=./ut_list.txt
-      #     reference_file=./distribute_ut_list.txt
+      - name: Prepare Conda Environment
+        run: |
+          set +e
+          CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
+          source /opt/miniconda/bin/activate ${CONDA_ENV}
+          if [ $? -ne 0 ]; then
+              echo 'conda env does not exist'
+              conda create -n ${CONDA_ENV} python=3.10 -y
+              conda activate ${CONDA_ENV}
+          fi
+          pip install jax==0.4.20 jaxlib==0.4.20
+          pip install numpy
+          conda install libstdcxx-ng==12.2.0 -c conda-forge
+          pip install absl-py
+          pip list | grep numpy
+          pip list | grep jax
+      - name: Build openXLA
+        run: |
+          set +e
+          CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
+          source /opt/miniconda/bin/activate ${CONDA_ENV}
+          which bazel
+          if [ $? -eq 1 ]; then
+            wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
+            bash bazel-5.3.0-installer-linux-x86_64.sh --user
+          fi
+          export PATH=$PATH:/home/sdp/bin
+          source /home/sdp/.bazel/bin/bazel-complete.bash
+          bazel --version
+          basekit_path=/home/sdp
+          complier_path=${basekit_path}/intel/oneapi/compiler/latest
+          mkl_path=${basekit_path}/intel/oneapi/mkl/latest
+          #get build config
+          if [ -d "jax_test" ]; then
+              echo "jax_test folder already exists. Doing nothing."
+              cp ./jax_test/openxla/config/openXLA_demoxla_auto_configure_mkl.exp .
+          else
+              git clone https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
+              cp ./jax_test/openxla/config/openXLA_demoxla_auto_configure_mkl.exp .
+          fi
+          python --version
+          chmod +x ./openXLA_demoxla_auto_configure_mkl.exp
+          ./openXLA_demoxla_auto_configure_mkl.exp $complier_path $mkl_path
+          bazel clean --expunge --async
+          bazel build //xla/tools/pip_package:build_pip_package
+          ./bazel-bin/xla/tools/pip_package/build_pip_package ./
+          build_result=${PIPESTATUS[0]}
+          echo $build_result
+          if [ "$build_result" = "0" ];then
+              echo "Build successful"
+              pip install *.whl
+          else
+              echo "Build Failed"
+              exit 1
+          fi
+      - name: UT testing
+        run: |
+          set +e
+          CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
+          source /opt/miniconda/bin/activate ${CONDA_ENV}
+          # install requirement from https://github.com/intel-innersource/frameworks.ai.infrastructure.intel-extension-for-tensorflow.jax/blob/yang/jax-v0.4.20/build/test-requirements.txt
+          # pip install -e . (install in local )
+          basekit_path=/home/sdp
+          source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
+          source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
+          if [ -d "jax_test" ]; then
+              echo "jax_test folder already exists. Doing nothing."
+          else
+              git clone https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
+          fi
+          cd jax_test/openxla
+          pip install ./tools/*.whl
+          pip install -r test-requirements.txt
+          mkdir -p ./logs/ut
+          find ./tests -name "*.py" | sed 's#\./##g' |& tee ut_list.txt
+          file_path=./ut_list.txt
+          reference_file=./distribute_ut_list.txt
           
-      #     # run distribute ut first
-      #     # Check if the file exists
-      #     if [ -f "$file_path" ]; then
-      #         # Read each line using a while loop
-      #         while IFS= read -r line; do
-      #             # Process each line (you can replace this with your own logic)
-      #             echo "Processing line: $line"
-      #             if grep -qFx "$line" "$reference_file"; then
-      #                 echo "'$line' is distribute case"
-      #                 log_name=$(basename "$line" .py)
-      #                 python $line |& tee ./logs/ut/$log_name.log
-      #                 if [ ${PIPESTATUS[0]} -eq 0 ]; then
-      #                   echo "$line" >> ./logs/ut/successful.log
-      #                 else
-      #                     echo "$line" >> ./logs/ut/err.log
-      #                 fi
-      #             fi
-      #         done < "$file_path"
-      #     else
-      #         echo "File not found: $file_path"
-      #         exit
-      #     fi
-      #     # Loop through all Python files in the folder and execute them
-      #     dev_num=4 #IDC have 4 1100 pvc card
-      #     # Create a pipe and bind the file descriptor 6
-      #     tmp_fifofile="/tmp/$$.fifo"
-      #     mkfifo $tmp_fifofile
-      #     exec 6<>$tmp_fifofile
-      #     rm $tmp_fifofile
-      #     # Writing NUM_PROC blank data to the pipe
-      #     for ((i=0;i<$dev_num;i++)); do
-      #         echo "$i"
-      #     done >&6
+          # run distribute ut first
+          # Check if the file exists
+          if [ -f "$file_path" ]; then
+              # Read each line using a while loop
+              while IFS= read -r line; do
+                  # Process each line (you can replace this with your own logic)
+                  echo "Processing line: $line"
+                  if grep -qFx "$line" "$reference_file"; then
+                      echo "'$line' is distribute case"
+                      log_name=$(basename "$line" .py)
+                      python $line |& tee ./logs/ut/$log_name.log
+                      if [ ${PIPESTATUS[0]} -eq 0 ]; then
+                        echo "$line" >> ./logs/ut/successful.log
+                      else
+                          echo "$line" >> ./logs/ut/err.log
+                      fi
+                  fi
+              done < "$file_path"
+          else
+              echo "File not found: $file_path"
+              exit
+          fi
+          # Loop through all Python files in the folder and execute them
+          dev_num=4 #IDC have 4 1100 pvc card
+          # Create a pipe and bind the file descriptor 6
+          tmp_fifofile="/tmp/$$.fifo"
+          mkfifo $tmp_fifofile
+          exec 6<>$tmp_fifofile
+          rm $tmp_fifofile
+          # Writing NUM_PROC blank data to the pipe
+          for ((i=0;i<$dev_num;i++)); do
+              echo "$i"
+          done >&6
           
-      #     while IFS= read -r line; do
-      #       read -u6 id
-      #         {
-      #           # Process each line (you can replace this with your own logic)
-      #           echo "Processing line: $line"
-      #           if grep -qFx "$line" "$reference_file"; then
-      #               echo "'$line' is distribute case,skip"
-      #               echo $id >&6
-      #           else
-      #             log_name=$(basename "$line" .py)
-      #             echo "running ut on device-$id"
-      #             echo $line
-      #             echo $id
-      #             echo "ZE_AFFINITY_MASK=$id python $line"
-      #             ZE_AFFINITY_MASK=$id python $line |& tee ./logs/ut/$log_name.log
-      #             if [ ${PIPESTATUS[0]} -eq 0 ]; then
-      #               echo "$line" >> ./logs/ut/successful.log
-      #             else
-      #                 echo "$line" >> ./logs/ut/err.log
-      #             fi
-      #             # writing one data to the pipe for the next task
-      #             echo $id >&6
-      #           fi
-      #         } &
-      #     done < "$file_path"
-      #     wait
-      #     exec 6>&-
-      #     if [ -f "./logs/ut/err.log" ]; then
-      #       echo "exist fail cases"
-      #       cat ./logs/ut/err.log
-      #       exit 1 
-      #     else
-      #         echo "run successful"
-      #     fi
+          while IFS= read -r line; do
+            read -u6 id
+              {
+                # Process each line (you can replace this with your own logic)
+                echo "Processing line: $line"
+                if grep -qFx "$line" "$reference_file"; then
+                    echo "'$line' is distribute case,skip"
+                    echo $id >&6
+                else
+                  log_name=$(basename "$line" .py)
+                  echo "running ut on device-$id"
+                  echo $line
+                  echo $id
+                  echo "ZE_AFFINITY_MASK=$id python $line"
+                  ZE_AFFINITY_MASK=$id python $line |& tee ./logs/ut/$log_name.log
+                  if [ ${PIPESTATUS[0]} -eq 0 ]; then
+                    echo "$line" >> ./logs/ut/successful.log
+                  else
+                      echo "$line" >> ./logs/ut/err.log
+                  fi
+                  # writing one data to the pipe for the next task
+                  echo $id >&6
+                fi
+              } &
+          done < "$file_path"
+          wait
+          exec 6>&-
+          
       - name: Upload XLA CI Data
         uses: actions/upload-artifact@v3
         with:
           name: XLA-CI-Data
-          path: /home/sdp/xuming
+          path: /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax_test/openxla/logs
+      - name: Test Results Check
+            run: |
+              cd /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax_test/openxla
+              #UT results check
+              if [ -f "./logs/ut/err.log" ]; then
+                echo "exist fail cases"
+                cat ./logs/ut/err.log
+                exit 1 
+              else
+                  echo "run successful"
+              fi
