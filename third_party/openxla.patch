@@ -1684,7 +1684,7 @@ index 0605af7c2..e6d04d737 100644
          &device_info_->gpu_compute_capability());
      if (cuda_cc != nullptr &&
 diff --git a/xla/service/gpu/ir_emission_utils.cc b/xla/service/gpu/ir_emission_utils.cc
-index a28628c14..fb2f71cae 100644
+index a28628c14..84a780506 100644
 --- a/xla/service/gpu/ir_emission_utils.cc
 +++ b/xla/service/gpu/ir_emission_utils.cc
 @@ -83,11 +83,11 @@ bool IsMatrixMultiplication(const HloInstruction& dot) {
@@ -1713,7 +1713,7 @@ index a28628c14..fb2f71cae 100644
 +  CHECK_EQ(value->getType()->getPrimitiveSizeInBits(), 32);
 +  if (value->getType()->isFloatTy()) {
 +    return EmitDeviceFunctionCall(
-+        "__builtin_spirv_OpSubgroupShuffleDownINTEL_f32_f32_i32",
++        "_Z32__spirv_SubgroupShuffleDownINTELffj",
 +        {value, value, offset}, {F32, F32, U32}, F32,
 +        llvm::AttrBuilder(b->getContext())
 +            .addAttribute(llvm::Attribute::NoUnwind)
@@ -1721,7 +1721,7 @@ index a28628c14..fb2f71cae 100644
 +        b);
 +  } else {
 +    return EmitDeviceFunctionCall(
-+        "__builtin_spirv_OpSubgroupShuffleDownINTEL_i32_i32_i32",
++        "_Z32__spirv_SubgroupShuffleDownINTELjjj",
 +        {value, value, offset}, {U32, U32, U32}, U32,
 +        llvm::AttrBuilder(b->getContext())
 +            .addAttribute(llvm::Attribute::NoUnwind)
@@ -3085,7 +3085,7 @@ index 92f31a6c1..aead65821 100644
  }  // namespace xla
  
 diff --git a/xla/service/gpu/target_util.cc b/xla/service/gpu/target_util.cc
-index 12b12b3f1..4ca1c1e6d 100644
+index 12b12b3f1..c48318ad8 100644
 --- a/xla/service/gpu/target_util.cc
 +++ b/xla/service/gpu/target_util.cc
 @@ -23,12 +23,12 @@ limitations under the License.
@@ -3200,7 +3200,7 @@ index 12b12b3f1..4ca1c1e6d 100644
 +      return {llvm::Intrinsic::nvvm_barrier0, llvm::Intrinsic::amdgcn_s_barrier,
 +              [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
 +                return EmitDeviceFunctionCall(
-+                    "__builtin_spirv_OpControlBarrier_i32_i32_i32",
++                    "_Z22__spirv_ControlBarrierjjj",
 +                    {b_->getInt32(2), b_->getInt32(2), b_->getInt32(272)},
 +                    {U32, U32, U32}, U32,
 +                    llvm::AttrBuilder(b_->getContext())
@@ -3252,7 +3252,7 @@ index 12b12b3f1..4ca1c1e6d 100644
 +              [](llvm::IRBuilder<>* b_) -> llvm::CallInst* {
 +                // TODO: Fix it.
 +                return EmitDeviceFunctionCall(
-+                    "__builtin_spirv_OpControlBarrier_i32_i32_i32",
++                    "_Z22__spirv_ControlBarrierjjj",
 +                    {b_->getInt32(2), b_->getInt32(2), b_->getInt32(272)},
 +                    {U32, U32, U32}, U32,
 +                    llvm::AttrBuilder(b_->getContext())
@@ -3275,63 +3275,63 @@ index 12b12b3f1..4ca1c1e6d 100644
    switch (func_id) {
      case TargetDeviceFunctionID::kAtan2: {
 -      return {"__nv_atan2", "__ocml_atan2"};
-+      return {"__nv_atan2", "__ocml_atan2", "__builtin_spirv_OpenCL_atan2"};
++      return {"__nv_atan2", "__ocml_atan2", "_Z17__spirv_ocl_atan2"};
      }
      case TargetDeviceFunctionID::kCos: {
 -      return {"__nv_cos", "__ocml_cos"};
-+      return {"__nv_cos", "__ocml_cos", "__builtin_spirv_OpenCL_cos"};
++      return {"__nv_cos", "__ocml_cos", "_Z15__spirv_ocl_cos"};
      }
      case TargetDeviceFunctionID::kExp: {
 -      return {"__nv_exp", "__ocml_exp"};
-+      return {"__nv_exp", "__ocml_exp", "__builtin_spirv_OpenCL_exp"};
++      return {"__nv_exp", "__ocml_exp", "_Z15__spirv_ocl_exp"};
      }
      case TargetDeviceFunctionID::kExpm1: {
 -      return {"__nv_expm1", "__ocml_expm1"};
-+      return {"__nv_expm1", "__ocml_expm1", "__builtin_spirv_OpenCL_expm1"};
++      return {"__nv_expm1", "__ocml_expm1", "_Z17__spirv_ocl_expm1"};
      }
      case TargetDeviceFunctionID::kFmod: {
 -      return {"__nv_fmod", "__ocml_fmod"};
-+      return {"__nv_fmod", "__ocml_fmod", "__builtin_spirv_OpenCL_fmod"};
++      return {"__nv_fmod", "__ocml_fmod", "_Z16__spirv_ocl_fmod"};
      }
      case TargetDeviceFunctionID::kHypot: {
 -      return {"__nv_hypot", "__ocml_hypot"};
-+      return {"__nv_hypot", "__ocml_hypot", "__builtin_spirv_OpenCL_hypot"};
++      return {"__nv_hypot", "__ocml_hypot", "_Z17__spirv_ocl_hypot"};
      }
      case TargetDeviceFunctionID::kLog: {
 -      return {"__nv_log", "__ocml_log"};
-+      return {"__nv_log", "__ocml_log", "__builtin_spirv_OpenCL_log"};
++      return {"__nv_log", "__ocml_log", "_Z15__spirv_ocl_log"};
      }
      case TargetDeviceFunctionID::kLog1p: {
 -      return {"__nv_log1p", "__ocml_log1p"};
-+      return {"__nv_log1p", "__ocml_log1p", "__builtin_spirv_OpenCL_log1p"};
++      return {"__nv_log1p", "__ocml_log1p", "_Z17__spirv_ocl_log1p"};
      }
      case TargetDeviceFunctionID::kPow: {
 -      return {"__nv_pow", "__ocml_pow"};
-+      return {"__nv_pow", "__ocml_pow", "__builtin_spirv_OpenCL_pow"};
++      return {"__nv_pow", "__ocml_pow", "_Z15__spirv_ocl_pow"};
      }
      case TargetDeviceFunctionID::kRsqrt: {
 -      return {"__nv_rsqrt", "__ocml_rsqrt"};
-+      return {"__nv_rsqrt", "__ocml_rsqrt", "__builtin_spirv_OpenCL_rsqrt"};
++      return {"__nv_rsqrt", "__ocml_rsqrt", "_Z17__spirv_ocl_rsqrt"};
      }
      case TargetDeviceFunctionID::kSin: {
 -      return {"__nv_sin", "__ocml_sin"};
-+      return {"__nv_sin", "__ocml_sin", "__builtin_spirv_OpenCL_sin"};
++      return {"__nv_sin", "__ocml_sin", "_Z15__spirv_ocl_sin"};
      }
      case TargetDeviceFunctionID::kSqrt: {
 -      return {"__nv_sqrt", "__ocml_sqrt"};
-+      return {"__nv_sqrt", "__ocml_sqrt", "__builtin_spirv_OpenCL_sqrt"};
++      return {"__nv_sqrt", "__ocml_sqrt", "_Z16__spirv_ocl_sqrt"};
      }
      case TargetDeviceFunctionID::kTan: {
 -      return {"__nv_tan", "__ocml_tan"};
-+      return {"__nv_tan", "__ocml_tan", "__builtin_spirv_OpenCL_tan"};
++      return {"__nv_tan", "__ocml_tan", "_Z15__spirv_ocl_tan"};
      }
      case TargetDeviceFunctionID::kTanh: {
 -      return {"__nv_tanh", "__ocml_tanh"};
-+      return {"__nv_tanh", "__ocml_tanh", "__builtin_spirv_OpenCL_tanh"};
++      return {"__nv_tanh", "__ocml_tanh", "_Z16__spirv_ocl_tanh"};
      }
      case TargetDeviceFunctionID::kCbrt: {
 -      return {"__nv_cbrt", "__ocml_cbrt"};
-+      return {"__nv_cbrt", "__ocml_cbrt", "__builtin_spirv_OpenCL_cbrt"};
++      return {"__nv_cbrt", "__ocml_cbrt", "_Z16__spirv_ocl_cbrt"};
      }
    }
  }
@@ -3341,19 +3341,19 @@ index 12b12b3f1..4ca1c1e6d 100644
      }
 +  } else if (target_triple.isSPIR()) {
 +    if (output_type == F32) {
-+      if (gpu_root_names.spir_root == "__builtin_spirv_OpenCL_hypot" ||
-+          gpu_root_names.spir_root == "__builtin_spirv_OpenCL_pow" ||
-+          gpu_root_names.spir_root == "__builtin_spirv_OpenCL_atan2" ||
-+          gpu_root_names.spir_root == "__builtin_spirv_OpenCL_fmod")
-+        return StrCat(gpu_root_names.spir_root, "_f32_f32");
-+      return StrCat(gpu_root_names.spir_root, "_f32");
++      if (gpu_root_names.spir_root == "_Z17__spirv_ocl_hypot" ||
++          gpu_root_names.spir_root == "_Z15__spirv_ocl_pow" ||
++          gpu_root_names.spir_root == "_Z17__spirv_ocl_atan2" ||
++          gpu_root_names.spir_root == "_Z16__spirv_ocl_fmod")
++        return StrCat(gpu_root_names.spir_root, "ff");
++      return StrCat(gpu_root_names.spir_root, "f");
 +    } else if (output_type == F64) {
-+      if (gpu_root_names.spir_root == "__builtin_spirv_OpenCL_hypot" ||
-+          gpu_root_names.spir_root == "__builtin_spirv_OpenCL_pow" ||
-+          gpu_root_names.spir_root == "__builtin_spirv_OpenCL_atan2" ||
-+          gpu_root_names.spir_root == "__builtin_spirv_OpenCL_fmod")
-+        return StrCat(gpu_root_names.spir_root, "_f64_f64");
-+      return StrCat(gpu_root_names.spir_root, "_f64");
++      if (gpu_root_names.spir_root == "_Z17__spirv_ocl_hypot" ||
++          gpu_root_names.spir_root == "_Z15__spirv_ocl_pow" ||
++          gpu_root_names.spir_root == "_Z17__spirv_ocl_atan2" ||
++          gpu_root_names.spir_root == "_Z16__spirv_ocl_fmod")
++        return StrCat(gpu_root_names.spir_root, "dd");
++      return StrCat(gpu_root_names.spir_root, "d");
 +    } else {
 +      LOG(FATAL) << "Unexpected type while getting device function name.";
 +    }
