@@ -1838,7 +1838,7 @@ index af3a8530b..7a74c6fa2 100644
  
    info.symbol_name.assign(symbol_name);
 diff --git a/xla/service/gpu/ir_emitter_nested.cc b/xla/service/gpu/ir_emitter_nested.cc
-index ad83ba15a..dee125af9 100644
+index ad83ba15a..114e2765d 100644
 --- a/xla/service/gpu/ir_emitter_nested.cc
 +++ b/xla/service/gpu/ir_emitter_nested.cc
 @@ -33,6 +33,11 @@ limitations under the License.
@@ -1853,6 +1853,21 @@ index ad83ba15a..dee125af9 100644
  namespace xla {
  namespace gpu {
  namespace {
+@@ -380,6 +385,14 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
+       return true;
+     }
+ 
++    if (target_triple.isSPIR() &&
++        element_type == F32) {
++      builder->CreateAtomicRMW(llvm::AtomicRMWInst::FAdd, output_address,
++                               source, llvm::MaybeAlign(),
++                               llvm::AtomicOrdering::SequentiallyConsistent);
++      return true;
++    }
++
+     if (is_atomic_integral) {
+       // integral + integral
+       builder->CreateAtomicRMW(
 diff --git a/xla/service/gpu/ir_emitter_unnested.cc b/xla/service/gpu/ir_emitter_unnested.cc
 index 53d02c62d..cf72aa8b0 100644
 --- a/xla/service/gpu/ir_emitter_unnested.cc
