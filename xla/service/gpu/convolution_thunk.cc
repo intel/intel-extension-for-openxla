@@ -636,8 +636,6 @@ Status CreateOneDnnPrimitive(
 
     } else if (conv_descriptor.kind == CudnnConvKind::kBackwardFilter) {
       // TODO(ITEX): handle post_ops_attr.
-      if (input_type == F16)
-        return InternalError("FP16 Conv BackwardFilter is not supported");
       ConvFwdPd fwd_pd = ConvFwdPd(
           onednn_primitive->engine, dnnl::prop_kind::forward,
           dnnl::algorithm::convolution_direct, src_md, filter_md_prefer, dst_md,
