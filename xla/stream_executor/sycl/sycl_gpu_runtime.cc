@@ -99,7 +99,8 @@ class DevicePool {
     }
   }
 
-  SYCLError_t getint(const sycl::device& device, int* device_ordinal) {
+  SYCLError_t getDeviceOrdinal(const sycl::device& device,
+                               int* device_ordinal) {
     const auto& devices = DevicePool::GetDevicesPool();
     auto it = std::find(devices.begin(), devices.end(), device);
     if (it != devices.end()) {
@@ -290,6 +291,11 @@ SYCLError_t SYCLGetDeviceCount(int* count) {
 
 SYCLError_t SYCLGetDevice(sycl::device** device, int device_ordinal) {
   return DevicePool::getDevice(device, device_ordinal);
+}
+
+SYCLError_t SYCLGetDeviceOrdinal(const sycl::device& device,
+                                 int* device_ordinal) {
+  return DevicePool::GetInstance()->getDeviceOrdinal(device, device_ordinal);
 }
 
 SYCLError_t SYCLCreateStream(sycl::device* device_handle,

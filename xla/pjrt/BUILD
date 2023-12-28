@@ -74,6 +74,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":tf_xpu_pjrt_client",
+        "//xla/stream_executor/sycl:sycl_gpu_runtime_imp",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
@@ -82,6 +83,7 @@ cc_library(
         "@xla//xla/service/gpu:gpu_executable_run_options",
         "@xla//xla/stream_executor:device_mem_allocator",
         "@xla//xla/stream_executor:device_memory",
+        "@xla//xla/stream_executor:tf_allocator_adapter",
     ],
     alwayslink = True,
 )

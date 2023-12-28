@@ -2,8 +2,12 @@
 
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/pjrt/tf_xpu_pjrt_client.h"
+#include "xla/stream_executor/device_memory_allocator.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
+#include "xla/stream_executor/tf_allocator_adapter.h"
 #include "xla/stream_executor/tpu/c_api_conversions.h"
+
 xla::PrimitiveType XlaDataTypeFromString(std::string data_type) {
   if (data_type == "bool")
     return xla::PRED;
@@ -70,6 +74,27 @@ void* ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client) {
           ->local_device_state()
           ->compute_stream()));
   return stream;
+}
+
+void* ITEXBFCAllocateOnSyclDevice(const sycl::device& device,
+                                  PJRT_Client* pjrt_c_client, size_t n) {
+  int device_id = SYCLGetDeviceOrdinal(device, &device_id);
+  auto pjrt_client = reinterpret_cast<xla::PjRtStreamExecutorClient*>(
+      pjrt_c_client->client.get());
+  auto* allocator = reinterpret_cast<stream_executor::MultiDeviceAdapter*>(
+      pjrt_client->allocator());
+  void* device_mem = allocator->AllocateRaw(device_id, n, true, 0);
+  return device_mem;
+}
+
+void ITEXBFCDeallocateOnSyclDevice(const sycl::device& device,
+                                   PJRT_Client* pjrt_c_client, void* addr) {
+  int device_id = SYCLGetDeviceOrdinal(device, &device_id);
+  auto pjrt_client = reinterpret_cast<xla::PjRtStreamExecutorClient*>(
+      pjrt_c_client->client.get());
+  auto* allocator = reinterpret_cast<stream_executor::MultiDeviceAdapter*>(
+      pjrt_client->allocator());
+  allocator->DeallocateRaw(device_id, addr);
 }
 
 extern "C" {
