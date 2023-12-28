@@ -3,7 +3,7 @@ run-name: ${{ github.actor }} is testing out GitHub Action
 on:
   pull_request:
     branches:
-      - main
+      - IDC_preCI_master
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -30,7 +30,6 @@ jobs:
               conda activate ${CONDA_ENV}
           fi
           pip install jax==0.4.20 jaxlib==0.4.20
-          pip install numpy
           conda install libstdcxx-ng==12.2.0 -c conda-forge
           pip install absl-py
           pip list | grep numpy
@@ -79,23 +78,24 @@ jobs:
           set +e
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
           source /opt/miniconda/bin/activate ${CONDA_ENV}
-          # install requirement from https://github.com/intel-innersource/frameworks.ai.infrastructure.intel-extension-for-tensorflow.jax/blob/yang/jax-v0.4.20/build/test-requirements.txt
-          # pip install -e . (install in local )
           basekit_path=/home/sdp
           source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
           source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
+          git clone https://github.com/google/jax.git
+          cd jax && git checkout jaxlib-v0.4.20
+          patch -p1 -i ../test/jax_ut.patch
+          mkdir -p ./logs/ut
+          find ./tests -name "*.py" | sed 's#\./##g' |& tee ut_list.txt
+          file_path=./ut_list.txt
+
+          # get distribute ut list
           if [ -d "jax_test" ]; then
               echo "jax_test folder already exists. Doing nothing."
           else
               git clone https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
           fi
-          cd jax_test/openxla
-          pip install ./tools/*.whl
-          pip install -r test-requirements.txt
-          mkdir -p ./logs/ut
-          find ./tests -name "*.py" | sed 's#\./##g' |& tee ut_list.txt
-          file_path=./ut_list.txt
-          reference_file=./distribute_ut_list.txt
+          reference_file=jax_test/openxla/distribute_ut_list.txt
+          
           
           # run distribute ut first
           # Check if the file exists
@@ -162,10 +162,10 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: XLA-CI-Data
-          path: /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax_test/openxla/logs
+          path: /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax/logs
       - name: Test Results Check
         run: |
-          cd /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax_test/openxla
+          cd /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax
           #UT results check
           if [ -f "./logs/ut/err.log" ]; then
             echo "exist fail cases"
