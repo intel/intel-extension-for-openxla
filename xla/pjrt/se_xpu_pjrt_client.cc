@@ -155,7 +155,7 @@ StreamExecutorXpuDevice::StreamExecutorXpuDevice(
       device_vendor_(std::move(device_vendor)),
       slice_index_(slice_index) {
   description().SetAttributes({
-      {"device_vendor", "Intel"},
+      {"device_vendor", std::string("Intel")},
       {"slice_index", static_cast<int64_t>(slice_index)},
   });
   description().SetToString(
