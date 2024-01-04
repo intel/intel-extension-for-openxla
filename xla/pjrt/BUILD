@@ -32,6 +32,8 @@ cc_library(
     name = "se_xpu_client",
     srcs = ["se_xpu_pjrt_client.cc"],
     hdrs = ["se_xpu_pjrt_client.h"],
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -63,7 +65,10 @@ cc_library(
         "@xla//xla/stream_executor:device_mem_allocator",
         "@xla//xla/stream_executor:device_memory",
         "@xla//xla/stream_executor:tf_allocator_adapter",
+        "//xla/stream_executor/sycl:sycl_gpu_runtime_imp",
+        "//xla/stream_executor/sycl:hw_info",
     ],
+    alwayslink = True,
 )
 
 cc_library(
