@@ -38,8 +38,8 @@ def workspace(path_prefix = "", tf_repo_name = ""):
 
     new_git_repository(
         name = "xetla",
-        # v0.3.4
-        commit = "78a776183d52e94689091b808959b4661a5d94d0",
+        # v0.3.4.1
+        commit = "5d9a7886fc4a40a5c7bba28ea78c5dde4a35b44a",
         remote = "https://github.com/intel/xetla",
         verbose = True,
         build_file = "//third_party/xetla:BUILD",
