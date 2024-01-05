@@ -23,8 +23,8 @@ def tf_copts(android_optimization_level_override = "-O2", is_external = False):
     )
 
 def xetla_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
-    kwargs["copts"] = kwargs.get("copts", []) + if_sycl(["-sycl_compile", "--xetla"])
-    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_sycl(["-link_stage", "--xetla"])
+    kwargs["copts"] = kwargs.get("copts", []) + if_sycl(["-target", "sycl", "--xetla", "-sycl_compile"])
+    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_sycl(["-target", "sycl", "--xetla", "-link_stage"])
     native.cc_library(
         name = name,
         srcs = srcs,
@@ -34,8 +34,8 @@ def xetla_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
     )
 
 def xpu_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
-    kwargs["copts"] = kwargs.get("copts", []) + if_sycl(["-sycl_compile"])
-    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_sycl(["-link_stage"])
+    kwargs["copts"] = kwargs.get("copts", []) + if_sycl(["-target", "sycl", "-sycl_compile"])
+    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_sycl(["-target", "sycl", "-link_stage"])
     native.cc_library(
         name = name,
         srcs = srcs,

@@ -11,6 +11,10 @@ def if_sycl(if_true, if_false = []):
         "//conditions:default": if_false,
     })
 
+def sycl_default_copts():
+    """Default options for all SYCL compilations."""
+    return if_sycl(["-x", "sycl"])
+
 def sycl_build_is_configured():
     """Returns true if SYCL compiler was enabled during the configure process."""
     return %{sycl_build_is_configured}
@@ -29,3 +33,7 @@ def if_sycl_build_is_configured(x, y):
     if sycl_build_is_configured():
       return x
     return y
+
+def sycl_library(copts = [], **kwargs):
+    """Wrapper over cc_library which adds default SYCL options."""
+    native.cc_library(copts = sycl_default_copts() + copts, **kwargs)

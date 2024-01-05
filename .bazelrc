@@ -13,6 +13,8 @@ build:gpu --define=using_sycl=true
 build:gpu --define=device=gpu
 build:gpu --repo_env TF_NEED_SYCL=1
 build:gpu --define=tensorflow_mkldnn_contraction_kernel=0
+build:gpu --cxxopt=-std=c++17
+build:gpu --host_cxxopt=-std=c++17
 
 build --define=use_fast_cpp_protos=true
 build --define=allow_oversize_protos=true

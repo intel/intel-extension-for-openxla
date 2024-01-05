@@ -3453,7 +3453,7 @@ index 006020e41..de5c3fc23 100644
    global->setUnnamedAddr(llvm::GlobalVariable::UnnamedAddr::Global);
  
 diff --git a/xla/service/llvm_ir/ir_array.cc b/xla/service/llvm_ir/ir_array.cc
-index fa6ca3fff..c5a7ae782 100644
+index fa6ca3fff..82230ee27 100644
 --- a/xla/service/llvm_ir/ir_array.cc
 +++ b/xla/service/llvm_ir/ir_array.cc
 @@ -25,6 +25,7 @@ limitations under the License.
@@ -3479,7 +3479,7 @@ index fa6ca3fff..c5a7ae782 100644
 -    return b->CreateInBoundsGEP(
 -        type, b->CreateBitCast(base_ptr_, type->getPointerTo()), index.linear(),
 -        llvm_ir::AsStringRef(name));
-+    auto linear_index = dyn_cast<llvm::BinaryOperator>(index.linear());
++    auto linear_index = llvm::dyn_cast<llvm::BinaryOperator>(index.linear());
 +    // only separate const offset when having add
 +    if (linear_index && (linear_index->getOpcode() == llvm::Instruction::Add)) {
 +      llvm::Value* index_operand_0 = linear_index->getOperand(0);

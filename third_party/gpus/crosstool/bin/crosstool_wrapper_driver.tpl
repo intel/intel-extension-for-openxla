@@ -41,8 +41,7 @@ if not os.path.exists(SYCL_PATH):
   if not os.path.exists(SYCL_PATH) or check_is_intel_llvm(SYCL_PATH):
     raise RuntimeError("compiler not found or invalid")
 
-HOST_COMPILER_PATH = "%{HOST_COMPILER_PATH}"
-SYCL_COMPILER_VERSION = "%{SYCL_COMPILER_VERSION}"
+CPU_COMPILER = ('%{cpu_compiler}')
 basekit_path = "%{basekit_path}"
 basekit_version = "%{basekit_version}"
 
@@ -55,12 +54,25 @@ def system(cmd):
   else:
     return -os.WTERMSIG(ret)
 
-def call_compiler(argv, link = False, sycl = True, xetla = False):
+def GetHostCompilerOptions(argv, xetla):
+  parser = ArgumentParser()
+  parser = ArgumentParser()
+  parser.add_argument('-c', nargs='*', action='append')
+  parser.add_argument('-o', nargs='*', action='append')
+  args, leftover = parser.parse_known_args(argv)
+  sycl_host_compile_flags = leftover
+  if xetla:
+    sycl_host_compile_flags.append('-std=c++20')
+  else:
+    sycl_host_compile_flags.append('-std=c++17')
+  host_flags = ['-fsycl-host-compiler-options=\'%s\'' % (' '.join(sycl_host_compile_flags))]
+  return host_flags
+
+def call_compiler(argv, is_sycl = False, link = False, sycl_compile = True, xetla = False):
   flags = argv
 
-  # common flags
-  common_flags = ['-fPIC']
   sycl_device_only_flags = ['-fsycl']
+  # sycl_device_only_flags.append('-fsycl-host-compiler=%{cpu_compiler}')
   sycl_device_only_flags.append('-fno-sycl-unnamed-lambda')
   sycl_device_only_flags.append('-fsycl-targets=spir64_gen,spir64')
   sycl_device_only_flags.append('-sycl-std=2020')
@@ -72,24 +84,24 @@ def call_compiler(argv, link = False, sycl = True, xetla = False):
   sycl_device_only_flags.append('-cl-fp32-correctly-rounded-divide-sqrt')
   sycl_device_only_flags.append('-fsycl-device-code-split=per_source')
 
+  common_flags = []
+  common_flags.extend([%{sycl_builtin_include_directories}])
+  # ref: https://github.com/intel/llvm/blob/sycl/clang/docs/UsersManual.rst#controlling-floating-point-behavior
+  common_flags.append("-fno-finite-math-only")
+  common_flags.append("-fno-fast-math")
+  common_flags.append("-fexceptions")
+
   compile_flags = []
-  compile_flags.append(' -isystem ' + ' -isystem '.join(%{sycl_builtin_include_directories}))
   compile_flags.append('-DDNNL_GRAPH_WITH_SYCL=1')
   if xetla:
     compile_flags.append("-std=c++20")
     compile_flags.append("-DXETPP_NEW_XMAIN")
   else:
-    compile_flags.append("-std=c++17")   
+    compile_flags.append("-std=c++17")
 
   # link flags
   link_flags = ['-fPIC']
   link_flags.append('-lsycl')
-  link_flags.append("-fsycl")
-  if xetla:
-    link_flags.append('-Xs "-doubleGRF -Xfinalizer -printregusage  -Xfinalizer -DPASTokenReduction  -Xfinalizer -enableBCR"')
-  else:
-    link_flags.append('-Xs \'-options "-cl-poison-unsupported-fp64-kernels -cl-intel-enable-auto-large-GRF-mode"\'')
-  link_flags.append('-fsycl-max-parallel-link-jobs=8')
   link_flags.append("-Wl,-no-as-needed")
   link_flags.append("-Wl,--enable-new-dtags")
   link_flags.append("-Wl,-rpath=%{SYCL_ROOT_DIR}/lib/")
@@ -97,51 +109,51 @@ def call_compiler(argv, link = False, sycl = True, xetla = False):
   link_flags.append("-lze_loader")
   link_flags.append("-lOpenCL")
 
-  # oneMKL config
-  # mkl_path = basekit_path + "/mkl/" + basekit_version
-  # common_flags.append('-DMKL_ILP64')
-  # common_flags.append('-isystem {}/include'.format(mkl_path))
-  # link_flags.append("-L{}/lib/intel64".format(mkl_path))
-  # link_flags.append("-lmkl_sycl")
-  # link_flags.append("-lmkl_intel_ilp64")
-  # link_flags.append("-lmkl_sequential")
-  # link_flags.append("-lmkl_core")
+  sycl_link_flags = []
+  sycl_link_flags.append("-fsycl")
+  sycl_link_flags.append('-fsycl-max-parallel-link-jobs=8')
+  # sycl_link_flags.append('-fsycl-link')
+  if xetla:
+    sycl_link_flags.append('-Xs "-doubleGRF -Xfinalizer -printregusage  -Xfinalizer -DPASTokenReduction  -Xfinalizer -enableBCR"')
+  else:
+    sycl_link_flags.append('-Xs \'-options "-cl-poison-unsupported-fp64-kernels -cl-intel-enable-auto-large-GRF-mode"\'')
 
   flags += common_flags
   if link:
     flags += link_flags
-  if sycl:
+    # TODO: Disable for gcc compilation
+    flags += sycl_link_flags
+
+  host_flags = GetHostCompilerOptions(flags, xetla)
+  if sycl_compile:
     flags += compile_flags
     flags += sycl_device_only_flags
+    # flags += host_flags
 
   for i, f in enumerate(flags):
     if isinstance(f, list):
       flags[i] = ''.join(f)
 
-  cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + SYCL_PATH + ' ' + ' '.join(flags))
+  if is_sycl:
+    cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + SYCL_PATH + ' ' + ' '.join(flags))
+  else:
+    # TODO: switch to gcc compilation
+    cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + SYCL_PATH + ' ' + ' '.join(flags))
+    # cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + CPU_COMPILER + ' ' + ' '.join(flags))
 
   return system(cmd)
 
 def main():
   parser = ArgumentParser()
+  parser = ArgumentParser(fromfile_prefix_chars='@')
+  parser.add_argument('-target', nargs=1)
   parser.add_argument('--xetla', action='store_true')
   parser.add_argument('-sycl_compile', action='store_true')
   parser.add_argument('-link_stage', action='store_true')
-  if len(sys.argv[1:]) == 1 and (sys.argv[1:][0].startswith('@')):
-    with open(sys.argv[1:][0].split('@')[1],'r') as file:
-      real_args = file.readlines()
-      real_args = [x.strip() for x in real_args]
-      args, leftover = parser.parse_known_args(real_args)
-  else:
-    args, leftover = parser.parse_known_args(sys.argv[1:])
+  args, leftover = parser.parse_known_args(sys.argv[1:])
 
   leftover = [shlex.quote(s) for s in leftover]
-  if args.link_stage:
-    # link for DPC++ object
-    return call_compiler(leftover, link=True, sycl=args.sycl_compile, xetla=args.xetla)
-  else:
-    # compile for DPC++ object
-    return call_compiler(leftover, link=False, sycl=args.sycl_compile, xetla=args.xetla)
+  return call_compiler(leftover, is_sycl=(args.target and args.target[0] == 'sycl'), link=args.link_stage, sycl_compile=args.sycl_compile, xetla=args.xetla)
 
 if __name__ == '__main__':
   sys.exit(main())

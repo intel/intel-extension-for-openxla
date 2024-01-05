@@ -32,13 +32,19 @@ cc_toolchain_suite(
 
 cc_toolchain(
     name = "cc-compiler-local",
-    all_files = ":empty",
-    compiler_files = ":empty",
+    all_files = ":crosstool_wrapper_driver",
+    compiler_files = ":crosstool_wrapper_driver",
+    ar_files = ":crosstool_wrapper_driver",
+    as_files = ":crosstool_wrapper_driver",
     dwp_files = ":empty",
-    linker_files = ":empty",
+    linker_files = ":crosstool_wrapper_driver",
     objcopy_files = ":empty",
     strip_files = ":empty",
-    supports_param_files = 1,                                                   
+    # To support linker flags that need to go to the start of command line
+    # we need the toolchain to support parameter files. Parameter files are
+    # last on the command line and contain all shared libraries to link, so all
+    # regular options will be left of them.
+    supports_param_files = 1,
     toolchain_identifier = "local_linux",
     toolchain_config = ":cc-compiler-local-config",
 )
@@ -46,11 +52,15 @@ cc_toolchain(
 cc_toolchain_config(
     name = "cc-compiler-local-config",
     cpu = "local",
-    compiler_driver = "bin/crosstool_wrapper_driver",
-    cxx_builtin_include_directories = %{cxx_builtin_include_directories},
-    additional_include_directories = [%{additional_include_directories}],
+    compiler = "compiler",
+    toolchain_identifier = "local_linux",
+    host_system_name = "local",
+    target_system_name = "local",
+    target_libc = "local",
+    abi_version = "local",
+    abi_libc_version = "local",
+    cxx_builtin_include_directories = [%{cxx_builtin_include_directories}],
     host_compiler_path = "%{host_compiler_path}",
-    sycl_compiler_root = "%{sycl_compiler_root}",
     host_compiler_prefix = "%{host_compiler_prefix}",
     unfiltered_compile_flags = [%{unfiltered_compile_flags}],
     linker_bin_path = "%{linker_bin_path}",

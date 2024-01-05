@@ -21,7 +21,7 @@ cc_library(
 )
 
 xpu_library(
-    name = "sycl_gpu_runtime_imp",
+    name = "sycl_gpu_runtime",
     srcs = ["sycl_gpu_runtime.cc"],
     deps = [
         ":sycl_gpu_header",
@@ -48,7 +48,7 @@ cc_library(
     name = "sycl_driver",
     srcs = ["sycl_driver.cc"],
     deps = [
-        ":sycl_gpu_runtime_imp",
+        ":sycl_gpu_runtime",
         "@com_google_absl//absl/debugging:leak_check",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/container:node_hash_map",
@@ -111,7 +111,7 @@ cc_library(
     srcs = ["sycl_kernel.cc"],
     hdrs = ["sycl_kernel.h"],
     deps = [
-        ":sycl_gpu_runtime_imp",
+        ":sycl_gpu_runtime",
         "@xla//xla/stream_executor:stream_executor_headers",
         "@xla//xla/stream_executor/gpu:gpu_kernel_header",
         "@xla//xla/stream_executor/platform",

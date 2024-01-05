@@ -2,7 +2,6 @@
 """SYCL autoconfiguration.
 `sycl_configure` depends on the following environment variables:
 
-  * HOST_CXX_COMPILER:  The host C++ compiler
   * HOST_C_COMPILER:    The host C compiler
   * PYTHON_LIB_PATH: The path to the python lib
 """
@@ -28,13 +27,12 @@ load(
     "which",
 )
 
-_HOST_CXX_COMPILER = "HOST_CXX_COMPILER"
+_GCC_HOST_COMPILER_PATH = "GCC_HOST_COMPILER_PATH"
+_GCC_HOST_COMPILER_PREFIX = "GCC_HOST_COMPILER_PREFIX"
 
 _HOST_C_COMPILER = "HOST_C_COMPILER"
 
 _SYCL_TOOLKIT_PATH = "SYCL_TOOLKIT_PATH"
-
-_SYCL_COMPILER_VERSION = "SYCL_COMPILER_VERSION"
 
 _PYTHON_LIB_PATH = "PYTHON_LIB_PATH"
 
@@ -71,7 +69,7 @@ def _sycl_include_path(repository_ctx, sycl_config, bash_bin):
 
     inc_dirs.append(_mkl_path(sycl_config) + "/include")
     inc_dirs.append(_sycl_header_path(repository_ctx, sycl_config, bash_bin) + "/include")
-    inc_dirs.append(_sycl_header_path(repository_ctx, sycl_config, bash_bin) + "/lib/clang/17/include")
+    inc_dirs.append(_sycl_header_path(repository_ctx, sycl_config, bash_bin) + "/include/sycl")
 
     return inc_dirs
 
@@ -100,15 +98,23 @@ def find_c(repository_ctx):
     return c
 
 def find_cc(repository_ctx):
-    """Find host C++ compiler."""
-    cc_name = "g++"
-    if _HOST_CXX_COMPILER in repository_ctx.os.environ:
-        cc_name = repository_ctx.os.environ[_HOST_CXX_COMPILER].strip()
+    """Find the C++ compiler."""
+
+    # Return a dummy value for GCC detection here to avoid error
+    target_cc_name = "gcc"
+    cc_path_envvar = _GCC_HOST_COMPILER_PATH
+    cc_name = target_cc_name
+
+    cc_name_from_env = get_host_environ(repository_ctx, cc_path_envvar)
+    if cc_name_from_env:
+        cc_name = cc_name_from_env
     if cc_name.startswith("/"):
+        # Absolute path, maybe we should make this supported by our which function.
         return cc_name
-    cc = repository_ctx.which(cc_name)
+    cc = which(repository_ctx, cc_name)
     if cc == None:
-        fail("Cannot find C++ compiler, please correct your path.")
+        fail(("Cannot find {}, either correct your path or set the {}" +
+              " environment variable").format(target_cc_name, cc_path_envvar))
     return cc
 
 def find_sycl_root(repository_ctx, sycl_config):
@@ -139,35 +145,6 @@ def find_sycl_include_path(repository_ctx, sycl_config):
         if l.startswith(" ") and l.strip().startswith("/") and str(repository_ctx.path(l.strip()).realpath) not in include_dirs:
             include_dirs.append(str(repository_ctx.path(l.strip()).realpath))
     return include_dirs
-
-def get_sycl_version(repository_ctx, sycl_config):
-    """Get DPC++ compiler version yyyymmdd"""
-    default_version = "00000000"
-    macro = "__INTEL_LLVM_COMPILER"
-    version_file = "include/sycl/CL/sycl/version.hpp"
-    base_path = find_sycl_root(repository_ctx, sycl_config)
-    intel_llvm_macro = "00000000"
-    compiler_bin_path = base_path + "/bin/icpx"
-    compiler_macros = repository_ctx.execute([compiler_bin_path, "-dM", "-E", "-xc++", "/dev/null"])
-    macro_list = compiler_macros.stdout.split("\n")
-    for m in macro_list:
-        result = m.strip().split(" ")
-        if macro in result:
-            intel_llvm_macro = result[-1]
-    if intel_llvm_macro >= "20230000":
-        version_file = "include/sycl/version.hpp"
-    full_path = repository_ctx.path(base_path + "/" + version_file)
-    if not full_path.exists:
-        return default_version
-    f = repository_ctx.read(full_path)
-    lines = str(f).split("\n")
-    for l in lines:
-        if l.startswith("#define"):
-            l_list = l.strip().split(" ")
-            if (l_list[0] == "#define" and
-                l_list[1] == "__SYCL_COMPILER_VERSION"):
-                default_version = l_list[-1]
-    return default_version
 
 def find_python_lib(repository_ctx):
     """Returns python path."""
@@ -351,24 +328,36 @@ def _get_cxx_inc_directories_impl(repository_ctx, cc, lang_is_cpp):
         lang = "c++"
     else:
         lang = "c"
-    result = repository_ctx.execute([cc, "-E", "-x" + lang, "-", "-v"])
-    index1 = result.stderr.find(_INC_DIR_MARKER_BEGIN)
+
+    # TODO: We pass -no-canonical-prefixes here to match the compiler flags,
+    #       but in rocm_clang CROSSTOOL file that is a `feature` and we should
+    #       handle the case when it's disabled and no flag is passed
+    result = raw_exec(repository_ctx, [
+        cc,
+        "-no-canonical-prefixes",
+        "-E",
+        "-x" + lang,
+        "-",
+        "-v",
+    ])
+    stderr = err_out(result)
+    index1 = stderr.find(_INC_DIR_MARKER_BEGIN)
     if index1 == -1:
         return []
-    index1 = result.stderr.find("\n", index1)
+    index1 = stderr.find("\n", index1)
     if index1 == -1:
         return []
-    index2 = result.stderr.rfind("\n ")
+    index2 = stderr.rfind("\n ")
     if index2 == -1 or index2 < index1:
         return []
-    index2 = result.stderr.find("\n", index2 + 1)
+    index2 = stderr.find("\n", index2 + 1)
     if index2 == -1:
-        inc_dirs = result.stderr[index1 + 1:]
+        inc_dirs = stderr[index1 + 1:]
     else:
-        inc_dirs = result.stderr[index1 + 1:index2].strip()
+        inc_dirs = stderr[index1 + 1:index2].strip()
 
     return [
-        _normalize_include_path(repository_ctx, _cxx_inc_convert(p))
+        str(repository_ctx.path(_cxx_inc_convert(p)))
         for p in inc_dirs.split("\n")
     ]
 
@@ -381,10 +370,11 @@ def get_cxx_inc_directories(repository_ctx, cc):
     includes_cpp = _get_cxx_inc_directories_impl(repository_ctx, cc, True)
     includes_c = _get_cxx_inc_directories_impl(repository_ctx, cc, False)
 
+    includes_cpp_set = depset(includes_cpp)
     return includes_cpp + [
         inc
         for inc in includes_c
-        if inc not in includes_cpp
+        if inc not in includes_cpp_set.to_list()
     ]
 
 _DUMMY_CROSSTOOL_BZL_FILE = """
@@ -440,7 +430,6 @@ def _create_local_sycl_repository(repository_ctx):
     unfiltered_cxx_flags = ""
     linker_flags = ""
 
-    sycl_defines = {}
     tpl_paths = {labelname: _tpl_path(repository_ctx, labelname) for labelname in [
         "sycl:build_defs.bzl",
         "sycl:BUILD",
@@ -521,9 +510,31 @@ def _create_local_sycl_repository(repository_ctx):
         repository_dict,
     )
 
+    # Set up crosstool/
+
+    cc = find_cc(repository_ctx)
+
+    host_compiler_includes = get_cxx_inc_directories(repository_ctx, cc)
+
+    host_compiler_prefix = get_host_environ(repository_ctx, _GCC_HOST_COMPILER_PREFIX, "/usr/bin")
+
+    sycl_defines = {}
+
+    sycl_defines["%{host_compiler_prefix}"] = host_compiler_prefix
+    sycl_defines["%{host_compiler_path}"] = "bin/crosstool_wrapper_driver"
+
+    sycl_defines["%{cpu_compiler}"] = str(cc)
+    sycl_defines["%{linker_bin_path}"] = "/usr/bin"
+    # sycl_defines["%{linker_bin_path}"] = sycl_config.sycl_toolkit_path + "/hcc/compiler/bin"
+
+    sycl_internal_inc_dirs = find_sycl_include_path(repository_ctx, sycl_config)
     additional_linker_flags = []
-    builtin_includes = []
-    builtin_includes += _sycl_include_path(repository_ctx, sycl_config, bash_bin)
+    cxx_builtin_includes_list = sycl_internal_inc_dirs + _sycl_include_path(repository_ctx, sycl_config, bash_bin) + host_compiler_includes
+    builtin_includes_list = _sycl_include_path(repository_ctx, sycl_config, bash_bin)
+    sycl_builtin_include_directories = []
+    for include_path in builtin_includes_list:
+        sycl_builtin_include_directories.append('-isystem')
+        sycl_builtin_include_directories.append(include_path)
 
     pwd = repository_ctx.os.environ["PWD"]
     additional_inc = []
@@ -543,37 +554,20 @@ def _create_local_sycl_repository(repository_ctx):
         tmp_dir = "/tmp/" + tmp_suffix
         sycl_defines["%{TMP_DIRECTORY}"] = tmp_dir
 
-    sycl_defines["%{cxx_builtin_include_directories}"] = str(builtin_includes)
-    sycl_defines["%{sycl_builtin_include_directories}"] = str(builtin_includes)
+    sycl_defines["%{cxx_builtin_include_directories}"] = to_list_of_strings(cxx_builtin_includes_list)
+    sycl_defines["%{sycl_builtin_include_directories}"] = to_list_of_strings(sycl_builtin_include_directories)
     sycl_defines["%{extra_no_canonical_prefixes_flags}"] = "\"-fno-canonical-system-headers\""
     sycl_defines["%{unfiltered_compile_flags}"] = to_list_of_strings([
         "-DGOOGLE_SYCL=1",
         "-DMKL_ILP64",
+        "-fPIC",
     ])
-    sycl_defines["%{host_compiler}"] = "gcc"
-    sycl_defines["%{HOST_COMPILER_PATH}"] = "/usr/bin/gcc"
-    sycl_defines["%{host_compiler_prefix}"] = "/usr/bin"
     sycl_defines["%{sycl_compiler_root}"] = str(sycl_config.sycl_toolkit_path)
-    sycl_defines["%{linker_bin_path}"] = "/usr/bin"
     sycl_defines["%{SYCL_ROOT_DIR}"] = str(sycl_config.sycl_toolkit_path)
     sycl_defines["%{additional_include_directories}"] = additional_inc
-    sycl_defines["%{SYCL_COMPILER_VERSION}"] = str(get_sycl_version(repository_ctx, sycl_config))
     sycl_defines["%{PYTHON_LIB_PATH}"] = repository_ctx.os.environ[_PYTHON_LIB_PATH]
     sycl_defines["%{basekit_path}"] = str(sycl_config.sycl_basekit_path)
     sycl_defines["%{basekit_version}"] = str(sycl_config.sycl_basekit_version_number)
-
-    sycl_internal_inc_dirs = find_sycl_include_path(repository_ctx, sycl_config)
-    sycl_internal_inc = "\", \"".join(sycl_internal_inc_dirs)
-    sycl_internal_isystem_inc = []
-    for d in sycl_internal_inc_dirs:
-        sycl_internal_isystem_inc.append("-isystem\", \"" + d)
-
-    if len(sycl_internal_inc_dirs) > 0:
-        sycl_defines["%{SYCL_ISYSTEM_INC}"] = "\"]), \n\tflag_group(flags=[ \"".join(sycl_internal_isystem_inc)
-        sycl_defines["%{SYCL_INTERNAL_INC}"] = sycl_internal_inc
-    else:
-        sycl_defines["%{SYCL_ISYSTEM_INC}"] = ""
-        sycl_defines["%{SYCL_INTERNAL_INC}"] = ""
 
     linker_flags = "" if additional_linker_flags == [] else "linker_flag: "
     linker_flags += "\n  linker_flag: ".join(additional_linker_flags)
