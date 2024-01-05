@@ -119,6 +119,11 @@ PJRT_Buffer* C_ITEXCreatePjRtBuffer(int device_id,
 void* C_ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client) {
   return ITEXGetStreamFromPjRtDevice(device_id, pjrt_c_client);
 }
+
+void C_RegisterCustomCallTarget(const char *symbol, void *address,
+                                const char *platform) {
+  xla::CustomCallTargetRegistry::Global()->Register(symbol, address, platform);
+}
 }
 
 namespace xla {
