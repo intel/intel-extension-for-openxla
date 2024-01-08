@@ -33,6 +33,7 @@ cc_library(
     srcs = ["se_xpu_pjrt_client.cc"],
     hdrs = ["se_xpu_pjrt_client.h"],
     visibility = ["//visibility:public"],
+    linkstatic = 1,
     deps = [
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
