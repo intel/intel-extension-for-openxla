@@ -32,7 +32,6 @@ cc_library(
     name = "se_xpu_client",
     srcs = ["se_xpu_pjrt_client.cc"],
     hdrs = ["se_xpu_pjrt_client.h"],
-    linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/base:core_headers",

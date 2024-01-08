@@ -115,9 +115,6 @@ GetStreamExecutorXpuDeviceAllocator(
           SYCLGetDevice(&sycl_dev, ordinal_and_device.second->device_ordinal());
           if (IsXeHPC(sycl_dev)) {          
             setenv("ITEX_USING_DATA_CENTER_GPU_MAX", "1", 0);  
-            printf("CBOSS DBG indeed using data center gpu max!\r\n");
-          } else {
-            printf("CBOSS DBG didnot using data center gpu max!\r\n");
           }
         });
       }
