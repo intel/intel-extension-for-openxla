@@ -248,11 +248,11 @@ static sycl::async_handler SYCLAsyncHandler = [](sycl::exception_list eL) {
   }
 };
 
-class StreamPool {
+class SYCLStreamPool {
  public:
   static SYCLError_t getDefaultStream(sycl::device* device_handle,
                                       sycl::queue** stream_p) {
-    *stream_p = StreamPool::GetStreamsPool(device_handle)[0].get();
+    *stream_p = SYCLStreamPool::GetStreamsPool(device_handle)[0].get();
     return SYCL_SUCCESS;
   }
 
@@ -260,17 +260,17 @@ class StreamPool {
                                   sycl::queue** stream_p) {
     if (IsMultipleStreamEnabled()) {
       sycl::property_list propList{sycl::property::queue::in_order()};
-      StreamPool::GetStreamsPool(device_handle)
+      SYCLStreamPool::GetStreamsPool(device_handle)
           .push_back(std::make_shared<sycl::queue>(
               DevicePool::getDeviceContext(), *device_handle, SYCLAsyncHandler,
               propList));
     }
-    *stream_p = StreamPool::GetStreamsPool(device_handle).back().get();
+    *stream_p = SYCLStreamPool::GetStreamsPool(device_handle).back().get();
     return SYCL_SUCCESS;
   }
 
   static SYCLError_t syncContext(sycl::device* device_handle) {
-    for (auto stream : StreamPool::GetStreamsPool(device_handle)) {
+    for (auto stream : SYCLStreamPool::GetStreamsPool(device_handle)) {
       stream->wait();
     }
     return SYCL_SUCCESS;
@@ -279,7 +279,7 @@ class StreamPool {
   static SYCLError_t destroyStream(sycl::device* device_handle,
                                    sycl::queue* stream_handle) {
     if (stream_handle == nullptr) return SYCL_ERROR_INVALID_STREAM;
-    auto stream_pool = StreamPool::GetStreamsPool(device_handle);
+    auto stream_pool = SYCLStreamPool::GetStreamsPool(device_handle);
     for (int i = 0; i < stream_pool.size(); i++) {
       if (stream_pool[i].get() == stream_handle) {
         stream_pool.erase(stream_pool.begin() + i);
@@ -287,15 +287,6 @@ class StreamPool {
       }
     }
     return SYCL_ERROR_INVALID_STREAM;
-  }
-
-  static SYCLError_t getStreams(sycl::device* device_handle,
-                                std::vector<sycl::queue*>* streams) {
-    auto stream_pool = StreamPool::GetStreamsPool(device_handle);
-    for (int i = 0; i < stream_pool.size(); i++) {
-      streams->push_back(stream_pool[i].get());
-    }
-    return SYCL_SUCCESS;
   }
 
  private:
@@ -330,16 +321,16 @@ SYCLError_t SYCLGetDevice(sycl::device** device, int device_ordinal) {
 
 SYCLError_t SYCLCreateStream(sycl::device* device_handle,
                              sycl::queue** stream_p) {
-  return StreamPool::createStream(device_handle, stream_p);
+  return SYCLStreamPool::createStream(device_handle, stream_p);
 }
 
 SYCLError_t SYCLDestroyStream(sycl::device* device_handle,
                               sycl::queue* stream_handle) {
-  return StreamPool::destroyStream(device_handle, stream_handle);
+  return SYCLStreamPool::destroyStream(device_handle, stream_handle);
 }
 
 SYCLError_t SYCLCtxSynchronize(sycl::device* device_handle) {
-  return StreamPool::syncContext(device_handle);
+  return SYCLStreamPool::syncContext(device_handle);
 }
 
 /************************* SYCL memory management
@@ -404,7 +395,7 @@ static void memsetDeviceD32(void* dstDevice, int value, size_t n, bool async,
 SYCLError_t SYCLMemcpyDtoH(void* dstHost, const void* srcDevice,
                            size_t ByteCount, sycl::device* device) {
   sycl::queue* stream;
-  auto res = StreamPool::getDefaultStream(device, &stream);
+  auto res = SYCLStreamPool::getDefaultStream(device, &stream);
   memcpyDeviceToHost(dstHost, srcDevice, ByteCount, false, stream);
   return res;
 }
@@ -412,7 +403,7 @@ SYCLError_t SYCLMemcpyDtoH(void* dstHost, const void* srcDevice,
 SYCLError_t SYCLMemcpyHtoD(void* dstDevice, const void* srcHost,
                            size_t ByteCount, sycl::device* device) {
   sycl::queue* stream;
-  auto res = StreamPool::getDefaultStream(device, &stream);
+  auto res = SYCLStreamPool::getDefaultStream(device, &stream);
   memcpyHostToDevice(dstDevice, srcHost, ByteCount, false, stream);
   return res;
 }
@@ -420,7 +411,7 @@ SYCLError_t SYCLMemcpyHtoD(void* dstDevice, const void* srcHost,
 SYCLError_t SYCLMemcpyDtoD(void* dstDevice, const void* srcDevice,
                            size_t ByteCount, sycl::device* device) {
   sycl::queue* stream;
-  auto res = StreamPool::getDefaultStream(device, &stream);
+  auto res = SYCLStreamPool::getDefaultStream(device, &stream);
   memcpyDeviceToDevice(dstDevice, srcDevice, ByteCount, false, stream);
   return res;
 }
@@ -452,7 +443,7 @@ SYCLError_t SYCLMemcpyDtoDAsync(void* dstDevice, const void* srcDevice,
 SYCLError_t SYCLMemsetD8(void* dstDevice, unsigned char uc, size_t N,
                          sycl::device* device) {
   sycl::queue* stream;
-  auto res = StreamPool::getDefaultStream(device, &stream);
+  auto res = SYCLStreamPool::getDefaultStream(device, &stream);
   memsetDeviceD8(dstDevice, uc, N, false, stream);
   return res;
 }
@@ -466,7 +457,7 @@ SYCLError_t SYCLMemsetD8Async(void* dstDevice, unsigned char uc, size_t N,
 SYCLError_t SYCLMemsetD32(void* dstDevice, unsigned int ui, size_t N,
                           sycl::device* device) {
   sycl::queue* stream;
-  auto res = StreamPool::getDefaultStream(device, &stream);
+  auto res = SYCLStreamPool::getDefaultStream(device, &stream);
   memsetDeviceD32(dstDevice, ui, N, false, stream);
   return res;
 }
@@ -479,7 +470,7 @@ SYCLError_t SYCLMemsetD32Async(void* dstDevice, unsigned int ui, size_t N,
 
 void* SYCLMalloc(sycl::device* device, size_t ByteCount) {
   sycl::queue* stream;
-  StreamPool::getDefaultStream(device, &stream);
+  SYCLStreamPool::getDefaultStream(device, &stream);
 
   // Always use default 0 stream to allocate mem
   auto ptr = aligned_alloc_device(/*alignment=*/64, ByteCount, *stream);
@@ -488,7 +479,7 @@ void* SYCLMalloc(sycl::device* device, size_t ByteCount) {
 
 void* SYCLMallocHost(sycl::device* device, size_t ByteCount) {
   sycl::queue* stream;
-  StreamPool::getDefaultStream(device, &stream);
+  SYCLStreamPool::getDefaultStream(device, &stream);
 
   // Always use default 0 stream to allocate mem
   auto ptr = aligned_alloc_host(/*alignment=*/64, ByteCount, *stream);
@@ -497,7 +488,7 @@ void* SYCLMallocHost(sycl::device* device, size_t ByteCount) {
 
 void* SYCLMallocShared(sycl::device* device, size_t ByteCount) {
   sycl::queue* stream;
-  StreamPool::getDefaultStream(device, &stream);
+  SYCLStreamPool::getDefaultStream(device, &stream);
 
   // Always use default 0 stream to allocate mem
   auto ptr = aligned_alloc_shared(/*alignment=*/64, ByteCount, *stream);
@@ -506,7 +497,7 @@ void* SYCLMallocShared(sycl::device* device, size_t ByteCount) {
 
 void SYCLFree(sycl::device* device, void* ptr) {
   sycl::queue* stream;
-  StreamPool::getDefaultStream(device, &stream);
+  SYCLStreamPool::getDefaultStream(device, &stream);
 
   // Always use default 0 stream to free mem
   sycl::free(ptr, *stream);
