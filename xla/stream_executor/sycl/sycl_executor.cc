@@ -546,18 +546,16 @@ void GpuExecutor::DeallocateStream(Stream* stream) {
 }
 
 bool GpuExecutor::CreateStreamDependency(Stream* dependent, Stream* other) {
-  sycl::event* other_completed_event = *AsGpuStream(other)->completed_event();
-  bool ok = GpuDriver::RecordEvent(context_, other_completed_event,
-                                   AsGpuStreamValue(other))
-                .ok();
-  if (!ok) {
-    LOG(ERROR) << "failed to record completion event; "
-                  "therefore, failed to create inter-stream dependency";
-    return false;
-  }
+  // For thread safe, event should be thread local.
+  auto* other_queue = AsGpuStreamValue(other);
+  auto event = other_queue->ext_oneapi_submit_barrier();
+
+  EventWrapper event_wrapper;
+  event_wrapper.event = &event;
+  event_wrapper.queue = AsGpuStreamValue(other);
 
   return GpuDriver::WaitStreamOnEvent(context_, AsGpuStreamValue(dependent),
-                                      other_completed_event);
+                                      &event_wrapper);
 }
 
 tsl::Status GpuExecutor::BlockHostUntilDone(Stream* stream) {
@@ -566,17 +564,11 @@ tsl::Status GpuExecutor::BlockHostUntilDone(Stream* stream) {
   return ::tsl::OkStatus();
 }
 
-blas::BlasSupport* GpuExecutor::CreateBlas() {
-  return nullptr;
-}
+blas::BlasSupport* GpuExecutor::CreateBlas() { return nullptr; }
 
-dnn::DnnSupport* GpuExecutor::CreateDnn() {
-  return nullptr;
-}
+dnn::DnnSupport* GpuExecutor::CreateDnn() { return nullptr; }
 
-fft::FftSupport* GpuExecutor::CreateFft() {
-  return nullptr;
-}
+fft::FftSupport* GpuExecutor::CreateFft() { return nullptr; }
 
 bool GpuExecutor::CanEnablePeerAccessTo(StreamExecutorInterface* other) {
   return false;
@@ -643,7 +635,8 @@ GpuExecutor::GetStreamImplementation() {
 
 tsl::StatusOr<std::unique_ptr<internal::CommandBufferInterface>>
 GpuExecutor::GetCommandBufferImplementation(CommandBuffer::Mode mode) {
-  LOG(FATAL) << "GetCommandBufferImplementation is not implemented in sycl_executor";
+  LOG(FATAL)
+      << "GetCommandBufferImplementation is not implemented in sycl_executor";
 }
 
 void* GpuExecutor::platform_specific_context() { return context_; }

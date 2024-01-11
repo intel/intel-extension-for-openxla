@@ -18,10 +18,6 @@ limitations under the License.
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <map>
-#include <set>
-#include <utility>
-
 #include <cstdint>
 #include <cstring>
 #include <map>
@@ -39,14 +35,14 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/synchronization/notification.h"
-#include "xla/stream_executor/gpu/gpu_driver.h"
-#include "xla/stream_executor/platform/port.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"
 #include "tsl/platform/stacktrace.h"
 #include "tsl/platform/status.h"
 #include "tsl/platform/threadpool.h"
+#include "xla/stream_executor/gpu/gpu_driver.h"
+#include "xla/stream_executor/platform/port.h"
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 
 #define RETURN_IF_SYCL_RES_ERROR(expr, ...)                            \
@@ -80,9 +76,7 @@ class GpuContext {
 
 namespace {
 
-static tsl::Status InternalInit() {
-  return ::tsl::OkStatus();
-}
+static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
 
 }  // namespace
 /* static */ tsl::Status GpuDriver::Init() {
@@ -419,41 +413,66 @@ static tsl::Status InternalInit() {
 }
 
 /* static */ tsl::Status GpuDriver::InitEvent(GpuContext* context,
-                                              GpuEventHandle* event,
+                                              GpuEventHandle* event_handle,
                                               EventFlags flags) {
-  *event = new sycl::event;
+  if (*event_handle != nullptr) {
+    LOG(FATAL) << "Event is wrongly initialized before using";
+  }
+
+  *event_handle = new EventWrapper();
+  (*event_handle)->event = new sycl::event;
+  (*event_handle)->queue = nullptr;
+
   return tsl::OkStatus();
 }
 
 /* static */ tsl::Status GpuDriver::DestroyEvent(GpuContext* context,
-                                                 GpuEventHandle* event) {
-  if (*event == nullptr) {
+                                                 GpuEventHandle* event_handle) {
+  if (*event_handle == nullptr) {
     return tsl::Status{absl::StatusCode::kInvalidArgument,
                        "input event cannot be null"};
   }
 
-  delete (*event);
+  delete (*event_handle)->event;
+  delete (*event_handle);
+  *event_handle = nullptr;
+
   return tsl::OkStatus();
 }
 
 /* static */ tsl::Status GpuDriver::RecordEvent(GpuContext* context,
-                                                GpuEventHandle event,
+                                                GpuEventHandle event_handle,
                                                 GpuStreamHandle stream) {
-  if (IsMultipleStreamEnabled()) {
-    *event = stream->ext_oneapi_submit_barrier();
-  }
+  event_handle->queue = stream;
+  *(event_handle->event) = stream->ext_oneapi_submit_barrier();
+
   return tsl::OkStatus();
 }
 
 /* static */ bool GpuDriver::WaitStreamOnEvent(GpuContext* context,
-                                               sycl::queue* stream,
-                                               sycl::event* event) {
-  if (IsMultipleStreamEnabled()) {
-    const std::vector<sycl::event> event_list{*event};
+                                               GpuStreamHandle stream,
+                                               GpuEventHandle event_handle) {
+  // No need to wait if it's same in-order queue.
+  static absl::once_flag init_flag;
+  static bool optimize_single_queue = true;
+
+  // Env setting for debug.
+  absl::call_once(init_flag, [&]() {
+    const char* env = std::getenv("_XLA_OPTIMIZE_SINGLE_QUEUE");
+
+    if (env != nullptr) {
+      std::string str_value = absl::AsciiStrToLower(env);
+      if (str_value == "0" || str_value == "false") {
+        optimize_single_queue = false;
+      }
+    }
+  });
+
+  if (!optimize_single_queue || stream != event_handle->queue) {
+    const std::vector<sycl::event> event_list{*(event_handle->event)};
     stream->ext_oneapi_submit_barrier(event_list);
-  } else {
-    stream->wait();
   }
+
   return true;
 }
 
