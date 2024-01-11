@@ -28,21 +28,18 @@ namespace gpu {
 namespace sycl = ::sycl;
 
 Event::Status GpuEvent::PollForStatus() {
-  if (IsMultipleStreamEnabled()) {
-    auto event_status =
-        gpu_event_->get_info<sycl::info::event::command_execution_status>();
+  auto* event = gpu_event_->event;
+  auto event_status =
+      event->get_info<sycl::info::event::command_execution_status>();
 
-    switch (event_status) {
-      case sycl::info::event_command_status::submitted:
-      case sycl::info::event_command_status::running:
-        return Event::Status::kPending;
-      case sycl::info::event_command_status::complete:
-        return Event::Status::kComplete;
-      default:
-        return Event::Status::kUnknown;
-    }
-  } else {
-    return Event::Status::kComplete;
+  switch (event_status) {
+    case sycl::info::event_command_status::submitted:
+    case sycl::info::event_command_status::running:
+      return Event::Status::kPending;
+    case sycl::info::event_command_status::complete:
+      return Event::Status::kComplete;
+    default:
+      return Event::Status::kUnknown;
   }
 }
 

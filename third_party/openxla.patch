@@ -3332,7 +3332,7 @@ index cefd0a6af..5f2f78caf 100644
  // Type traits to get CUDA complex types from std::complex<>.
  
 diff --git a/xla/stream_executor/gpu/gpu_types.h b/xla/stream_executor/gpu/gpu_types.h
-index dea81d66a..af1f89180 100644
+index dea81d66a..14b13bbfd 100644
 --- a/xla/stream_executor/gpu/gpu_types.h
 +++ b/xla/stream_executor/gpu/gpu_types.h
 @@ -18,7 +18,18 @@ limitations under the License.
@@ -3355,16 +3355,20 @@ index dea81d66a..af1f89180 100644
  
  #define __HIP_DISABLE_CPP_FUNCTIONS__
  
-@@ -36,7 +47,29 @@ limitations under the License.
+@@ -36,7 +47,33 @@ limitations under the License.
  namespace stream_executor {
  namespace gpu {
  
 -#if TENSORFLOW_USE_ROCM
 +#if GOOGLE_SYCL
++typedef struct SYCLEventWrapper {
++  ::sycl::event* event;
++  ::sycl::queue* queue;
++} EventWrapper;
 +
 +using GpuContextHandle = const void*;
 +using GpuStreamHandle = ::sycl::queue*;
-+using GpuEventHandle = ::sycl::event*;
++using GpuEventHandle = EventWrapper*;
 +using GpuFunctionHandle = ::sycl::kernel*;
 +using GpuFunctionAttribute = const void*;
 +using GpuDeviceHandle = ::sycl::device*;
