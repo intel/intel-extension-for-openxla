@@ -70,7 +70,8 @@ lto_index_actions = [
 def _impl(ctx):
     tool_paths = [
         tool_path(name = "gcc", path = ctx.attr.host_compiler_path),
-        tool_path(name = "ar", path = ctx.attr.host_compiler_prefix + "/ar"),
+        tool_path(name = "ar", path = ctx.attr.ar_path),
+        # tool_path(name = "ar", path = ctx.attr.host_compiler_prefix + "/ar"),
         tool_path(name = "compat-ld", path = ctx.attr.host_compiler_prefix + "/ld"),
         tool_path(name = "cpp", path = ctx.attr.host_compiler_prefix + "/cpp"),
         tool_path(name = "dwp", path = ctx.attr.host_compiler_prefix + "/dwp"),
@@ -298,6 +299,51 @@ def _impl(ctx):
             ),
         ],
     )
+
+    mkl_link_feature = feature(
+        name = "mkl_link",
+        enabled = True,
+        flag_sets = [
+            flag_set(
+                actions = [
+                    ACTION_NAMES.cpp_link_dynamic_library,
+                    ACTION_NAMES.cpp_link_nodeps_dynamic_library,
+                ],
+                flag_groups = [flag_group(flags = [
+                    "-L%{MKL_PATH}/lib/",
+                    "-Wl,-no-as-needed",
+                    "-lmkl_intel_ilp64",
+                    "-lmkl_sequential",
+                    "-lmkl_core",
+                    "-lmkl_sycl_blas",
+                    "-lmkl_sycl_lapack",
+                    "-lmkl_sycl_sparse",
+                    "-lmkl_sycl_dft",
+                    "-lmkl_sycl_vm",
+                    "-lmkl_sycl_rng",
+                    "-lmkl_sycl_stats",
+                    "-lmkl_sycl_data_fitting",
+                ])],
+            ),
+        ],
+    )
+
+    host_link_feature = feature(
+        name = "host_link",
+        enabled = True,
+        flag_sets = [
+            flag_set(
+                actions = [
+                    ACTION_NAMES.cpp_link_dynamic_library,
+                    ACTION_NAMES.cpp_link_nodeps_dynamic_library,
+                ],
+                flag_groups = [flag_group(flags = [
+                    "-Wl,-Bstatic,-lsvml,-lirng,-limf,-lirc,-lirc_s,-Bdynamic"
+                ])],
+            ),
+        ],
+    )
+
     no_canonical_prefixes_feature = feature(
         name = "no-canonical-prefixes",
         flag_sets = [
@@ -363,6 +409,8 @@ def _impl(ctx):
         ],
     )
     features = [
+        mkl_link_feature,
+        host_link_feature,
         sycl_compiler_feature,
         stdlib_feature,
         determinism_feature,
@@ -430,6 +478,7 @@ cc_toolchain_config = rule(
         "host_compiler_path": attr.string(),
         "host_compiler_prefix": attr.string(),
         "linker_bin_path": attr.string(),
+        "ar_path": attr.string(),
     },
     provides = [CcToolchainConfigInfo],
 )

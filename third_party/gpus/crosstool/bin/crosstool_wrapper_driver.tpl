@@ -17,6 +17,7 @@ import subprocess
 import re
 import sys
 import shlex
+import tempfile
 
 TMPDIR = "%{TMP_DIRECTORY}"
 
@@ -45,6 +46,12 @@ CPU_COMPILER = ('%{cpu_compiler}')
 basekit_path = "%{basekit_path}"
 basekit_version = "%{basekit_version}"
 
+result = subprocess.run(["which", "ar"], capture_output=True, text=True)
+if result.returncode == 0:
+    AR_PATH = result.stdout.strip()  # Remove any trailing newline
+else:
+    raise RuntimeError("ar not found or invalid")
+
 def system(cmd):
   """Invokes cmd with os.system()"""
   
@@ -56,23 +63,25 @@ def system(cmd):
 
 def GetHostCompilerOptions(argv, xetla):
   parser = ArgumentParser()
-  parser = ArgumentParser()
-  parser.add_argument('-c', nargs='*', action='append')
-  parser.add_argument('-o', nargs='*', action='append')
   args, leftover = parser.parse_known_args(argv)
   sycl_host_compile_flags = leftover
   if xetla:
     sycl_host_compile_flags.append('-std=c++20')
+    sycl_host_compile_flags.append("-DXETPP_NEW_XMAIN")
   else:
     sycl_host_compile_flags.append('-std=c++17')
   host_flags = ['-fsycl-host-compiler-options=\'%s\'' % (' '.join(sycl_host_compile_flags))]
   return host_flags
 
 def call_compiler(argv, is_sycl = False, link = False, sycl_compile = True, xetla = False):
-  flags = argv
+  parser = ArgumentParser()
+  parser.add_argument('-c', nargs=1, action='append')
+  parser.add_argument('-o', nargs=1, action='append')
+  args, leftover = parser.parse_known_args(argv)
+
+  flags = leftover
 
   sycl_device_only_flags = ['-fsycl']
-  # sycl_device_only_flags.append('-fsycl-host-compiler=%{cpu_compiler}')
   sycl_device_only_flags.append('-fno-sycl-unnamed-lambda')
   sycl_device_only_flags.append('-fsycl-targets=spir64_gen,spir64')
   sycl_device_only_flags.append('-sycl-std=2020')
@@ -109,39 +118,81 @@ def call_compiler(argv, is_sycl = False, link = False, sycl_compile = True, xetl
   link_flags.append("-lze_loader")
   link_flags.append("-lOpenCL")
 
-  sycl_link_flags = []
+  sycl_link_flags = ['-fPIC']
   sycl_link_flags.append("-fsycl")
   sycl_link_flags.append('-fsycl-max-parallel-link-jobs=8')
-  # sycl_link_flags.append('-fsycl-link')
+  sycl_link_flags.append('-fsycl-link')
   if xetla:
     sycl_link_flags.append('-Xs "-doubleGRF -Xfinalizer -printregusage  -Xfinalizer -DPASTokenReduction  -Xfinalizer -enableBCR"')
   else:
     sycl_link_flags.append('-Xs \'-options "-cl-poison-unsupported-fp64-kernels -cl-intel-enable-auto-large-GRF-mode"\'')
 
-  flags += common_flags
-  if link:
-    flags += link_flags
-    # TODO: Disable for gcc compilation
-    flags += sycl_link_flags
+  # TODO: enable host-compiler for icx
+  # sycl_device_only_flags.append('-fsycl-host-compiler=%{cpu_compiler}')
+  # host_flags = GetHostCompilerOptions(flags+common_flags, xetla)
 
-  host_flags = GetHostCompilerOptions(flags, xetla)
+  in_files, out_files = [], []
   if sycl_compile:
-    flags += compile_flags
-    flags += sycl_device_only_flags
-    # flags += host_flags
+    # device compilation
+    if args.c:
+      in_files.append('-c')
+      in_files.extend(args.c[0])
+      assert len(args.c[0]) == 1
+    if args.o:
+      out_files.append('-o')
+      out_files.extend(args.o[0])
+      assert len(args.o[0]) == 1
 
-  for i, f in enumerate(flags):
-    if isinstance(f, list):
-      flags[i] = ''.join(f)
+    in_file = args.c[0][0]
+    out_file = args.o[0][0]
+    out_file_name = out_file.split('/')[-1].split('.')[0]
 
-  if is_sycl:
-    cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + SYCL_PATH + ' ' + ' '.join(flags))
+    # Create a temporary directory
+    with tempfile.TemporaryDirectory() as temp_dir:
+      object_file = os.path.join(temp_dir, out_file_name + '.compile.o')
+      dev_file = os.path.join(temp_dir, out_file_name + '.dev.o')
+
+      # compile object file
+      # icx -fsycl -c kernel.cpp -o kernel.compile.o
+      sycl_compile_flags = [" -c {} -o {} ".format(in_file, object_file)]
+      sycl_compile_flags += (flags + common_flags + compile_flags + sycl_device_only_flags)
+      compile_cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + SYCL_PATH + ' ' + ' '.join(sycl_compile_flags))
+      exit_status = system(compile_cmd)
+      if exit_status != 0:
+        return exit_status
+
+      # generate device object file that can be used by host compiler
+      # icx -fsycl -fPIC -fsycl-link kernel.compile.o -o kernel.dev.o
+      sycl_link_flags_dev = [" {} -o {} ".format(object_file, dev_file)]
+      sycl_link_flags_dev += (common_flags + sycl_link_flags)
+      link_cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + SYCL_PATH + ' ' + ' '.join(sycl_link_flags_dev))
+      exit_status = system(link_cmd)
+      if exit_status != 0:
+        return exit_status
+
+      # archive object files
+      # ar rcsD output.o kernel.compile.o kernel.dev.o
+      ar_flags = " rcsD {} {} {}".format(out_file, object_file, dev_file)
+      ar_cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + AR_PATH + ar_flags)
+      return system(ar_cmd)
+  elif link:
+    # sycl link
+    out_files.append('-o')
+    out_files.extend(args.o[0])
+    flags += (common_flags + in_files + out_files + link_flags)
+    cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + CPU_COMPILER + ' ' + ' '.join(flags))
+    return system(cmd)
   else:
-    # TODO: switch to gcc compilation
+    # host compilation
+    if args.c:
+      in_files.append('-c')
+      in_files.extend(args.c[0])
+    if args.o:
+      out_files.append('-o')
+      out_files.extend(args.o[0])
+    flags += (common_flags + in_files + out_files)
     cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + SYCL_PATH + ' ' + ' '.join(flags))
-    # cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + CPU_COMPILER + ' ' + ' '.join(flags))
-
-  return system(cmd)
+    return system(cmd)
 
 def main():
   parser = ArgumentParser()

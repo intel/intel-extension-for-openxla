@@ -436,6 +436,7 @@ def _create_local_sycl_repository(repository_ctx):
         "crosstool:BUILD.sycl",
         "crosstool:sycl_cc_toolchain_config.bzl",
         "crosstool/bin:crosstool_wrapper_driver",
+        "crosstool/bin:ar_driver",
     ]}
 
     find_sycl_config_script = repository_ctx.path(Label("//third_party/gpus:find_sycl_config.py.gz.base64"))
@@ -522,6 +523,7 @@ def _create_local_sycl_repository(repository_ctx):
 
     sycl_defines["%{host_compiler_prefix}"] = host_compiler_prefix
     sycl_defines["%{host_compiler_path}"] = "bin/crosstool_wrapper_driver"
+    sycl_defines["%{ar_path}"] = "bin/ar_driver"
 
     sycl_defines["%{cpu_compiler}"] = str(cc)
     sycl_defines["%{linker_bin_path}"] = "/usr/bin"
@@ -568,6 +570,7 @@ def _create_local_sycl_repository(repository_ctx):
     sycl_defines["%{PYTHON_LIB_PATH}"] = repository_ctx.os.environ[_PYTHON_LIB_PATH]
     sycl_defines["%{basekit_path}"] = str(sycl_config.sycl_basekit_path)
     sycl_defines["%{basekit_version}"] = str(sycl_config.sycl_basekit_version_number)
+    sycl_defines["%{MKL_PATH}"] = _mkl_path(sycl_config)
 
     linker_flags = "" if additional_linker_flags == [] else "linker_flag: "
     linker_flags += "\n  linker_flag: ".join(additional_linker_flags)
@@ -590,6 +593,12 @@ def _create_local_sycl_repository(repository_ctx):
     repository_ctx.template(
         "crosstool/bin/crosstool_wrapper_driver",
         tpl_paths["crosstool/bin:crosstool_wrapper_driver"],
+        sycl_defines,
+    )
+
+    repository_ctx.template(
+        "crosstool/bin/ar_driver",
+        tpl_paths["crosstool/bin:ar_driver"],
         sycl_defines,
     )
 

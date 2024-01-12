@@ -61,6 +61,7 @@ cc_toolchain_config(
     abi_libc_version = "local",
     cxx_builtin_include_directories = [%{cxx_builtin_include_directories}],
     host_compiler_path = "%{host_compiler_path}",
+    ar_path = "%{ar_path}",
     host_compiler_prefix = "%{host_compiler_prefix}",
     unfiltered_compile_flags = [%{unfiltered_compile_flags}],
     linker_bin_path = "%{linker_bin_path}",

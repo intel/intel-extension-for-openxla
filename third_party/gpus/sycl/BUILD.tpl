@@ -21,6 +21,7 @@ cc_library(
 
 cc_library(
     name = "mkl",
+    # TODO: remove redundant code
     srcs = [
         "sycl/lib/%{mkl_intel_ilp64_lib}",
         "sycl/lib/%{mkl_sequential_lib}",
