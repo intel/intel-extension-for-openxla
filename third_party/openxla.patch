@@ -521,10 +521,18 @@ index b91269c3e..151ab678d 100644
    bool parameter_is_tupled_arguments() const {
      return parameter_is_tupled_arguments_;
 diff --git a/xla/service/algebraic_simplifier.h b/xla/service/algebraic_simplifier.h
-index 232074497..e25faa418 100644
+index 232074497..8b304b6e2 100644
 --- a/xla/service/algebraic_simplifier.h
 +++ b/xla/service/algebraic_simplifier.h
-@@ -432,7 +432,9 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
+@@ -27,6 +27,7 @@ limitations under the License.
+ #include <vector>
+ 
+ #include "absl/container/inlined_vector.h"
++#include "tsl/util/env_var.h"
+ #include "xla/hlo/ir/dfs_hlo_visitor_with_default.h"
+ #include "xla/hlo/ir/hlo_instruction.h"
+ #include "xla/hlo/ir/hlo_module.h"
+@@ -432,7 +433,9 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
    virtual bool IsValidLayout(const Shape& shape) { return true; }
    // Allow backend targets to determine whether a layout is inefficient.
    virtual bool ShouldStrengthReduceDotToReduce(const HloInstruction* hlo) {
