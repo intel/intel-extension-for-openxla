@@ -113,60 +113,52 @@ Status RunAllToAll(bool has_split_dimension,
                    std::vector<DeviceBufferPair>& buffers, se::Stream& stream,
                    ncclComm_t comm) {
   int device_ordinal = stream.parent()->device_ordinal();
-  VLOG(3) << "Performing all-to-all from device ordinal: " << device_ordinal;
+  VLOG(3) << "Performing " << (has_split_dimension ? "" : "non-")
+          << "split all-to-all from device ordinal: " << device_ordinal;
 
   se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(&stream);
 
+  PrimitiveType element_type = buffers[0].element_type;
   int num_participants = comm->nranks;
+  int element_count = buffers[0].element_count *
+                      (primitive_util::IsComplexType(element_type) ? 2 : 1);
+  std::vector<const void*> send_buffers;
+  std::vector<void*> recv_buffers;
+
   // AllToAll can operate in two modes. Either it specifies a split dimension,
   // in which case inputs are split and outputs concatenated in that dimension
   // (here, we only support dimension 0), or it takes a list of inputs
   // and produces a tuple of outputs.
   if (has_split_dimension) {
-    int element_count = -1;
-    PrimitiveType element_type = buffers[0].element_type;
-    std::vector<const void*> send_buffers;
-    std::vector<void*> recv_buffers;
-    for (size_t i = 0; i < buffers.size(); ++i) {
-      DeviceBufferPair& buffer = buffers[i];
-      const uint8_t* send_buffer =
-          static_cast<uint8_t*>(buffer.source_buffer.opaque());
-      uint8_t* recv_buffer =
-          static_cast<uint8_t*>(buffer.destination_buffer.opaque());
+    TF_RET_CHECK(element_count % num_participants == 0)
+        << "Buffer was not an exact multiple of the number of participants.";
+    TF_RET_CHECK(buffers.size() == 1)
+        << "Split AllToAll only supported dimension 0 as buffer.";
 
-      element_count = buffers[0].element_count *
-                      (primitive_util::IsComplexType(element_type) ? 2 : 1);
+    DeviceBufferPair& buffer = buffers[0];
+    const uint8_t* send_buffer =
+        static_cast<uint8_t*>(buffer.source_buffer.opaque());
+    uint8_t* recv_buffer =
+        static_cast<uint8_t*>(buffer.destination_buffer.opaque());
 
-      TF_RET_CHECK(element_count % num_participants == 0)
-          << "Buffer was not an exact multiple of the number of participants.";
-      size_t chunk_elements = element_count / num_participants;
-      size_t chunk_bytes = chunk_elements * ShapeUtil::ByteSizeOfPrimitiveType(
-                                                buffer.element_type);
-      send_buffers.push_back(send_buffer);
-      recv_buffers.push_back(recv_buffer);
-    }
+    send_buffers.push_back(send_buffer);
+    recv_buffers.push_back(recv_buffer);
     sycl_alltoall_split(send_buffers, recv_buffers, element_count, element_type,
                         gpu_stream, comm);
   } else {
     TF_RET_CHECK(buffers.size() == num_participants)
         << "Number of inputs didn't match the number of participants.";
 
-    std::vector<const void*> send_buffers;
-    std::vector<void*> recv_buffers;
     for (size_t i = 0; i < buffers.size(); ++i) {
       DeviceBufferPair& buffer = buffers[i];
       const uint8_t* send_buffer =
           static_cast<uint8_t*>(buffer.source_buffer.opaque());
       uint8_t* recv_buffer =
           static_cast<uint8_t*>(buffer.destination_buffer.opaque());
+
       send_buffers.push_back(send_buffer);
       recv_buffers.push_back(recv_buffer);
     }
-
-    PrimitiveType element_type = buffers[0].element_type;
-    int element_count = buffers[0].element_count *
-                        (primitive_util::IsComplexType(element_type) ? 2 : 1);
-
     sycl_alltoall(send_buffers, recv_buffers, element_count, element_type,
                   gpu_stream, comm);
   }
