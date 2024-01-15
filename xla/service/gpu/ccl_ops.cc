@@ -415,7 +415,7 @@ void alltoall_split_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
       (*stream)
           .get_device()
           .template get_info<sycl::info::device::max_work_group_size>();
-  int sub_tensor_size = tensor_size / reduction_size;
+  const int sub_tensor_size = tensor_size / reduction_size;
   auto num_workgroup = (sub_tensor_size + group_size - 1) / group_size;
 
   // clang-format off
@@ -425,14 +425,13 @@ void alltoall_split_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
   // clang-format on
   if (reduction_size <= kLimitedRankSize) {
     stream->submit([&](sycl::handler& cgh) {
-      const T* send[kLimitedRankSize][kLimitedRankSize];  // SYCL: fix size
-      T* recv[kLimitedRankSize][kLimitedRankSize];        // SYCL: fix size
+      // Buffer size is always 1 in split AllToAll.
+      const T* send[kLimitedRankSize];  // SYCL: fix size
+      T* recv[kLimitedRankSize];        // SYCL: fix size
 
       for (int i = 0; i < reduction_size; ++i) {
-        for (int k = 0; k < reduction_size; ++k) {  // SYCL: fix size
-          send[i][k] = static_cast<const T*>(participants[i].send[k]);
-          recv[i][k] = static_cast<T*>(participants[i].recv[k]);
-        }
+        send[i] = static_cast<const T*>(participants[i].send[0]);
+        recv[i] = static_cast<T*>(participants[i].recv[0]);
       }
 
       cgh.parallel_for<AllToAllSplitKernel<T>>(
@@ -442,12 +441,10 @@ void alltoall_split_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
             const int index = item.get_global_linear_id();
             if (index >= sub_tensor_size) return;
 
-            for (int k = 0; k < reduction_size; ++k) {  // SYCL: fix size
-              for (int i = 0; i < reduction_size; ++i) {
-                for (int j = 0; j < reduction_size; ++j) {
-                  recv[i][k][j * sub_tensor_size + index] =
-                      send[j][k][i * sub_tensor_size + index];
-                }
+            for (int i = 0; i < reduction_size; ++i) {  // SYCL: fix size
+              for (int k = 0; k < reduction_size; ++k) {
+                recv[i][index * sub_tensor_size + k] =
+                    send[k][index * sub_tensor_size + i];
               }
             }
           });
