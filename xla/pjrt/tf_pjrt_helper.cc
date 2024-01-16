@@ -81,6 +81,15 @@ PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
   return new PJRT_Buffer{std::move(buffer), pjrt_c_client};
 }
 
+void ITEXDeletePjRtBuffer(PJRT_Buffer* pjrt_buffer) {
+  delete pjrt_buffer;
+}
+
+void ITEXRecoverPjRtBuffer(PJRT_Buffer* pjrt_buffer) {
+  pjrt_buffer->recover_buffer();
+}
+
+
 void* ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client) {
   xla::PjRtDevice* pjrt_device =
       std::move(pjrt_c_client->client->LookupDevice(device_id).value());
