@@ -40,6 +40,7 @@ limitations under the License.
 #include "xla/pjrt/pjrt_future.h"
 #include "xla/pjrt/se_xpu_pjrt_client.h"
 #include "xla/pjrt/xpu_pjrt_client.h"
+#include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/service/hlo.pb.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
@@ -1532,7 +1533,8 @@ PJRT_Error* PJRT_Buffer_Destroy(PJRT_Buffer_Destroy_Args* args) {
       "PJRT_Buffer_Destroy_Args", PJRT_Buffer_Destroy_Args_STRUCT_SIZE,
       args->struct_size));
   // delete args->buffer;
-  args->buffer->deallocate_buffer();
+  auto* pjrt_buffer = reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(args->buffer->buffer.get());
+  pjrt_buffer->deallocate_buffer();
   return nullptr;
 }
 
