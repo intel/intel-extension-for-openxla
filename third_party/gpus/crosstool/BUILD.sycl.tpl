@@ -29,7 +29,6 @@ cc_toolchain_suite(
     },
 )
 
-
 cc_toolchain(
     name = "cc-compiler-local",
     all_files = ":crosstool_wrapper_driver",
@@ -52,19 +51,14 @@ cc_toolchain(
 cc_toolchain_config(
     name = "cc-compiler-local-config",
     cpu = "local",
-    compiler = "compiler",
-    toolchain_identifier = "local_linux",
-    host_system_name = "local",
-    target_system_name = "local",
-    target_libc = "local",
-    abi_version = "local",
-    abi_libc_version = "local",
-    cxx_builtin_include_directories = [%{cxx_builtin_include_directories}],
+    builtin_include_directories = [%{cxx_builtin_include_directories}],
+    # extra_no_canonical_prefixes_flags = [%{extra_no_canonical_prefixes_flags}],
     host_compiler_path = "%{host_compiler_path}",
-    ar_path = "%{ar_path}",
     host_compiler_prefix = "%{host_compiler_prefix}",
-    unfiltered_compile_flags = [%{unfiltered_compile_flags}],
+    host_unfiltered_compile_flags = [%{unfiltered_compile_flags}],
     linker_bin_path = "%{linker_bin_path}",
+    compiler = "unknown",
+    ar_path = "%{ar_path}",
 )
 
 filegroup(
@@ -74,5 +68,5 @@ filegroup(
 
 filegroup(
     name = "crosstool_wrapper_driver",
-    srcs = ["bin/crosstool_wrapper_driver"]
+    srcs = ["clang/bin/crosstool_wrapper_driver"]
 )

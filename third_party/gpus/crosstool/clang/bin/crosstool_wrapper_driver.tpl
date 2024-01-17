@@ -19,15 +19,6 @@ import sys
 import shlex
 import tempfile
 
-TMPDIR = "%{TMP_DIRECTORY}"
-
-os.environ["TMPDIR"] = TMPDIR
-os.environ["TEMP"] = TMPDIR
-os.environ["TMP"] = TMPDIR
-
-if not os.path.exists(TMPDIR):
-  os.makedirs(TMPDIR, exist_ok=True)
-
 def check_is_intel_llvm(path):
   cmd = path + " -dM -E -x c /dev/null | grep '__INTEL_LLVM_COMPILER'"
   check_result = subprocess.getoutput(cmd)
@@ -73,7 +64,7 @@ def GetHostCompilerOptions(argv, xetla):
   host_flags = ['-fsycl-host-compiler-options=\'%s\'' % (' '.join(sycl_host_compile_flags))]
   return host_flags
 
-def call_compiler(argv, is_sycl = False, link = False, sycl_compile = True, xetla = False):
+def call_compiler(argv, link = False, sycl_compile = True, xetla = False):
   parser = ArgumentParser()
   parser.add_argument('-c', nargs=1, action='append')
   parser.add_argument('-o', nargs=1, action='append')
@@ -94,7 +85,6 @@ def call_compiler(argv, is_sycl = False, link = False, sycl_compile = True, xetl
   sycl_device_only_flags.append('-fsycl-device-code-split=per_source')
 
   common_flags = []
-  common_flags.extend([%{sycl_builtin_include_directories}])
   # ref: https://github.com/intel/llvm/blob/sycl/clang/docs/UsersManual.rst#controlling-floating-point-behavior
   common_flags.append("-fno-finite-math-only")
   common_flags.append("-fno-fast-math")
@@ -133,6 +123,7 @@ def call_compiler(argv, is_sycl = False, link = False, sycl_compile = True, xetl
 
   in_files, out_files = [], []
   if sycl_compile:
+    flags = [shlex.quote(s) for s in flags]
     # device compilation
     if args.c:
       in_files.append('-c')
@@ -156,7 +147,7 @@ def call_compiler(argv, is_sycl = False, link = False, sycl_compile = True, xetl
       # icx -fsycl -c kernel.cpp -o kernel.compile.o
       sycl_compile_flags = [" -c {} -o {} ".format(in_file, object_file)]
       sycl_compile_flags += (flags + common_flags + compile_flags + sycl_device_only_flags)
-      compile_cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + SYCL_PATH + ' ' + ' '.join(sycl_compile_flags))
+      compile_cmd = ('env ' + SYCL_PATH + ' ' + ' '.join(sycl_compile_flags))
       exit_status = system(compile_cmd)
       if exit_status != 0:
         return exit_status
@@ -165,7 +156,7 @@ def call_compiler(argv, is_sycl = False, link = False, sycl_compile = True, xetl
       # icx -fsycl -fPIC -fsycl-link kernel.compile.o -o kernel.dev.o
       sycl_link_flags_dev = [" {} -o {} ".format(object_file, dev_file)]
       sycl_link_flags_dev += (common_flags + sycl_link_flags)
-      link_cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + SYCL_PATH + ' ' + ' '.join(sycl_link_flags_dev))
+      link_cmd = ('env ' + SYCL_PATH + ' ' + ' '.join(sycl_link_flags_dev))
       exit_status = system(link_cmd)
       if exit_status != 0:
         return exit_status
@@ -173,14 +164,15 @@ def call_compiler(argv, is_sycl = False, link = False, sycl_compile = True, xetl
       # archive object files
       # ar rcsD output.o kernel.compile.o kernel.dev.o
       ar_flags = " rcsD {} {} {}".format(out_file, object_file, dev_file)
-      ar_cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + AR_PATH + ar_flags)
+      ar_cmd = ('env ' + AR_PATH + ar_flags)
       return system(ar_cmd)
   elif link:
+    flags = [shlex.quote(s) for s in flags]
     # sycl link
     out_files.append('-o')
     out_files.extend(args.o[0])
     flags += (common_flags + in_files + out_files + link_flags)
-    cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + CPU_COMPILER + ' ' + ' '.join(flags))
+    cmd = ('env ' + CPU_COMPILER + ' ' + ' '.join(flags))
     return system(cmd)
   else:
     # host compilation
@@ -191,20 +183,17 @@ def call_compiler(argv, is_sycl = False, link = False, sycl_compile = True, xetl
       out_files.append('-o')
       out_files.extend(args.o[0])
     flags += (common_flags + in_files + out_files)
-    cmd = ('env ' + 'TMPDIR=' + TMPDIR  + ' ' + 'TEMP=' + TMPDIR + ' ' + 'TMP=' + TMPDIR + ' ' + SYCL_PATH + ' ' + ' '.join(flags))
-    return system(cmd)
+    return subprocess.call([SYCL_PATH] + flags)
 
 def main():
   parser = ArgumentParser()
   parser = ArgumentParser(fromfile_prefix_chars='@')
-  parser.add_argument('-target', nargs=1)
   parser.add_argument('--xetla', action='store_true')
   parser.add_argument('-sycl_compile', action='store_true')
   parser.add_argument('-link_stage', action='store_true')
   args, leftover = parser.parse_known_args(sys.argv[1:])
 
-  leftover = [shlex.quote(s) for s in leftover]
-  return call_compiler(leftover, is_sycl=(args.target and args.target[0] == 'sycl'), link=args.link_stage, sycl_compile=args.sycl_compile, xetla=args.xetla)
+  return call_compiler(leftover, link=args.link_stage, sycl_compile=args.sycl_compile, xetla=args.xetla)
 
 if __name__ == '__main__':
   sys.exit(main())

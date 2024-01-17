@@ -30,16 +30,6 @@ load(
 _GCC_HOST_COMPILER_PATH = "GCC_HOST_COMPILER_PATH"
 _GCC_HOST_COMPILER_PREFIX = "GCC_HOST_COMPILER_PREFIX"
 
-_HOST_C_COMPILER = "HOST_C_COMPILER"
-
-_SYCL_TOOLKIT_PATH = "SYCL_TOOLKIT_PATH"
-
-_PYTHON_LIB_PATH = "PYTHON_LIB_PATH"
-
-_PYTHON_LIB_DIR = "PYTHON_LIB_DIR"
-
-_PYTHON_BIN_PATH = "PYTHON_BIN_PATH"
-
 def _mkl_path(sycl_config):
     return sycl_config.sycl_basekit_path + "/mkl/" + sycl_config.sycl_basekit_version_number
 
@@ -84,18 +74,6 @@ def auto_configure_fail(msg):
     red = "\033[0;31m"
     no_color = "\033[0m"
     fail("\n%sAuto-Configuration Error:%s %s\n" % (red, no_color, msg))
-
-def find_c(repository_ctx):
-    """Find host C compiler."""
-    c_name = "gcc"
-    if _HOST_C_COMPILER in repository_ctx.os.environ:
-        c_name = repository_ctx.os.environ[_HOST_C_COMPILER].strip()
-    if c_name.startswith("/"):
-        return c_name
-    c = repository_ctx.which(c_name)
-    if c == None:
-        fail("Cannot find C compiler, please correct your path.")
-    return c
 
 def find_cc(repository_ctx):
     """Find the C++ compiler."""
@@ -145,12 +123,6 @@ def find_sycl_include_path(repository_ctx, sycl_config):
         if l.startswith(" ") and l.strip().startswith("/") and str(repository_ctx.path(l.strip()).realpath) not in include_dirs:
             include_dirs.append(str(repository_ctx.path(l.strip()).realpath))
     return include_dirs
-
-def find_python_lib(repository_ctx):
-    """Returns python path."""
-    if _PYTHON_LIB_PATH in repository_ctx.os.environ:
-        return repository_ctx.os.environ[_PYTHON_LIB_PATH].strip()
-    fail("Environment variable PYTHON_LIB_PATH was not specified re-run ./configure")
 
 def _lib_name(lib, version = "", static = False):
     """Constructs the name of a library on Linux.
@@ -237,46 +209,24 @@ def _find_libs(repository_ctx, sycl_config, bash_bin):
         libs_paths.append(("mkl_sycl_data_fitting", _sycl_lib_paths(repository_ctx, "mkl_sycl_data_fitting", mkl_path)))
     return _select_sycl_lib_paths(repository_ctx, libs_paths, bash_bin)
 
-def _exec_find_sycl_config(repository_ctx, script_path):
-    python_bin = get_python_bin(repository_ctx)
-
-    # If used with remote execution then repository_ctx.execute() can't
-    # access files from the source tree. A trick is to read the contents
-    # of the file in Starlark and embed them as part of the command. In
-    # this case the trick is not sufficient as the find_cuda_config.py
-    # script has more than 8192 characters. 8192 is the command length
-    # limit of cmd.exe on Windows. Thus we additionally need to compress
-    # the contents locally and decompress them as part of the execute().
-    compressed_contents = repository_ctx.read(script_path)
-    decompress_and_execute_cmd = (
-        "from zlib import decompress;" +
-        "from base64 import b64decode;" +
-        "from os import system;" +
-        "script = decompress(b64decode('%s'));" % compressed_contents.rstrip('\n') +
-        "f = open('script.py', 'wb');" +
-        "f.write(script);" +
-        "f.close();" +
-        "system('\"%s\" script.py');" % (python_bin)
-    )
-    return execute(repository_ctx, [python_bin, "-c", decompress_and_execute_cmd])
-
-def find_sycl_config(repository_ctx, script_path):
+def find_sycl_config(repository_ctx):
     """Returns SYCL config dictionary from running find_sycl_config.py"""
-    exec_result = _exec_find_sycl_config(repository_ctx, script_path)
+    python_bin = get_python_bin(repository_ctx)
+    exec_result = execute(repository_ctx, [python_bin, repository_ctx.attr._find_sycl_config])
     if exec_result.return_code:
         auto_configure_fail("Failed to run find_sycl_config.py: %s" % err_out(exec_result))
 
     # Parse the dict from stdout.
     return dict([tuple(x.split(": ")) for x in exec_result.stdout.splitlines()])
 
-def _get_sycl_config(repository_ctx, bash_bin, find_sycl_config_script):
+def _get_sycl_config(repository_ctx, bash_bin):
     """Detects and returns information about the SYCL installation on the system.
 
     Args:
       repository_ctx: The repository context.
       bash_bin: the path to the path interpreter
     """
-    config = find_sycl_config(repository_ctx, find_sycl_config_script)
+    config = find_sycl_config(repository_ctx)
     sycl_basekit_path = config["sycl_basekit_path"]
     sycl_toolkit_path = config["sycl_toolkit_path"]
     sycl_version_number = config["sycl_version_number"]
@@ -329,9 +279,6 @@ def _get_cxx_inc_directories_impl(repository_ctx, cc, lang_is_cpp):
     else:
         lang = "c"
 
-    # TODO: We pass -no-canonical-prefixes here to match the compiler flags,
-    #       but in rocm_clang CROSSTOOL file that is a `feature` and we should
-    #       handle the case when it's disabled and no flag is passed
     result = raw_exec(repository_ctx, [
         cc,
         "-no-canonical-prefixes",
@@ -426,32 +373,26 @@ def _create_dummy_repository(repository_ctx):
     )
 
 def _create_local_sycl_repository(repository_ctx):
-    builtin_include_dirs = ""
-    unfiltered_cxx_flags = ""
-    linker_flags = ""
-
     tpl_paths = {labelname: _tpl_path(repository_ctx, labelname) for labelname in [
         "sycl:build_defs.bzl",
         "sycl:BUILD",
         "crosstool:BUILD.sycl",
         "crosstool:sycl_cc_toolchain_config.bzl",
-        "crosstool/bin:crosstool_wrapper_driver",
-        "crosstool/bin:ar_driver",
+        "crosstool:clang/bin/crosstool_wrapper_driver",
+        "crosstool:clang/bin/ar_driver",
     ]}
 
-    find_sycl_config_script = repository_ctx.path(Label("//third_party/gpus:find_sycl_config.py.gz.base64"))
-
     bash_bin = get_bash_bin(repository_ctx)
-    sycl_config = _get_sycl_config(repository_ctx, bash_bin, find_sycl_config_script)
+    sycl_config = _get_sycl_config(repository_ctx, bash_bin)
 
     # Copy header and library files to execroot.
     copy_rules = [
-        # make_copy_dir_rule(
-        #     repository_ctx,
-        #     name = "sycl-include",
-        #     src_dir = _sycl_header_path(repository_ctx, sycl_config, bash_bin) + "/include",
-        #     out_dir = "sycl/include",
-        # ),
+        make_copy_dir_rule(
+            repository_ctx,
+            name = "sycl-include",
+            src_dir = _sycl_header_path(repository_ctx, sycl_config, bash_bin) + "/include",
+            out_dir = "sycl/include",
+        ),
     ]
     copy_rules.append(make_copy_dir_rule(
         repository_ctx,
@@ -503,7 +444,7 @@ def _create_local_sycl_repository(repository_ctx):
         "%{mkl_core_lib}": sycl_libs["mkl_core"].file_name,
         "%{mkl_sycl_libs}": mkl_sycl_libs,
         "%{copy_rules}": "\n".join(copy_rules),
-        "%{sycl_headers}": ('":mkl-include",\n'),
+        "%{sycl_headers}": ('":mkl-include",\n":sycl-include",\n'),
     }
     repository_ctx.template(
         "sycl/BUILD",
@@ -522,42 +463,16 @@ def _create_local_sycl_repository(repository_ctx):
     sycl_defines = {}
 
     sycl_defines["%{host_compiler_prefix}"] = host_compiler_prefix
-    sycl_defines["%{host_compiler_path}"] = "bin/crosstool_wrapper_driver"
-    sycl_defines["%{ar_path}"] = "bin/ar_driver"
+    sycl_defines["%{host_compiler_path}"] = "clang/bin/crosstool_wrapper_driver"
+    sycl_defines["%{ar_path}"] = "clang/bin/ar_driver"
 
     sycl_defines["%{cpu_compiler}"] = str(cc)
     sycl_defines["%{linker_bin_path}"] = "/usr/bin"
-    # sycl_defines["%{linker_bin_path}"] = sycl_config.sycl_toolkit_path + "/hcc/compiler/bin"
 
     sycl_internal_inc_dirs = find_sycl_include_path(repository_ctx, sycl_config)
-    additional_linker_flags = []
     cxx_builtin_includes_list = sycl_internal_inc_dirs + _sycl_include_path(repository_ctx, sycl_config, bash_bin) + host_compiler_includes
-    builtin_includes_list = _sycl_include_path(repository_ctx, sycl_config, bash_bin)
-    sycl_builtin_include_directories = []
-    for include_path in builtin_includes_list:
-        sycl_builtin_include_directories.append('-isystem')
-        sycl_builtin_include_directories.append(include_path)
-
-    pwd = repository_ctx.os.environ["PWD"]
-    additional_inc = []
-    if repository_ctx.os.environ.get("CPATH") != None:
-        for p in repository_ctx.os.environ["CPATH"].strip().split(":"):
-            if p != "":
-                additional_inc += [_normalize_include_path(repository_ctx, p)]
-    if len(additional_inc) > 0:
-        additional_inc = ",".join(additional_inc)
-    else:
-        additional_inc = "\"\""
-
-    if repository_ctx.os.environ.get("TMPDIR") != None:
-        sycl_defines["%{TMP_DIRECTORY}"] = repository_ctx.os.environ.get("TMPDIR")
-    else:
-        tmp_suffix = repository_ctx.execute(["cat", "/proc/sys/kernel/random/uuid"]).stdout.rstrip()
-        tmp_dir = "/tmp/" + tmp_suffix
-        sycl_defines["%{TMP_DIRECTORY}"] = tmp_dir
 
     sycl_defines["%{cxx_builtin_include_directories}"] = to_list_of_strings(cxx_builtin_includes_list)
-    sycl_defines["%{sycl_builtin_include_directories}"] = to_list_of_strings(sycl_builtin_include_directories)
     sycl_defines["%{extra_no_canonical_prefixes_flags}"] = "\"-fno-canonical-system-headers\""
     sycl_defines["%{unfiltered_compile_flags}"] = to_list_of_strings([
         "-DGOOGLE_SYCL=1",
@@ -566,14 +481,9 @@ def _create_local_sycl_repository(repository_ctx):
     ])
     sycl_defines["%{sycl_compiler_root}"] = str(sycl_config.sycl_toolkit_path)
     sycl_defines["%{SYCL_ROOT_DIR}"] = str(sycl_config.sycl_toolkit_path)
-    sycl_defines["%{additional_include_directories}"] = additional_inc
-    sycl_defines["%{PYTHON_LIB_PATH}"] = repository_ctx.os.environ[_PYTHON_LIB_PATH]
     sycl_defines["%{basekit_path}"] = str(sycl_config.sycl_basekit_path)
     sycl_defines["%{basekit_version}"] = str(sycl_config.sycl_basekit_version_number)
     sycl_defines["%{MKL_PATH}"] = _mkl_path(sycl_config)
-
-    linker_flags = "" if additional_linker_flags == [] else "linker_flag: "
-    linker_flags += "\n  linker_flag: ".join(additional_linker_flags)
 
     # Only expand template variables in the BUILD file
     repository_ctx.template(
@@ -591,14 +501,14 @@ def _create_local_sycl_repository(repository_ctx):
     )
 
     repository_ctx.template(
-        "crosstool/bin/crosstool_wrapper_driver",
-        tpl_paths["crosstool/bin:crosstool_wrapper_driver"],
+        "crosstool/clang/bin/crosstool_wrapper_driver",
+        tpl_paths["crosstool:clang/bin/crosstool_wrapper_driver"],
         sycl_defines,
     )
 
     repository_ctx.template(
-        "crosstool/bin/ar_driver",
-        tpl_paths["crosstool/bin:ar_driver"],
+        "crosstool/clang/bin/ar_driver",
+        tpl_paths["crosstool:clang/bin/ar_driver"],
         sycl_defines,
     )
 
@@ -610,6 +520,23 @@ def _sycl_autoconf_imp(repository_ctx):
         _create_local_sycl_repository(repository_ctx)
 
 sycl_configure = repository_rule(
-    local = True,
     implementation = _sycl_autoconf_imp,
+    local = True,
+    attrs = {
+        "_find_sycl_config": attr.label(
+            default = Label("//third_party/gpus:find_sycl_config.py"),
+        ),
+    },
 )
+"""Detects and configures the local SYCL toolchain.
+
+Add the following to your WORKSPACE FILE:
+
+```python
+sycl_configure(name = "local_config_sycl")
+```
+
+Args:
+  name: A unique name for this workspace rule.
+"""
+

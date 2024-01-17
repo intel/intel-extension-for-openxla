@@ -11,24 +11,15 @@ package(
     licenses = ["notice"],
 )
 
-cc_library(
-    name = "sycl_gpu_header",
-    srcs = ["sycl_gpu_runtime.h"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@com_google_absl//absl/strings",
-    ],
-)
-
 xpu_library(
     name = "sycl_gpu_runtime",
     srcs = ["sycl_gpu_runtime.cc"],
+    hdrs = ["sycl_gpu_runtime.h"],
     deps = [
-        ":sycl_gpu_header",
         "@com_google_absl//absl/strings",
         "@tsl//tsl/util:env_var",
+        "@local_config_sycl//sycl:sycl_headers",
     ],
-    alwayslink = True,
 )
 
 cc_library(
@@ -39,9 +30,8 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        ":sycl_gpu_header",
+        ":sycl_gpu_runtime",
     ],
-    alwayslink = True,
 )
 
 cc_library(

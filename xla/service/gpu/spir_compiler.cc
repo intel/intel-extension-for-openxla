@@ -223,51 +223,6 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
   return OkStatus();
 }
 
-namespace {
-// Try to load textual LLVM IR from files defined in the FLAGS. If
-// successful, return the llvm::Module, otherwise return nullptr.
-std::unique_ptr<llvm::Module> MaybeLoadLLVMFromFile(const HloModule* module,
-                                                    llvm::Module* llvm_module) {
-  // If the xla_gpu_llvm_ir_file option is set, be explicit if a file is used
-  // and warn when a file is not used to ease catching typo in filename.
-  if (module == nullptr) {
-    return nullptr;
-  }
-
-  std::string prefix = xla::FilenameFor(*module, "", "");
-  auto xla_gpu_llvm_ir_file =
-      module->config().debug_options().xla_gpu_llvm_ir_file();
-  auto matched_filename = absl::c_find_if(
-      xla_gpu_llvm_ir_file, [prefix](const std::string& full_filename) {
-        // To ease comparing many LLVM versions, accept different suffixes then
-        // the original filename.
-        return absl::StartsWith(tsl::io::Basename(full_filename), prefix);
-      });
-  if (!xla_gpu_llvm_ir_file.empty() &&
-      matched_filename == std::end(xla_gpu_llvm_ir_file)) {
-    VLOG(0) << "RunBackend() - For module with prefix '" << prefix
-            << "', we did not found a LLVM file to load.";
-  }
-
-  if (matched_filename != std::end(xla_gpu_llvm_ir_file)) {
-    VLOG(0) << "RunBackend() - Will load LLVM from file: " << *matched_filename;
-    llvm::LLVMContext& context = llvm_module->getContext();
-    llvm::SMDiagnostic err;
-    std::unique_ptr<llvm::Module> loaded_module =
-        llvm::parseIRFile(*matched_filename, err, context);
-
-    if (!loaded_module) {
-      err.print("ERR", llvm::errs());
-      LOG(FATAL) << "Failed to load an LLVM file. It is probably invalid LLVM.";
-    }
-    // Overwrite the dumped not optimized LLVM to show which one will be used.
-    llvm_ir::DumpIrIfEnabled(*module, *loaded_module, /*optimized=*/false);
-    return loaded_module;
-  }
-  return nullptr;
-}
-
-}  // namespace
 
 SPIRCompiler::SPIRCompiler()
     : GpuCompiler(stream_executor::sycl::kSyclPlatformId, spir::TargetTriple(),
@@ -284,27 +239,22 @@ SPIRCompiler::CompileTargetBinary(const HloModuleConfig& module_config,
                                   bool relocatable,
                                   const HloModule* debug_module,
                                   const CompileOptions& options) {
-  std::string libdevice_dir;
-  VLOG(2) << "Libdevice dir = " << libdevice_dir << "\n";
-  std::unique_ptr<llvm::Module> loaded_module =
-      MaybeLoadLLVMFromFile(debug_module, llvm_module);
-  llvm::Module* selected_module = nullptr;
-  if (loaded_module) {
-    selected_module = loaded_module.get();
-  } else {
-    selected_module = llvm_module;
+  if (relocatable) {
+    return Unimplemented("relocatable target binary is not implemented");
   }
 
-  std::string spir;
-  if (debug_module) {
-    XLA_SCOPED_LOGGING_TIMER("CompileTargetBinary - CompileToSpir");
-    TF_ASSIGN_OR_RETURN(spir, spir::CompileToSpir(selected_module, gpu_version,
-                                                  module_config.debug_options(),
-                                                  libdevice_dir));
+  std::vector<uint8_t> spir;
+  {
+    // This may print multiple lines per HLO compilation because of the
+    // parallelized compilation of LLVM modules.
+    XLA_SCOPED_LOGGING_TIMER_IF(
+        "SPIRCompiler::CompileTargetBinary - CompileToSpir",
+        !options.is_autotuning_compilation);
+    TF_ASSIGN_OR_RETURN(spir, spir::CompileToSpir(llvm_module, gpu_version,
+                                                  module_config.debug_options()));
   }
 
-  std::vector<uint8_t> spir_bin(spir.begin(), spir.end());
-  return std::pair<std::string, std::vector<uint8_t>>("", std::move(spir_bin));
+  return std::pair<std::string, std::vector<uint8_t>>("", std::move(spir));
 }
 
 /*static*/ SPIRCompiler* SPIRCompiler::CreateSPIRCompiler() {

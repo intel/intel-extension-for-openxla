@@ -145,6 +145,13 @@ cc_library(
     copts = [
         "-fexceptions",
         "-DDNNL_ENABLE_PRIMITIVE_CACHE",
+        "-DDNNL_USE_DPCPP_USM=1",
+        "-DDNNL_WITH_LEVEL_ZERO=1",
+        "-DNGEN_NO_OP_NAMES=1",
+        "-DNGEN_CPP11=1",
+        "-DNGEN_SAFE=1",
+        "-DNGEN_NEO_INTERFACE=1",
+        "-DDNNL_X64=1",
         #TODO(itex): for symbol collision, may be removed in produce version
         "-fvisibility=hidden",
     ],
@@ -162,5 +169,8 @@ cc_library(
     ],
     #nocopts = "-fno-exceptions",
     visibility = ["//visibility:public"],
-    deps = ["@intel_extension_for_openxla//xla/stream_executor/sycl:sycl_gpu_header"],
+    deps = [
+        "@local_config_sycl//sycl:sycl_headers",
+        "@intel_extension_for_openxla//xla/stream_executor/sycl:sycl_gpu_runtime"
+    ],
 )

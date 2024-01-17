@@ -1915,7 +1915,7 @@ index 619acb37a..d1abf8fc2 100644
  )
  
 diff --git a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
-index 20c22245c..dd481c936 100644
+index 20c22245c..87e3a600c 100644
 --- a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
 +++ b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
 @@ -73,6 +73,9 @@ limitations under the License.
@@ -1928,22 +1928,15 @@ index 20c22245c..dd481c936 100644
  namespace xla {
  namespace gpu {
  namespace {
-@@ -149,11 +152,13 @@ std::unique_ptr<llvm::TargetMachine> GetTargetMachine(
-   const llvm::Target* target =
-       llvm::TargetRegistry::lookupTarget("", triple, error);
-   if (target == nullptr) {
-+    // SYCL: do not have target machine for spirv
-+#if !GOOGLE_SYCL
-     LOG(FATAL) << "Unable to find Target for triple '" << triple.str() << "'"
+@@ -153,7 +156,6 @@ std::unique_ptr<llvm::TargetMachine> GetTargetMachine(
                 << " -- " << error;
-+#endif
      return nullptr;
    }
 -
    llvm::TargetOptions target_options =
        llvm::codegen::InitTargetOptionsFromCodeGenFlags(llvm::Triple());
  
-@@ -365,10 +370,15 @@ Status LinkAndOptimizeModule(
+@@ -365,10 +367,13 @@ Status LinkAndOptimizeModule(
    llvm::CGSCCAnalysisManager cgam;
    llvm::ModuleAnalysisManager mam;
  
@@ -1954,14 +1947,12 @@ index 20c22245c..dd481c936 100644
 +  // SYCL: customized config
    llvm::PipelineTuningOptions pto;
 -  pto.SLPVectorization = true;
-+  pto.SLPVectorization = 0;
-+  pto.LoopVectorization = 0;
-+  pto.MergeFunctions = 0;
-+  pto.CallGraphProfile = 1;
++  pto.SLPVectorization = false;
++  pto.LoopVectorization = false;
    pto.InlinerThreshold = inline_threshold;
  
    llvm::PassInstrumentationCallbacks pic;
-@@ -1001,5 +1011,134 @@ StatusOr<std::vector<uint8_t>> CompileToHsaco(
+@@ -1001,5 +1006,103 @@ StatusOr<std::vector<uint8_t>> CompileToHsaco(
  
  }  // namespace amdgpu
  
@@ -1969,11 +1960,10 @@ index 20c22245c..dd481c936 100644
 +std::unique_ptr<llvm::TargetMachine> SPIRGetTargetMachine(
 +    llvm::Triple target_triple, se::GpuComputeCapability gpu_version,
 +    const DebugOptions& debug_options) {
-+  // Actually no Target Machine for spir triple.
-+  return GetTargetMachine(target_triple, "cpu", debug_options, "fs");
++  return nullptr;
 +}
 +
-+Status SPIRTargetModuleLinker(llvm::Module* module, 
++Status SPIRTargetModuleLinker(llvm::Module* module,
 +                              se::GpuComputeCapability gpu_version,
 +                              const DebugOptions& debug_options,
 +                              const std::string& device_bitcode_dir_path) {
@@ -1997,36 +1987,8 @@ index 20c22245c..dd481c936 100644
 +  return oss.str();
 +}
 +
-+// One-time module initializer.
-+// Must be called only once -- DO NOT CALL DIRECTLY.
 +void SPIRBackendInit(const DebugOptions& debug_options) {
-+  // Feed all customized flags here, so we can override them with llvm_cl_opts
-+  // without redeploy the compiler for development purpose.
 +
-+  // This flag tunes a threshold in branch folding. The default threshold, which
-+  // is one, is not suitable for CUDA programs where branches are more expensive
-+  // than for CPU programs. Setting the threshold to 2 improves the latency of
-+  // TwoDPatchDotProductKernel_IND_3_ND_48 by over 5%, and does not affect the
-+  // latency of other benchmarks so far.
-+  //
-+  // I also tried setting this threshold to other values:
-+  // * 3-6 gives similar results as 2;
-+  // * >6 start hurting the performance of at least dot product kernels.
-+  //
-+  // TODO(jingyue): The current threshold only considers the number of IR
-+  // instructions which do not accurately reflect the true cost. We need a
-+  // better cost model.
-+  FeedLLVMWithFlags({"-bonus-inst-threshold=2"});
-+  // Increase limit when scanning memory dependencies.  This helps to reduce
-+  // more redundant load instructions.
-+  //
-+  // The specific value is currently large enough for s3d in shoc benchmark,
-+  // which contains a lot of load instructions and many arithmetic instructions
-+  // between those loads.
-+  FeedLLVMWithFlags({"-memdep-block-scan-limit=500"});
-+
-+  // Most of the slowness appears to be in trying to form horizontal reductions,
-+  // which don't exist in PTX *anyway*.  Disable these.
 +  FeedLLVMWithFlags({"-slp-vectorize-hor=false"});
 +
 +  bool vec = true;
@@ -2045,17 +2007,16 @@ index 20c22245c..dd481c936 100644
 +  llvm_ir::InitializeLLVMCommandLineOptions(
 +      debug_options.xla_backend_extra_options());
 +
-+  // Initialize the LLVM optimization passes.
 +  llvm::PassRegistry* registry = llvm::PassRegistry::getPassRegistry();
 +  InitializePasses(registry);
 +}
 +}  // namespace
 +
 +namespace spir {
-+StatusOr<std::string> CompileToSpir(llvm::Module* module,
-+                                    se::GpuComputeCapability gpu_version,
-+                                    const DebugOptions& debug_options,
-+                                    const std::string& libdevice_dir_path) {
++StatusOr<std::vector<uint8_t>> CompileToSpir(
++    llvm::Module* module, se::GpuComputeCapability gpu_version,
++    const DebugOptions& debug_options) {
++  std::string libdevice_dir_path;
 +  static absl::once_flag backend_init_flag;
 +  absl::call_once(backend_init_flag, SPIRBackendInit, debug_options);
 +
@@ -2064,11 +2025,10 @@ index 20c22245c..dd481c936 100644
 +    XLA_SCOPED_LOGGING_TIMER("Compile module " + module->getName().str());
 +
 +    // If the module has no functions or globals, there's nothing to compile.
-+    // Just return an empty string.
 +    if (module->empty() && module->global_empty()) {
 +      VLOG(2) << "Module '" << module->getName().str()
 +              << "' is empty. Skipping compilation.";
-+      return std::string();
++      return std::vector<uint8_t>();
 +    }
 +
 +    // No SPIR target machine?
@@ -2090,25 +2050,24 @@ index 20c22245c..dd481c936 100644
 +    TF_ASSIGN_OR_RETURN(spir,
 +                        EmitModuleToSpir(module, gpu_version, debug_options));
 +  }
-+  return spir;
++  return std::vector<uint8_t>(spir.begin(), spir.end());
 +}
 +}  // namespace spir
 +
  }  // namespace gpu
  }  // namespace xla
 diff --git a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
-index 9ff362c2d..08e37abac 100644
+index 9ff362c2d..13b6e24a9 100644
 --- a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
 +++ b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
-@@ -66,6 +66,13 @@ StatusOr<std::vector<uint8_t>> CompileToHsaco(
+@@ -66,6 +66,12 @@ StatusOr<std::vector<uint8_t>> CompileToHsaco(
      const std::string& module_config_cache_key);
  }  // namespace amdgpu
  
 +namespace spir {
-+StatusOr<std::string> CompileToSpir(llvm::Module* module,
-+                                    se::GpuComputeCapability gpu_version,
-+                                    const DebugOptions& debug_options,
-+                                    const std::string& libdevice_dir_path);
++StatusOr<std::vector<uint8_t>> CompileToSpir(
++    llvm::Module* module, se::GpuComputeCapability gpu_version,
++    const DebugOptions& debug_options);
 +}  // namespace spir
 +
  }  // namespace gpu
@@ -3677,7 +3636,7 @@ index cefd0a6af..5f2f78caf 100644
  // Type traits to get CUDA complex types from std::complex<>.
  
 diff --git a/xla/stream_executor/gpu/gpu_types.h b/xla/stream_executor/gpu/gpu_types.h
-index dea81d66a..14b13bbfd 100644
+index dea81d66a..c934b326b 100644
 --- a/xla/stream_executor/gpu/gpu_types.h
 +++ b/xla/stream_executor/gpu/gpu_types.h
 @@ -18,7 +18,18 @@ limitations under the License.
