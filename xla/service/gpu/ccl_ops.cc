@@ -418,11 +418,12 @@ void alltoall_split_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
   const int sub_tensor_size = tensor_size / reduction_size;
   auto num_workgroup = (sub_tensor_size + group_size - 1) / group_size;
 
-  // clang-format off
   // Process: send vec -> rev vec
-  // P0: ([a0, a1], [b0, b1], [c0, c1], ...) -> ([a0, d0], [b0, e0], [c0, f0], ...)
-  // P1: ([d0, d1], [e0, e1], [f0, f1], ...) -> ([a1, d1], [b1, e1], [c1, f1], ...)
-  // clang-format on
+  // P0: ([a0, a1, a2], [a3, a4, a5]) -> ([a0, a1, a2], [b0, b1, b2])
+  // P1: ([b0, b1, b2], [b3, b4, b5]) -> ([a3, a4, a5], [b3, b4, b5])
+  //   * Switch data by group, each group has `sub_tensor_size` elements
+  //   * group_size = reduction_size;
+  //   * sub_tensor_size = tensor_size / reduction_size;
   if (reduction_size <= kLimitedRankSize) {
     stream->submit([&](sycl::handler& cgh) {
       // Buffer size is always 1 in split AllToAll.
@@ -441,10 +442,10 @@ void alltoall_split_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
             const int index = item.get_global_linear_id();
             if (index >= sub_tensor_size) return;
 
-            for (int i = 0; i < reduction_size; ++i) {  // SYCL: fix size
+            for (int i = 0; i < reduction_size; ++i) {
               for (int k = 0; k < reduction_size; ++k) {
-                recv[i][index * sub_tensor_size + k] =
-                    send[k][index * sub_tensor_size + i];
+                recv[k][i * sub_tensor_size + index] =
+                    send[i][k * sub_tensor_size + index];
               }
             }
           });
