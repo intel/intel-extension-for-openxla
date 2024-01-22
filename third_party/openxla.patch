@@ -1543,6 +1543,24 @@ index 74c3d8397..293dbccd7 100644
      case CudnnfMHAKind::kScaleBiasMaskSoftmax:
      case CudnnfMHAKind::kScaleBiasMaskSoftmaxDropout:
      case CudnnfMHAKind::kScaleMaskSoftmax:
+diff --git a/xla/service/gpu/gpu_fusible.cc b/xla/service/gpu/gpu_fusible.cc
+index 744dd1ce1..f1df13275 100644
+--- a/xla/service/gpu/gpu_fusible.cc
++++ b/xla/service/gpu/gpu_fusible.cc
+@@ -462,6 +462,13 @@ FusionDecision IsProducerConsumerFusible(const HloInstruction& producer,
+   }
+ 
+   if (IsInputFusibleReduction(producer)) {
++#if GOOGLE_SYCL
++    // TODO: Check on latest XLA. Reduction epilogue fusion may cause
++    // regression for row reductions cases with large dim.
++    // It changes fusion kind from kInput to kLoop, and
++    // will fail to enter the row vectorization pass.
++    return "Reduction epilogue fusion is not enabled.";
++#endif
+     if (!producer.GetModule()
+              ->config()
+              .debug_options()
 diff --git a/xla/service/gpu/gpu_layout_assignment.cc b/xla/service/gpu/gpu_layout_assignment.cc
 index ad2d7ffa6..06c8ab79b 100644
 --- a/xla/service/gpu/gpu_layout_assignment.cc
@@ -1890,6 +1908,28 @@ index 53d02c62d..cf72aa8b0 100644
    } else {
      return InternalError("EmitConvolutionThunk: Unexpected operation");
    }
+diff --git a/xla/service/gpu/launch_dimensions.cc b/xla/service/gpu/launch_dimensions.cc
+index 47762ba19..6b5dcfa32 100644
+--- a/xla/service/gpu/launch_dimensions.cc
++++ b/xla/service/gpu/launch_dimensions.cc
+@@ -93,6 +93,9 @@ struct BlockSizes {
+ BlockSizes GetBlockSizes(LaunchDimensionsConfig dim_config,
+                          const se::DeviceDescription& gpu_device_info,
+                          const Shape& shape, int64_t num_elements) {
++#if !GOOGLE_SYCL
++  // TODO: It will set 128 threads per block by default. We prefer to use
++  // the max value (1024 on PVC). It can benefit instructions like scatter.
+   if (!dim_config.row_vectorized && !dim_config.few_waves) {
+     BlockSizes result;
+     const int kWarpSchedulers = 4;
+@@ -103,6 +106,7 @@ BlockSizes GetBlockSizes(LaunchDimensionsConfig dim_config,
+         num_elements, result.threads_per_block_x * result.threads_per_block_y);
+     return result;
+   }
++#endif
+ 
+   int64_t threads_per_block_row_vectorized =
+       ThreadsPerBlockRowVectorized(shape, gpu_device_info, dim_config);
 diff --git a/xla/service/gpu/llvm_gpu_backend/BUILD b/xla/service/gpu/llvm_gpu_backend/BUILD
 index 619acb37a..d1abf8fc2 100644
 --- a/xla/service/gpu/llvm_gpu_backend/BUILD
@@ -2109,6 +2149,24 @@ index e6d318df2..59543ed8e 100644
  };
  
  // Run the given GEMM instruction `gemm` subject to the configuration
+diff --git a/xla/service/gpu/model/gpu_performance_model.cc b/xla/service/gpu/model/gpu_performance_model.cc
+index 51579cd34..610ce12cc 100644
+--- a/xla/service/gpu/model/gpu_performance_model.cc
++++ b/xla/service/gpu/model/gpu_performance_model.cc
+@@ -230,7 +230,12 @@ LaunchDimensions EstimateFusionLaunchDimensions(
+     auto launch_dimensions = fusion_analysis->GetLaunchDimensions();
+     if (launch_dimensions.ok()) return *launch_dimensions;
+   }
+-  int64_t block_size = 128;  // Result for default LaunchDimensionsConfig.
++  // Result for default LaunchDimensionsConfig.
++#if GOOGLE_SYCL
++  int64_t block_size = RoundUpTo(device_info.threads_per_block_limit(),int64_t{32});
++#else
++  int64_t block_size = 128;
++#endif
+   int64_t num_blocks = CeilOfRatio(estimated_num_threads, block_size);
+   return LaunchDimensions(num_blocks, block_size);
+ }
 diff --git a/xla/service/gpu/parallel_loop_emitter.cc b/xla/service/gpu/parallel_loop_emitter.cc
 index c6b76fd2b..1e85a5259 100644
 --- a/xla/service/gpu/parallel_loop_emitter.cc
