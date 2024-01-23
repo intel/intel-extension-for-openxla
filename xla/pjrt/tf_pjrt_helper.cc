@@ -82,6 +82,8 @@ PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
 }
 
 void ITEXDeletePjRtBuffer(PJRT_Buffer* pjrt_buffer) {
+  printf("CBOSS I am in ITEXDeletePjRtBuffer!\r\n");
+  fflush(stdout);
   delete pjrt_buffer;
 }
 

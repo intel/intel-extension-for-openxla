@@ -1533,8 +1533,11 @@ PJRT_Error* PJRT_Buffer_Destroy(PJRT_Buffer_Destroy_Args* args) {
       "PJRT_Buffer_Destroy_Args", PJRT_Buffer_Destroy_Args_STRUCT_SIZE,
       args->struct_size));
   // delete args->buffer;
+  printf("CBOSS DGB I am in PJRT_Buffer_Destroy!\r\n");
+  fflush(stdout);
   auto* pjrt_buffer = reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(args->buffer->buffer.get());
   pjrt_buffer->deallocate_buffer();
+  //args->buffer->buffer->deallocate_buffer();
   return nullptr;
 }
 
@@ -1663,6 +1666,8 @@ PJRT_Error* PJRT_Buffer_Delete(PJRT_Buffer_Delete_Args* args) {
   PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
       "PJRT_Buffer_Delete_Args", PJRT_Buffer_Delete_Args_STRUCT_SIZE,
       args->struct_size));
+  printf("CBOSS DGB I am in PJRT_Buffer_Delete!\r\n");
+  fflush(stdout);
   args->buffer->buffer->Delete();
   return nullptr;
 }
