@@ -1,14 +1,6 @@
 # Quick Start for fine-tunes BERT on SQuAD
-Fine-tunes BERT model on SQuAD task by [Question Answering examples](https://github.com/huggingface/transformers/tree/v4.32.0/examples/flax/question-answering#question-answering-examples).
+Fine-tunes BERT model on SQuAD task by [Question Answering examples](https://github.com/huggingface/transformers/tree/v4.37.0/examples/flax/question-answering).
 This expample is referred from [HuggingFace Transformers](https://github.com/huggingface/transformers). See [Backup](#Backup) for modification details.
-
-
-**IMPORTANT: This example is temporarily unavailable under JAX v0.4.20 with below error due to public issue (https://github.com/huggingface/transformers/issues/27644):**
-```
-AttributeError: 'ArrayImpl' object has no attribute 'split'
-```
-**Will reenable it once it's fixed in community.**
-
 
 ## Requirements
 
@@ -70,10 +62,10 @@ Performance... xxx iter/s
 ### Backup
 ```patch
 diff --git a/examples/flax/question-answering/run_qa.py b/examples/flax/question-answering/run_qa.py
-index a2839539e..a530d8560 100644
+index a3497b9bb..de866936e 100644
 --- a/examples/flax/question-answering/run_qa.py
 +++ b/examples/flax/question-answering/run_qa.py
-@@ -846,7 +846,8 @@ def main():
+@@ -851,7 +851,8 @@ def main():
 
      # region Training steps and logging init
      train_dataset = processed_raw_datasets["train"]
@@ -83,7 +75,7 @@ index a2839539e..a530d8560 100644
 
      # Log a few random samples from the training set:
      for index in random.sample(range(len(train_dataset)), 3):
-@@ -957,11 +958,12 @@ def main():
+@@ -962,11 +963,12 @@ def main():
      state = replicate(state)
 
      train_time = 0
@@ -97,7 +89,7 @@ index a2839539e..a530d8560 100644
          train_metrics = []
 
          # Create sampling rng
-@@ -982,6 +984,13 @@ def main():
+@@ -987,6 +989,13 @@ def main():
 
              cur_step = epoch * step_per_epoch + step
 
@@ -111,7 +103,7 @@ index a2839539e..a530d8560 100644
              if cur_step % training_args.logging_steps == 0 and cur_step > 0:
                  # Save metrics
                  train_metric = unreplicate(train_metric)
-@@ -1048,6 +1057,9 @@ def main():
+@@ -1053,6 +1062,9 @@ def main():
                      if training_args.push_to_hub:
                          repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
          epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
