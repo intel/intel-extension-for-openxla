@@ -1,6 +1,5 @@
 #! /bin/bash
 # A script for single-node pile pretraining
-#export ZE_AFFINITY_MASK=0.0
 set -x
 
 if [ ! -n "$1" ];then

@@ -5,7 +5,7 @@ Script jax_gptj.py for [EleutherAI/gpt-j-6B](https://huggingface.co/EleutherAI/g
 ## Prerequisites
 
 ```bash
-pip install jax==0.4.20 jaxlib==0.4.20 flax==0.7.0 transformers==4.32 diffusers==0.16.1 datasets==2.12.0
+pip install jax==0.4.20 jaxlib==0.4.20 flax==0.7.0 transformers==4.37 diffusers==0.16.1 datasets==2.12.0
 ```
 
 ## Options
@@ -25,7 +25,7 @@ pip install jax==0.4.20 jaxlib==0.4.20 flax==0.7.0 transformers==4.32 diffusers=
 ## Accuracy Example
 
 ```bash
-export ZE_AFFINITY_MASK=0.0
+export ZE_AFFINITY_MASK=0
 numactl -N 0 -m 0 python jax_gptj.py --accuracy-only --dtype "float16"
 ```
 
@@ -35,19 +35,19 @@ To fully utilize the hardware capabilities and achieve the best performance, you
 
 | **ENV** | **Description** | **PVC Platform** | **ATSM/DG2 Platform** | 
 | :---: | :---: | :---: |:---: |
-| ZE_AFFINITY_MASK | Run this model on single GPU tile |export ZE_AFFINITY_MASK=0.0 | export ZE_AFFINITY_MASK=0.0 |
+| ZE_AFFINITY_MASK | Run this model on single GPU tile |export ZE_AFFINITY_MASK=0 | export ZE_AFFINITY_MASK=0 |
 | XETLA_GEMM | Call the [XETLA](https://github.com/intel/xetla) library to run GEMMs, instead of using oneDNN.|export XETLA_GEMM=1 | NA |
 
 ### Greedy Search
 
 ```bash
-export ZE_AFFINITY_MASK=0.0
+export ZE_AFFINITY_MASK=0
 python jax_gptj.py --greedy
 ```
 
 ### Beam Search = 4
 
 ```bash
-export ZE_AFFINITY_MASK=0.0
+export ZE_AFFINITY_MASK=0
 python jax_gptj.py --input-tokens 1024 --max-new-tokens 128 --num-iter 100 --num-warmup 10
 ```
