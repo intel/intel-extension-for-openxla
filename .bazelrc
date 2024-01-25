@@ -37,7 +37,7 @@ common --experimental_repo_remote_exec
 # Default options should come above this line
 
 # Options from ./configure
-try-import %workspace%/.itex_configure.bazelrc
+try-import %workspace%/.xla_extension_configure.bazelrc
 
 # Put user-specific options in .bazelrc.user
 try-import %workspace%/.bazelrc.user
