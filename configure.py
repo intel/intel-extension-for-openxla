@@ -43,10 +43,10 @@ _DEFAULT_OCL_SDK_ROOT = ''
 
 _DEFAULT_PROMPT_ASK_ATTEMPTS = 10
 
-_ITEX_BAZELRC_FILENAME = '.itex_configure.bazelrc'
-_ITEX_WORKSPACE_ROOT = ''
-_ITEX_BAZELRC = ''
-_ITEX_CURRENT_BAZEL_VERSION = None
+_XLA_EXTENSION_BAZELRC_FILENAME = '.xla_extension_configure.bazelrc'
+_XLA_EXTENSION_WORKSPACE_ROOT = ''
+_XLA_EXTENSION_BAZELRC = ''
+_XLA_EXTENSION_CURRENT_BAZEL_VERSION = None
 
 _DENY_PATH_LIST = ['..', ';', '|', '$', "'", '%', '*', '&', ':', '?', '<', '>', 'http', 'ftp'] # pylint: disable=line-too-long
 
@@ -65,8 +65,8 @@ def is_linux():
 
 
 def remove_configure_file():
-  if os.path.exists(_ITEX_BAZELRC_FILENAME):
-    os.remove(_ITEX_BAZELRC_FILENAME)
+  if os.path.exists(_XLA_EXTENSION_BAZELRC_FILENAME):
+    os.remove(_XLA_EXTENSION_BAZELRC_FILENAME)
 
 
 def get_input(question):
@@ -120,7 +120,7 @@ def sed_in_place(filename, old, new):
 
 def write_to_bazelrc(line):
   try:
-    with open(_ITEX_BAZELRC, 'a') as f:
+    with open(_XLA_EXTENSION_BAZELRC, 'a') as f:
       f.write(line + '\n')
   finally:
     f.close()
@@ -302,7 +302,7 @@ def create_build_configuration(environ_cp):
 def reset_configure_bazelrc():
   """Reset file that contains customized config settings."""
   try:
-    with open(_ITEX_BAZELRC, 'w') as f:
+    with open(_XLA_EXTENSION_BAZELRC, 'w') as f:
       pass
   finally:
     f.close()
@@ -754,9 +754,9 @@ def check_safe_workspace_path(workspace):
   raise Exception("Invalid workspace path!")
 
 def main():
-  global _ITEX_WORKSPACE_ROOT
-  global _ITEX_BAZELRC
-  global _ITEX_CURRENT_BAZEL_VERSION
+  global _XLA_EXTENSION_WORKSPACE_ROOT
+  global _XLA_EXTENSION_BAZELRC
+  global _XLA_EXTENSION_CURRENT_BAZEL_VERSION
 
   if not is_linux():
     print('Only support linux currently.')
@@ -769,16 +769,18 @@ def main():
       default=os.path.abspath(os.path.dirname(__file__)),
       help='The absolute path to your active Bazel workspace.')
 
-  _ITEX_WORKSPACE_ROOT = check_safe_workspace_path(
+  _XLA_EXTENSION_WORKSPACE_ROOT = check_safe_workspace_path(
       os.path.abspath(os.path.dirname(__file__)))
-  _ITEX_BAZELRC = os.path.join(_ITEX_WORKSPACE_ROOT, _ITEX_BAZELRC_FILENAME)
+  _XLA_EXTENSION_BAZELRC = os.path.join(
+      _XLA_EXTENSION_WORKSPACE_ROOT, _XLA_EXTENSION_BAZELRC_FILENAME)
 
   # Make a copy of os.environ to be clear when functions and getting and setting
   # environment variables.
   environ_cp = dict(os.environ)
 
   current_bazel_version = check_bazel_version('5.3.0')
-  _ITEX_CURRENT_BAZEL_VERSION = convert_version_to_int(current_bazel_version)
+  _XLA_EXTENSION_CURRENT_BAZEL_VERSION = convert_version_to_int(
+      current_bazel_version)
 
   reset_configure_bazelrc()
 
