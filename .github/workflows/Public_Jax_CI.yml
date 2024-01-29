@@ -5,7 +5,7 @@ on:
 
 jobs:
   openXLA-CI:
-    runs-on: self-hosted
+    runs-on: Intel_openxla
     steps:
     - name: Prepare Conda Environment
       run: |
