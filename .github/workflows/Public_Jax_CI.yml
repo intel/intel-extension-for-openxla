@@ -6,8 +6,6 @@ on:
 jobs:
   openXLA-CI:
     runs-on: Intel_openxla
-    if: |
-      !(contains(github.repository, 'intel-innersource'))
     steps:
       - name: Check out repository code
         uses: actions/checkout@v3
@@ -15,7 +13,7 @@ jobs:
       - name: Prepare Conda Environment
         run: |
           set +e
-          CONDA_ENV=jax_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
+          CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
           source /opt/miniconda/bin/activate ${CONDA_ENV}
           if [ $? -ne 0 ]; then
               echo 'conda env does not exist'
@@ -30,7 +28,7 @@ jobs:
       - name: Build Jax
         run: |
           set +e
-          CONDA_ENV=jax_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
+          CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
           source /opt/miniconda/bin/activate ${CONDA_ENV}
           which bazel
           if [ $? -eq 1 ]; then
@@ -52,7 +50,7 @@ jobs:
       - name: UT testing
         run: |
           set +e
-          CONDA_ENV=jax_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
+          CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
           source /opt/miniconda/bin/activate ${CONDA_ENV}
           cd jax
           commit_hash=$(git rev-parse --short HEAD)
@@ -82,11 +80,11 @@ jobs:
       - name: Upload CI Data
         uses: actions/upload-artifact@v3
         with:
-          name: XLA-CI-Data
-          path: /home/sdp/actions-runner/workspace_openxla/jax/jax_test/openxla/logs
+          name: JAX-CI-Data
+          path: /home/sdp/actions-runner/workspace_openxla/jax/logs
       - name: Test Results Check
         run: |
-          cd /home/sdp/actions-runner/workspace_openxla/jax/jax_test/openxla
+          cd /home/sdp/actions-runner/workspace_openxla/jax
           #UT results check
           if [ -f "./logs/ut/err.log" ]; then
             echo "exist fail cases"
