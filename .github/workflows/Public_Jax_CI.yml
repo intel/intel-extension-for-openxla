@@ -56,7 +56,7 @@ jobs:
         set +e
         CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
         source /opt/miniconda/bin/activate ${CONDA_ENV}
-        cd jax
+        cd intel-extension-for-openxla/intel-extension-for-openxla/jax
         commit_hash=$(git rev-parse --short HEAD)
         mkdir -p ./logs/ut
         echo "$commit_hash" |& tee ./logs/ut/$commit_hash.txt
@@ -88,7 +88,7 @@ jobs:
         path: /home/sdp/actions-runner/workspace_openxla/jax/logs
     - name: Test Results Check
       run: |
-        cd /home/sdp/actions-runner/workspace_openxla/jax
+        cd /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax
         #UT results check
         if [ -f "./logs/ut/err.log" ]; then
           echo "exist fail cases"
