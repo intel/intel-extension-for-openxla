@@ -2,10 +2,10 @@ name: Public Jax CI
 run-name: Jax master is testing out GitHub Action
 on:
   workflow_dispatch:
-  inputs:
-    jax_commit:
-      description: 'Specify the commit hash'
-      default: 'master'
+    inputs:
+      jax_commit:
+        description: 'Specify the commit hash'
+        default: 'master'
 
 jobs:
   JAX-CI:
