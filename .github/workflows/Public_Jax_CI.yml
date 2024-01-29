@@ -24,7 +24,9 @@ jobs:
           fi
           conda install -c conda-forge gcc=12.1.0
           pip install numpy wheel build  
-          pip install -r ../build/test-requirements.txt
+          #This CI is for public jax 
+          git clone https://github.com/google/jax.git
+          pip install -r jax/build/test-requirements.txt
       - name: Build openXLA
         run: |
           set +e
@@ -36,6 +38,7 @@ jobs:
             bash bazel-5.3.0-installer-linux-x86_64.sh --user
           fi
           #build jax 
+          cd jax
           python build/build.py   #CPU
           build_result=${PIPESTATUS[0]}
           echo $build_result
@@ -56,8 +59,10 @@ jobs:
           else
               git clone -b jax https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
           fi
-          cd jax_test/openxla
+          cd jax
+          commit_hash=$(git rev-parse --short HEAD)
           mkdir -p ./logs/ut
+          echo "$commit_hash" |& tee ./logs/ut/$commit_hash.txt
           find ./tests -name "*.py" | sed 's#\./##g' |& tee ut_list.txt
           file_path=./ut_list.txt
           
