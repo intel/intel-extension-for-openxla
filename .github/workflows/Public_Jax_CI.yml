@@ -2,9 +2,14 @@ name: Public Jax CI
 run-name: Jax master is testing out GitHub Action
 on:
   workflow_dispatch:
+  inputs:
+    jax_commit:
+      description: 'Specify the commit hash'
+      default: 'master'
+ 
 
 jobs:
-  openXLA-CI:
+  JAX-CI:
     runs-on: Intel_openxla
     steps:
     - name: Check out repository code
@@ -23,7 +28,7 @@ jobs:
         conda install -c conda-forge gcc=12.1.0
         pip install numpy wheel build  
         #This CI is for public jax 
-        git clone https://github.com/google/jax.git
+        git clone https://github.com/google/jax.git && cd jax && git checkout ${{ inputs.gha_runner }}
         pip install -r jax/build/test-requirements.txt
     - name: Build Jax
       run: |
