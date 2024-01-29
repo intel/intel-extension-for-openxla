@@ -30,6 +30,7 @@ jobs:
         # conda install -c conda-forge gcc=12.1.0
         # conda install gcc_linux-64
         # conda install gxx_linux-64
+        sudo apt install g++ python python3-dev -y | true
         pip uninstall jax jaxlib -y
         pip install numpy wheel build  
         #This CI is for public jax 
