@@ -6,12 +6,14 @@ on:
     jax_commit:
       description: 'Specify the commit hash'
       default: 'master'
- 
 
 jobs:
   JAX-CI:
     runs-on: Intel_openxla
     steps:
+    - name: Check out repository code
+        uses: actions/checkout@v3
+        
     - name: Prepare Conda Environment
       run: |
         set +e
@@ -26,7 +28,7 @@ jobs:
         pip install numpy wheel build  
         #This CI is for public jax 
         git clone https://github.com/google/jax.git && cd jax && git checkout ${{ inputs.gha_runner }}
-        pip install -r jax/build/test-requirements.txt
+        pip install -r ./build/test-requirements.txt
     - name: Build Jax
       run: |
         set +e
