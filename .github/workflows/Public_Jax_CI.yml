@@ -1,4 +1,4 @@
-name: openxla ci
+name: Public Jax CI
 run-name: ${{ github.actor }} is testing out GitHub Action
 on:
   workflow_dispatch:
