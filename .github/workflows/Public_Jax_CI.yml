@@ -1,5 +1,5 @@
 name: Public Jax CI
-run-name: ${{ github.actor }} is testing out GitHub Action
+run-name: Jax master is testing out GitHub Action
 on:
   workflow_dispatch:
 
@@ -27,7 +27,7 @@ jobs:
           #This CI is for public jax 
           git clone https://github.com/google/jax.git
           pip install -r jax/build/test-requirements.txt
-      - name: Build openXLA
+      - name: Build Jax
         run: |
           set +e
           CONDA_ENV=jax_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
@@ -54,19 +54,14 @@ jobs:
           set +e
           CONDA_ENV=jax_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
           source /opt/miniconda/bin/activate ${CONDA_ENV}
-          if [ -d "jax_test" ]; then
-              echo "jax_test folder already exists. Doing nothing."
-          else
-              git clone -b jax https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
-          fi
           cd jax
           commit_hash=$(git rev-parse --short HEAD)
           mkdir -p ./logs/ut
           echo "$commit_hash" |& tee ./logs/ut/$commit_hash.txt
           find ./tests -name "*.py" | sed 's#\./##g' |& tee ut_list.txt
-          file_path=./ut_list.txt
-          
+
           # Check if the file exists
+          file_path=./ut_list.txt
           if [ -f "$file_path" ]; then
               # Read each line using a while loop
               while IFS= read -r line; do
@@ -74,15 +69,17 @@ jobs:
                   log_name=$(basename "$line" .py)
                   python $line |& tee ./logs/ut/$log_name.log
                   if [ ${PIPESTATUS[0]} -eq 0 ]; then
-                    echo "$line" >> ./logs/ut/successful.log
+                      echo "$line" >> ./logs/ut/successful.log
                   else
                       echo "$line" >> ./logs/ut/err.log
                   fi
+              done < "$file_path"  # Close the while loop properly
           else
               echo "File not found: $file_path"
               exit
           fi
-      - name: Upload XLA CI Data
+
+      - name: Upload CI Data
         uses: actions/upload-artifact@v3
         with:
           name: XLA-CI-Data
