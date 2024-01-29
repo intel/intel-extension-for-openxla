@@ -30,6 +30,7 @@ jobs:
         # conda install -c conda-forge gcc=12.1.0
         # conda install gcc_linux-64
         # conda install gxx_linux-64
+        pip uninstall jax jaxlib -y
         pip install numpy wheel build  
         #This CI is for public jax 
         git clone https://github.com/google/jax.git && cd jax && git checkout ${{ inputs.gha_runner }}
