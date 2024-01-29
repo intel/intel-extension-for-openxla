@@ -12,9 +12,6 @@ jobs:
   JAX-CI:
     runs-on: Intel_openxla
     steps:
-    - name: Check out repository code
-      uses: actions/checkout@v3
-
     - name: Prepare Conda Environment
       run: |
         set +e
