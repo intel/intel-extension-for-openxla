@@ -56,7 +56,7 @@ jobs:
         set +e
         CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
         source /opt/miniconda/bin/activate ${CONDA_ENV}
-        cd $WORKSPACE/intel-extension-for-openxla/intel-extension-for-openxla/jax
+        cd ~/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax
         commit_hash=$(git rev-parse --short HEAD)
         mkdir -p ./logs/ut
         echo "$commit_hash" |& tee ./logs/ut/$commit_hash.txt
