@@ -1,5 +1,9 @@
 name: Public Jax CI
+run-name: Jax master is testing out GitHub Action
 on:
+  push:
+    branches:
+      - wenjun/jax
   workflow_dispatch:
     inputs:
       jax_commit:
@@ -10,7 +14,89 @@ jobs:
   JAX-CI:
     runs-on: Intel_openxla
     steps:
-      - name: Check out repository code
-        uses: actions/checkout@v3
+    - name: Check out repository code
+      uses: actions/checkout@v3
+        
+    - name: Prepare Conda Environment
+      run: |
+        set +e
+        CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
+        source /opt/miniconda/bin/activate ${CONDA_ENV}
+        if [ $? -ne 0 ]; then
+            echo 'conda env does not exist'
+            conda create -n ${CONDA_ENV} python=3.10 -y
+            conda activate ${CONDA_ENV}
+        fi
+        conda install -c conda-forge gcc=12.1.0
+        pip install numpy wheel build  
+        #This CI is for public jax 
+        git clone https://github.com/google/jax.git && cd jax && git checkout ${{ inputs.gha_runner }}
+        pip install -r ./build/test-requirements.txt
+    - name: Build Jax
+      run: |
+        set +e
+        CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
+        source /opt/miniconda/bin/activate ${CONDA_ENV}
+        which bazel
+        if [ $? -eq 1 ]; then
+          wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
+          bash bazel-5.3.0-installer-linux-x86_64.sh --user
+        fi
+        #build jax 
+        cd jax
+        python build/build.py   #CPU
+        build_result=${PIPESTATUS[0]}
+        echo $build_result
+        if [ "$build_result" = "0" ];then
+            echo "Build successful"
+            pip install tests/*.whl
+        else
+            echo "Build Failed"
+            exit 1
+        fi
+    - name: UT testing
+      run: |
+        set +e
+        CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
+        source /opt/miniconda/bin/activate ${CONDA_ENV}
+        cd jax
+        commit_hash=$(git rev-parse --short HEAD)
+        mkdir -p ./logs/ut
+        echo "$commit_hash" |& tee ./logs/ut/$commit_hash.txt
+        find ./tests -name "*.py" | sed 's#\./##g' |& tee ut_list.txt
 
-      # Rest of your workflow steps...
+        # Check if the file exists
+        file_path=./ut_list.txt
+        if [ -f "$file_path" ]; then
+            # Read each line using a while loop
+            while IFS= read -r line; do
+                echo "Processing line: $line"
+                log_name=$(basename "$line" .py)
+                python $line |& tee ./logs/ut/$log_name.log
+                if [ ${PIPESTATUS[0]} -eq 0 ]; then
+                    echo "$line" >> ./logs/ut/successful.log
+                else
+                    echo "$line" >> ./logs/ut/err.log
+                fi
+            done < "$file_path"  # Close the while loop properly
+        else
+            echo "File not found: $file_path"
+            exit
+        fi
+
+    - name: Upload CI Data
+      uses: actions/upload-artifact@v3
+      with:
+        name: JAX-CI-Data
+        path: /home/sdp/actions-runner/workspace_openxla/jax/logs
+    - name: Test Results Check
+      run: |
+        cd /home/sdp/actions-runner/workspace_openxla/jax
+        #UT results check
+        if [ -f "./logs/ut/err.log" ]; then
+          echo "exist fail cases"
+          cat ./logs/ut/err.log
+          exit 1 
+        else
+            echo "run successful"
+        fi
