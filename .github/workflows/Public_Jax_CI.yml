@@ -89,10 +89,10 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: JAX-CI-Data
-        path: /home/sdp/actions-runner/workspace_openxla/jax/logs
+        path: ~/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax/logs
     - name: Test Results Check
       run: |
-        cd /home/sdp/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax
+        cd ~/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax
         #UT results check
         if [ -f "./logs/ut/err.log" ]; then
           echo "exist fail cases"
