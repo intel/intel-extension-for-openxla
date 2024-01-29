@@ -2,6 +2,12 @@ name: Public Jax CI
 run-name: Jax master is testing out GitHub Action
 on:
   workflow_dispatch:
+      inputs:
+        parameter_name:
+          description: 'Description of the input parameter'
+          required: true
+          default: 'default_value'
+
 
 jobs:
   openXLA-CI:
