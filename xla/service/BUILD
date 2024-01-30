@@ -1,5 +1,3 @@
-load("//third_party/onednn:build_defs.bzl", "onednn_deps")
-
 package(
     default_visibility = [
         "//visibility:public",
@@ -11,7 +9,8 @@ cc_library(
     name = "onednn_util",
     hdrs = ["onednn_util.h"],
     deps = [
+        "@onednn_gpu//:onednn_gpu",
         "@tsl//tsl/platform:errors",
         "@tsl//tsl/platform:logging",
-    ] + onednn_deps(),
+    ],
 )

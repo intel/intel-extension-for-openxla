@@ -22,7 +22,7 @@ config_setting(
 
 # TODO(itex): try better bazel usage in configuring strings with different options
 _CMAKE_COMMON_LIST = {
-    "#cmakedefine DNNL_CPU_RUNTIME DNNL_RUNTIME_${DNNL_CPU_RUNTIME}": if_sycl_build_is_configured("#define DNNL_CPU_RUNTIME DNNL_RUNTIME_DPCPP", "#define DNNL_CPU_RUNTIME DNNL_RUNTIME_SYCL"),
+    "#cmakedefine DNNL_CPU_RUNTIME DNNL_RUNTIME_${DNNL_CPU_RUNTIME}": "#define DNNL_CPU_RUNTIME DNNL_RUNTIME_NONE",
     "#cmakedefine DNNL_CPU_THREADING_RUNTIME DNNL_RUNTIME_${DNNL_CPU_THREADING_RUNTIME}": "#define DNNL_CPU_THREADING_RUNTIME DNNL_RUNTIME_SEQ",
     "#cmakedefine DNNL_GPU_RUNTIME DNNL_RUNTIME_${DNNL_GPU_RUNTIME}": if_sycl_build_is_configured("#define DNNL_GPU_RUNTIME DNNL_RUNTIME_DPCPP", "#define DNNL_GPU_RUNTIME DNNL_RUNTIME_SYCL"),
     "#cmakedefine DNNL_SYCL_DPCPP": if_sycl_build_is_configured("#define DNNL_SYCL_DPCPP", "/* #undef DNNL_SYCL_DPCPP */"),
@@ -34,6 +34,7 @@ _CMAKE_COMMON_LIST = {
     "#cmakedefine DNNL_USE_RT_OBJECTS_IN_PRIMITIVE_CACHE": "#define DNNL_USE_RT_OBJECTS_IN_PRIMITIVE_CACHE",
     "#cmakedefine DNNL_ENABLE_STACK_CHECKER": "#undef DNNL_ENABLE_STACK_CHECKER",
     "#cmakedefine DNNL_EXPERIMENTAL": "#define DNNL_EXPERIMENTAL",
+    "#cmakedefine ONEDNN_BUILD_GRAPH": "#undef ONEDNN_BUILD_GRAPH",
     "#cmakedefine01 BUILD_TRAINING": "#define BUILD_TRAINING 1",
     "#cmakedefine01 BUILD_INFERENCE": "#define BUILD_INFERENCE 0",
     "#cmakedefine01 BUILD_PRIMITIVE_ALL": "#define BUILD_PRIMITIVE_ALL 1",
@@ -76,17 +77,11 @@ _CMAKE_COMMON_LIST = {
     "#cmakedefine01 BUILD_GEMM_AVX512": "#define BUILD_GEMM_AVX512 0",
 }
 
-_CMAKE_WITHOUT_ONEDNN_GRAPH_LIST = {
-    "#cmakedefine ONEDNN_BUILD_GRAPH": "#undef ONEDNN_BUILD_GRAPH",
-}
-
-_CMAKE_WITHOUT_ONEDNN_GRAPH_LIST.update(_CMAKE_COMMON_LIST)
-
 template_rule(
     name = "dnnl_config_h",
     src = "include/oneapi/dnnl/dnnl_config.h.in",
     out = "include/oneapi/dnnl/dnnl_config.h",
-    substitutions = _CMAKE_WITHOUT_ONEDNN_GRAPH_LIST,
+    substitutions = _CMAKE_COMMON_LIST,
 )
 
 convert_cl_to_cpp(
@@ -117,8 +112,7 @@ filegroup(
             "src/**/*.c",
         ],
         exclude = [
-            "src/cpu/aarch64/**",
-            "src/cpu/rv64/**",
+            "src/cpu/**",
             "src/gpu/nvidia/*",
             "src/gpu/amd/*",
             "src/gpu/sycl/ref*",
@@ -151,7 +145,6 @@ cc_library(
         "-DNGEN_CPP11=1",
         "-DNGEN_SAFE=1",
         "-DNGEN_NEO_INTERFACE=1",
-        "-DDNNL_X64=1",
         #TODO(itex): for symbol collision, may be removed in produce version
         "-fvisibility=hidden",
     ],
@@ -161,9 +154,6 @@ cc_library(
         "include/oneapi/dnnl",
         "src",
         "src/common",
-        "src/cpu",
-        "src/cpu/gemm",
-        "src/cpu/xbyak",
         "src/ocl",
         "src/sycl",
     ],

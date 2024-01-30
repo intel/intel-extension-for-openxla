@@ -10,19 +10,6 @@ package(
     licenses = ["notice"],
 )
 
-config_setting(
-    name = "build_with_onednn",
-    define_values = {
-        "build_with_onednn": "true",
-    },
-    visibility = ["//visibility:public"],
-)
-
-bzl_library(
-    name = "build_defs_bzl",
-    srcs = ["build_defs.bzl"],
-)
-
 py_binary(
     name = "gen_gpu_kernel_list",
     srcs = ["gen_gpu_kernel_list.py"],
