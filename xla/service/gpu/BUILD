@@ -23,6 +23,7 @@ cc_library(
     ],
     deps = [
         ":gpu_compiler",
+        "//xla/stream_executor/sycl:hw_info",
         "//xla/stream_executor/sycl:sycl_platform_id",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/container:node_hash_map",

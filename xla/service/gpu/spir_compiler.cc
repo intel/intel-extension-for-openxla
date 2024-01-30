@@ -60,6 +60,7 @@ limitations under the License.
 #include "xla/service/reshape_mover.h"
 #include "xla/service/tuple_simplifier.h"
 #include "xla/status_macros.h"
+#include "xla/stream_executor/sycl/hw_info.h"
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
 #include "xla/types.h"
 #include "xla/util.h"
@@ -167,7 +168,7 @@ Status SPIRCompiler::OptimizeHloPostLayoutAssignment(
 
   bool use_mha = true;
   TF_CHECK_OK(tsl::ReadBoolFromEnvVar("MHA", true, &use_mha));
-  if (use_mha) {
+  if (use_mha && IsXetlaHardwareSupport()) {
     HloPassPipeline mha_fusion_pipeline("multi-headed attention fusion");
     const DebugOptions& debug_options = hlo_module->config().debug_options();
     // The LayoutAssignment pass may leave behind kCopy instructions which are
