@@ -73,7 +73,7 @@ struct Manager {
       permute_collectives TF_GUARDED_BY(mu);
 };
 
-template <typename T, typename Func, int reduction_size>
+template <typename T, typename Func>
 struct AllReduceKernel;
 
 template <typename T, typename Func, typename AccT = T>
@@ -86,235 +86,29 @@ void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
           .template get_info<sycl::info::device::max_work_group_size>();
   auto num_workgroup = (tensor_size + group_size - 1) / group_size;
 
-#define IN(i) in##i##_ptr
-#define OUT(i) out##i##_ptr
-#define IN_PTR(i) auto IN(i) = static_cast<const T*>(participants[i].send)
-#define OUT_PTR(i) auto OUT(i) = static_cast<T*>(participants[i].recv)
-#define ADD_DPCPP(i, j) \
-  OUT(i)[index] = T(Func()(AccT(OUT(i)[index]), AccT(IN(j)[index])))
-#define COPY_OUT_DPCPP(i, j) OUT(i)[index] = OUT(j)[index]
-
-  if (reduction_size == 2) {
+  if (reduction_size <= MAX_RANK_SIZE) {
     stream->submit([&](sycl::handler& cgh) {
-      IN_PTR(0);
-      IN_PTR(1);
-      OUT_PTR(0);
-      OUT_PTR(1);
+      const T* in_ptr[MAX_RANK_SIZE];
+      T* out_ptr[MAX_RANK_SIZE];
 
-      cgh.parallel_for<AllReduceKernel<T, Func, 2>>(
+      for (int i = 0; i < reduction_size; ++i) {
+        in_ptr[i] = static_cast<const T*>(participants[i].send);
+        out_ptr[i] = static_cast<T*>(participants[i].recv);
+      }
+
+      cgh.parallel_for<AllReduceKernel<T, Func>>(
           sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
                             sycl::range<1>(group_size)),
           [=](sycl::nd_item<1> item) {
             const int index = item.get_global_linear_id();
             if (index >= tensor_size) return;
-            ADD_DPCPP(0, 1);
-            COPY_OUT_DPCPP(1, 0);
-          });
-    });
-  } else if (reduction_size == 4) {
-    stream->submit([&](sycl::handler& cgh) {
-      IN_PTR(0);
-      IN_PTR(1);
-      IN_PTR(2);
-      IN_PTR(3);
-      OUT_PTR(0);
-      OUT_PTR(1);
-      OUT_PTR(2);
-      OUT_PTR(3);
 
-      cgh.parallel_for<AllReduceKernel<T, Func, 4>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-            ADD_DPCPP(0, 1);
-            ADD_DPCPP(0, 2);
-            ADD_DPCPP(0, 3);
-            COPY_OUT_DPCPP(1, 0);
-            COPY_OUT_DPCPP(2, 0);
-            COPY_OUT_DPCPP(3, 0);
-          });
-    });
-  } else if (reduction_size == 6) {
-    stream->submit([&](sycl::handler& cgh) {
-      IN_PTR(0);
-      IN_PTR(1);
-      IN_PTR(2);
-      IN_PTR(3);
-      IN_PTR(4);
-      IN_PTR(5);
-      OUT_PTR(0);
-      OUT_PTR(1);
-      OUT_PTR(2);
-      OUT_PTR(3);
-      OUT_PTR(4);
-      OUT_PTR(5);
-
-      cgh.parallel_for<AllReduceKernel<T, Func, 6>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-            ADD_DPCPP(0, 1);
-            ADD_DPCPP(0, 2);
-            ADD_DPCPP(0, 3);
-            ADD_DPCPP(0, 4);
-            ADD_DPCPP(0, 5);
-            COPY_OUT_DPCPP(1, 0);
-            COPY_OUT_DPCPP(2, 0);
-            COPY_OUT_DPCPP(3, 0);
-            COPY_OUT_DPCPP(4, 0);
-            COPY_OUT_DPCPP(5, 0);
-          });
-    });
-  } else if (reduction_size == 8) {
-    stream->submit([&](sycl::handler& cgh) {
-      IN_PTR(0);
-      IN_PTR(1);
-      IN_PTR(2);
-      IN_PTR(3);
-      IN_PTR(4);
-      IN_PTR(5);
-      IN_PTR(6);
-      IN_PTR(7);
-      OUT_PTR(0);
-      OUT_PTR(1);
-      OUT_PTR(2);
-      OUT_PTR(3);
-      OUT_PTR(4);
-      OUT_PTR(5);
-      OUT_PTR(6);
-      OUT_PTR(7);
-
-      cgh.parallel_for<AllReduceKernel<T, Func, 8>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-            ADD_DPCPP(0, 1);
-            ADD_DPCPP(0, 2);
-            ADD_DPCPP(0, 3);
-            ADD_DPCPP(0, 4);
-            ADD_DPCPP(0, 5);
-            ADD_DPCPP(0, 6);
-            ADD_DPCPP(0, 7);
-            COPY_OUT_DPCPP(1, 0);
-            COPY_OUT_DPCPP(2, 0);
-            COPY_OUT_DPCPP(3, 0);
-            COPY_OUT_DPCPP(4, 0);
-            COPY_OUT_DPCPP(5, 0);
-            COPY_OUT_DPCPP(6, 0);
-            COPY_OUT_DPCPP(7, 0);
-          });
-    });
-  } else if (reduction_size == 10) {
-    stream->submit([&](sycl::handler& cgh) {
-      IN_PTR(0);
-      IN_PTR(1);
-      IN_PTR(2);
-      IN_PTR(3);
-      IN_PTR(4);
-      IN_PTR(5);
-      IN_PTR(6);
-      IN_PTR(7);
-      IN_PTR(8);
-      IN_PTR(9);
-      OUT_PTR(0);
-      OUT_PTR(1);
-      OUT_PTR(2);
-      OUT_PTR(3);
-      OUT_PTR(4);
-      OUT_PTR(5);
-      OUT_PTR(6);
-      OUT_PTR(7);
-      OUT_PTR(8);
-      OUT_PTR(9);
-      ;
-
-      cgh.parallel_for<AllReduceKernel<T, Func, 10>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-            ADD_DPCPP(0, 1);
-            ADD_DPCPP(0, 2);
-            ADD_DPCPP(0, 3);
-            ADD_DPCPP(0, 4);
-            ADD_DPCPP(0, 5);
-            ADD_DPCPP(0, 6);
-            ADD_DPCPP(0, 7);
-            ADD_DPCPP(0, 8);
-            ADD_DPCPP(0, 9);
-            COPY_OUT_DPCPP(1, 0);
-            COPY_OUT_DPCPP(2, 0);
-            COPY_OUT_DPCPP(3, 0);
-            COPY_OUT_DPCPP(4, 0);
-            COPY_OUT_DPCPP(5, 0);
-            COPY_OUT_DPCPP(6, 0);
-            COPY_OUT_DPCPP(7, 0);
-            COPY_OUT_DPCPP(8, 0);
-            COPY_OUT_DPCPP(9, 0);
-          });
-    });
-  } else if (reduction_size == 12) {
-    stream->submit([&](sycl::handler& cgh) {
-      IN_PTR(0);
-      IN_PTR(1);
-      IN_PTR(2);
-      IN_PTR(3);
-      IN_PTR(4);
-      IN_PTR(5);
-      IN_PTR(6);
-      IN_PTR(7);
-      IN_PTR(8);
-      IN_PTR(9);
-      IN_PTR(10);
-      IN_PTR(11);
-      OUT_PTR(0);
-      OUT_PTR(1);
-      OUT_PTR(2);
-      OUT_PTR(3);
-      OUT_PTR(4);
-      OUT_PTR(5);
-      OUT_PTR(6);
-      OUT_PTR(7);
-      OUT_PTR(8);
-      OUT_PTR(9);
-      OUT_PTR(10);
-      OUT_PTR(11);
-
-      cgh.parallel_for<AllReduceKernel<T, Func, 12>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-            ADD_DPCPP(0, 1);
-            ADD_DPCPP(0, 2);
-            ADD_DPCPP(0, 3);
-            ADD_DPCPP(0, 4);
-            ADD_DPCPP(0, 5);
-            ADD_DPCPP(0, 6);
-            ADD_DPCPP(0, 7);
-            ADD_DPCPP(0, 8);
-            ADD_DPCPP(0, 9);
-            ADD_DPCPP(0, 10);
-            ADD_DPCPP(0, 11);
-            COPY_OUT_DPCPP(1, 0);
-            COPY_OUT_DPCPP(2, 0);
-            COPY_OUT_DPCPP(3, 0);
-            COPY_OUT_DPCPP(4, 0);
-            COPY_OUT_DPCPP(5, 0);
-            COPY_OUT_DPCPP(6, 0);
-            COPY_OUT_DPCPP(7, 0);
-            COPY_OUT_DPCPP(8, 0);
-            COPY_OUT_DPCPP(9, 0);
-            COPY_OUT_DPCPP(10, 0);
-            COPY_OUT_DPCPP(11, 0);
+            out_ptr[0][index] = in_ptr[0][index];
+            for (int i = 1; i < reduction_size; ++i)
+              out_ptr[0][index] =
+                  T(Func()(AccT(out_ptr[0][index]), AccT(in_ptr[i][index])));
+            for (int i = 1; i < reduction_size; ++i)
+              out_ptr[i][index] = out_ptr[0][index];
           });
     });
   } else {
