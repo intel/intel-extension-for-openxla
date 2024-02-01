@@ -2,7 +2,7 @@
 .ipynb_checkpoints
 node_modules
 /.bazelrc.user
-/.itex_configure.bazelrc
+/.xla_extension_configure.bazelrc
 /bazel-*
 /bazel_pip
 /itex/tools/python_bin_path.sh
