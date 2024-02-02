@@ -33,6 +33,7 @@ limitations under the License.
 #include "xla/pjrt/c/pjrt_c_api.h"
 #include "xla/pjrt/c/pjrt_c_api_helpers.h"
 #include "xla/pjrt/c/pjrt_c_api_tpu.h"
+#include "xla/pjrt/itex_pjrt_buffer.h"
 #include "xla/pjrt/mlir_to_hlo.h"
 #include "xla/pjrt/pjrt_client.h"
 #include "xla/pjrt/pjrt_executable.h"
@@ -689,6 +690,56 @@ PJRT_Error* PJRT_Client_BufferFromHostBuffer(
   }
 
   args->buffer = new PJRT_Buffer{std::move(buffer), args->client};
+  args->done_with_host_buffer =
+      new PJRT_Event{xla::PjRtFuture<xla::Status>(std::move(promise))};
+
+  return nullptr;
+}
+
+PJRT_Error* ITEX_PJRT_Client_BufferFromHostBuffer(
+    PJRT_Client_BufferFromHostBuffer_Args* args) {
+  PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
+      "PJRT_Client_BufferFromHostBuffer_Args",
+      PJRT_Client_BufferFromHostBuffer_Args_STRUCT_SIZE, args->struct_size));
+
+  absl::Span<const int64_t> dims =
+      absl::Span<const int64_t>(args->dims, args->num_dims);
+
+  if (args->byte_strides != nullptr) {
+    return new PJRT_Error{xla::Unimplemented(
+        "PJRT_Client_BufferFromHostBuffer doesn't support byte_strides.")};
+  }
+  if (args->memory != nullptr) {
+    return new PJRT_Error{xla::Unimplemented(
+        "PJRT_Client_BufferFromHostBuffer doesn't support memory.")};
+  }
+
+  xla::PjRtFuture<xla::Status>::Promise promise =
+      xla::PjRtFuture<xla::Status>::CreatePromise();
+
+  auto* pjrt_device = tensorflow::down_cast<xla::PjRtStreamExecutorDevice*>(
+      args->device->device);
+
+  xla::LocalDeviceState* transfer_local_device =
+      pjrt_device->local_device_state();
+  int device_ordinal = transfer_local_device->device_ordinal();
+
+  xla::PrimitiveType type = ::pjrt::ConvertFromPjRtBufferType(args->type);
+  xla::Shape shape = xla::ShapeUtil::MakeShape(type, dims);
+  size_t size = xla::ShapeUtil::ByteSizeOf(shape);
+
+  PJRT_ASSIGN_OR_RETURN(std::unique_ptr<xla::ITEXPjRtBuffer> dst_buffer,
+                        xla::AllocateITEXDestinationBuffer(
+                            device_ordinal, pjrt_device,
+                            args->client->client.get(), dims, type, size));
+
+  xla::se::Stream* stream = transfer_local_device->host_to_device_stream();
+  auto* executor = stream->parent()->implementation();
+  PJRT_RETURN_IF_ERROR(
+      executor->SynchronousMemcpy(&(dst_buffer->buffer()), args->data, size));
+
+  args->buffer = new PJRT_Buffer{std::move(dst_buffer), args->client};
+  promise.Set(xla::OkStatus());
   args->done_with_host_buffer =
       new PJRT_Event{xla::PjRtFuture<xla::Status>(std::move(promise))};
 
@@ -1703,6 +1754,44 @@ PJRT_Error* PJRT_Buffer_ToHostBuffer(PJRT_Buffer_ToHostBuffer_Args* args) {
   return nullptr;
 }
 
+PJRT_Error* ITEX_PJRT_Buffer_ToHostBuffer(PJRT_Buffer_ToHostBuffer_Args* args) {
+  PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
+      "PJRT_Buffer_ToHostBuffer_Args",
+      PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE, args->struct_size));
+
+  VLOG(1) << "PJRT_Buffer_ToHostBuffer";
+
+  xla::ITEXPjRtBuffer* buffer =
+      dynamic_cast<xla::ITEXPjRtBuffer*>(args->src->buffer.get());
+  size_t host_buffer_size = buffer->buffer_size();
+
+  if (args->dst == nullptr) {
+    args->dst_size = host_buffer_size;
+    return nullptr;
+  }
+
+  if (args->dst_size < host_buffer_size) {
+    return new PJRT_Error{
+        xla::InvalidArgument("`dst_size` must be >= %zu, got %zu.",
+                             host_buffer_size, args->dst_size)};
+  }
+
+  xla::LocalDeviceState* local_device = buffer->device()->local_device_state();
+  xla::se::Stream* stream = local_device->GetDeviceToHostStream();
+
+  auto promise = xla::PjRtFuture<xla::Status>::CreatePromise();
+  xla::se::DeviceMemoryBase base = buffer->buffer();
+  auto* executor = stream->parent()->implementation();
+  PJRT_RETURN_IF_ERROR(
+      executor->SynchronousMemcpy(args->dst, base, host_buffer_size));
+
+  promise.Set(xla::OkStatus());
+  xla::PjRtFuture<xla::Status> future(std::move(promise));
+  args->event = new PJRT_Event{std::move(future)};
+
+  return nullptr;
+}
+
 PJRT_Error* PJRT_Buffer_IsOnCpu(PJRT_Buffer_IsOnCpu_Args* args) {
   PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
       "PJRT_Buffer_IsOnCpu_Args", PJRT_Buffer_IsOnCpu_Args_STRUCT_SIZE,
@@ -2347,8 +2436,24 @@ constexpr PJRT_Api CreatePjrtApi() {
   };
 }
 
+constexpr PJRT_Api CreateITEXPjrtApi() {
+  PJRT_Api api = CreatePjrtApi();
+  api.PJRT_Client_BufferFromHostBuffer =
+      pjrt::ITEX_PJRT_Client_BufferFromHostBuffer;
+  api.PJRT_Buffer_ToHostBuffer = pjrt::ITEX_PJRT_Buffer_ToHostBuffer;
+  return api;
+}
+
 const PJRT_Api* GetPjrtApi() {
   static PJRT_Api c_api = CreatePjrtApi();
 
   return &c_api;
+}
+
+extern "C" {
+const PJRT_Api* GetITEXPjrtApi() {
+  static PJRT_Api c_api = CreateITEXPjrtApi();
+
+  return &c_api;
+}
 }

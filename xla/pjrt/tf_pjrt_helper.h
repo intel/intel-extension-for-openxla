@@ -195,8 +195,8 @@ PJRT_Buffer* C_ITEXCreatePjRtBuffer(int device_id,
                                     PjRtBuffer_Info* pjrt_buffer_info,
                                     PJRT_Client* pjrt_c_client);
 void* C_ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client);
-void C_RegisterCustomCallTarget(const char *symbol, void *address,
-                                const char *platform);
+void C_RegisterCustomCallTarget(const char* symbol, void* address,
+                                const char* platform);
 }
 
 namespace pjrt {

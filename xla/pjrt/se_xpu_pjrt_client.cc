@@ -32,9 +32,9 @@ limitations under the License.
 #include "xla/stream_executor/device_host_allocator.h"
 #include "xla/stream_executor/device_mem_allocator.h"
 #include "xla/stream_executor/device_memory.h"
-#include "xla/stream_executor/tf_allocator_adapter.h"
 #include "xla/stream_executor/sycl/hw_info.h"
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
+#include "xla/stream_executor/tf_allocator_adapter.h"
 
 namespace xla {
 namespace {
@@ -111,10 +111,10 @@ GetStreamExecutorXpuDeviceAllocator(
 
         static std::once_flag check_hardware_flag;
         std::call_once(check_hardware_flag, [&]() {
-          sycl::device* sycl_dev = nullptr; 
+          sycl::device* sycl_dev = nullptr;
           SYCLGetDevice(&sycl_dev, ordinal_and_device.second->device_ordinal());
-          if (IsXeHPC(sycl_dev)) {          
-            setenv("ITEX_USING_DATA_CENTER_GPU_MAX", "1", 0);  
+          if (IsXeHPC(sycl_dev)) {
+            setenv("ITEX_USING_DATA_CENTER_GPU_MAX", "1", 0);
           }
         });
       }
