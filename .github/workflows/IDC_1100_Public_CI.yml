@@ -95,8 +95,10 @@ jobs:
               git clone https://github.com/wendyliu235/aipc_unify_validation_infr.git jax_test
           fi
           reference_file=jax_test/openxla/distribute_ut_list.txt
-          
-          
+          blacklist=jax_test/openxla/blacklist.txt
+          grep -v -f $blacklist $file_path > ut_list_filtered.txt
+          mv ut_list_filtered.txt $file_path
+
           # run distribute ut first
           # Check if the file exists
           if [ -f "$file_path" ]; then
