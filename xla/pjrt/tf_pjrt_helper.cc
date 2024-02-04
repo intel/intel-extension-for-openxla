@@ -300,8 +300,13 @@ PJRT_Buffer* SameDeviceITEXBufferCopy(PJRT_Buffer* src_buffer,
 }  // namespace xla
 
 PJRT_Buffer* ITEXSameDevicePjRtBufferCopy(PJRT_Buffer* src_buffer,
-                                          PJRT_Client* c_client) {
-  return xla::SameDeviceITEXBufferCopy(src_buffer, c_client);
+                                          PJRT_Client* c_client,
+                                          bool xla_enabled) {
+  if (xla_enabled) {
+    return xla::SameDevicePjRtBufferCopy(src_buffer, c_client);
+  } else {
+    return xla::SameDeviceITEXBufferCopy(src_buffer, c_client);
+  }
 }
 
 void ITEXXlaShapeToDeviceShapeRepresentation(void* serialized_xla_shape,
