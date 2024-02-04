@@ -114,6 +114,7 @@ void ITEXBFCDeallocateOnSyclDevice(const sycl::device& device,
 
 extern "C" {
 struct PjRtBuffer_Info {
+  size_t size;
   std::string datatype;
   std::vector<int64_t> dimensions;
   std::vector<int64_t> layout;
@@ -126,6 +127,14 @@ void* C_ITEXOpaqueDataPointerFromPjRtBuffer(PJRT_Buffer* pjrt_c_buffer) {
 PJRT_Buffer* C_ITEXCreatePjRtBuffer(int device_id,
                                     PjRtBuffer_Info* pjrt_buffer_info,
                                     PJRT_Client* pjrt_c_client) {
+  return ITEXCreatePjRtBuffer(device_id, pjrt_buffer_info->datatype,
+                              &(pjrt_buffer_info->dimensions),
+                              pjrt_buffer_info->size, pjrt_c_client);
+}
+
+PJRT_Buffer* C_ITEXCreateSEPjRtBuffer(int device_id,
+                                      PjRtBuffer_Info* pjrt_buffer_info,
+                                      PJRT_Client* pjrt_c_client) {
   return ITEXCreateSEPjRtBuffer(device_id, pjrt_buffer_info->datatype,
                                 pjrt_buffer_info->dimensions,
                                 pjrt_buffer_info->layout, pjrt_c_client);
