@@ -861,7 +861,7 @@ index 099e6776a..1d76a0708 100644
    }
  
 diff --git a/xla/service/gpu/cusolver_context.cc b/xla/service/gpu/cusolver_context.cc
-index 282bfa295..1b095f307 100644
+index 282bfa295..a1f6ad396 100644
 --- a/xla/service/gpu/cusolver_context.cc
 +++ b/xla/service/gpu/cusolver_context.cc
 @@ -26,6 +26,7 @@ limitations under the License.
@@ -872,7 +872,7 @@ index 282bfa295..1b095f307 100644
  namespace {
  
  // Type traits to get CUDA complex types from std::complex<T>.
-@@ -414,6 +415,59 @@ Status GpuSolverContext::PotrfBatched(
+@@ -414,6 +415,64 @@ Status GpuSolverContext::PotrfBatched(
  #endif
        ToDevicePointer(lapack_info), batch_size));
  }
@@ -880,6 +880,11 @@ index 282bfa295..1b095f307 100644
  
 +StatusOr<GpuSolverContext> GpuSolverContext::Create() {
 +  return GpuSolverContext();
++}
++
++Status GpuSolverContext::SetStream(se::Stream* stream) {
++  gpu_stream_ = stream_executor::gpu::AsGpuStreamValue(stream);
++  return OkStatus();
 +}
 +
 +GpuSolverContext::GpuSolverContext() {}
@@ -931,9 +936,11 @@ index 282bfa295..1b095f307 100644
 +}
 +#endif // !GOOGLE_SYCL
  }  // namespace gpu
- }  // namespace xla
+-}  // namespace xla
++}  // namespace xla
+\ No newline at end of file
 diff --git a/xla/service/gpu/cusolver_context.h b/xla/service/gpu/cusolver_context.h
-index 63138f5fd..25bb8c00d 100644
+index 63138f5fd..e47de6238 100644
 --- a/xla/service/gpu/cusolver_context.h
 +++ b/xla/service/gpu/cusolver_context.h
 @@ -26,6 +26,12 @@ limitations under the License.
@@ -949,7 +956,7 @@ index 63138f5fd..25bb8c00d 100644
  #if !TENSORFLOW_USE_ROCM
  #include "third_party/gpus/cuda/include/cusolverDn.h"
  using gpusolverHandle_t = cusolverDnHandle_t;
-@@ -41,6 +47,7 @@ using gpusolverHandle_t = hipsolverHandle_t;
+@@ -41,16 +47,18 @@ using gpusolverHandle_t = hipsolverHandle_t;
  using gpusolverHandle_t = rocblas_handle;
  #endif  // TF_ROCM_VERSION >= 40500
  #endif  // TENSORFLOW_USE_ROCM
@@ -957,15 +964,19 @@ index 63138f5fd..25bb8c00d 100644
  
  #include "xla/statusor.h"
  #include "xla/stream_executor/blas.h"
-@@ -50,6 +57,7 @@ using gpusolverHandle_t = rocblas_handle;
+ #include "xla/stream_executor/stream_executor.h"
+ #include "xla/xla_data.pb.h"
++#include "xla/stream_executor/gpu/gpu_types.h"
+ 
  namespace xla {
  namespace gpu {
- 
-+#if !GOOGLE_SYCL
+-
  namespace se = ::stream_executor;
++#if !GOOGLE_SYCL
  
  class GpuSolverContext {
-@@ -104,6 +112,19 @@ class GpuSolverContext {
+  public:
+@@ -104,7 +112,64 @@ class GpuSolverContext {
    std::unique_ptr<std::remove_pointer_t<gpusolverHandle_t>, Deleter> handle_;
  };
  
@@ -973,8 +984,52 @@ index 63138f5fd..25bb8c00d 100644
 +class GpuSolverContext {
 + public:
 +  static StatusOr<GpuSolverContext> Create();
++  Status SetStream(se::Stream* stream);
++
++  template<typename T>
++  Status PotrfBatched(se::blas::UpperLower uplo, int n,
++                      int lda,
++                      int batch_size, se::DeviceMemoryBase* workspace_buffer, T* a_base) {
++    T* scratch_data = static_cast<T*>((*workspace_buffer).opaque());
++    int64_t scratchpad_size = (*workspace_buffer).size() / sizeof(T);
++
++    const int64_t stride_a = n * n;
++
++    oneapi::mkl::uplo params_uplo;
++    switch(uplo){
++      case se::blas::UpperLower::kLower:
++        params_uplo = oneapi::mkl::uplo::L;
++        break;
++      case se::blas::UpperLower::kUpper:
++        params_uplo = oneapi::mkl::uplo::U;
++        break;
++      default:
++        params_uplo = static_cast<oneapi::mkl::uplo>(uplo);
++    }
++
++    try {
++      oneapi::mkl::lapack::potrf_batch(*gpu_stream_, params_uplo, n,
++                                       a_base, lda, stride_a, batch_size,
++                                       scratch_data, scratchpad_size);
++    } catch (oneapi::mkl::lapack::batch_error const& be) {
++      int i = 0;
++      auto& ids = be.ids();
++      for (auto const& e : be.exceptions()) {
++        try {
++          std::rethrow_exception(e);
++        } catch (oneapi::mkl::lapack::exception& e) {
++          LOG(ERROR) << "Exception " << ids[i++]
++                     << " in a batch says: " << e.what()
++                     << " (info code: " << e.info() << ")";
++        }
++      }
++    }
++    return OkStatus();
++  }
++
 + private:
 +  explicit GpuSolverContext();
++  stream_executor::gpu::GpuStreamHandle gpu_stream_;
 +};
 +
 +std::string TransposeString(oneapi::mkl::transpose t);
@@ -985,6 +1040,9 @@ index 63138f5fd..25bb8c00d 100644
  }  // namespace gpu
  }  // namespace xla
  
+-#endif  // XLA_SERVICE_GPU_CUSOLVER_CONTEXT_H_
++#endif  // XLA_SERVICE_GPU_CUSOLVER_CONTEXT_H_
+\ No newline at end of file
 diff --git a/xla/service/gpu/cusolver_rewriter.cc b/xla/service/gpu/cusolver_rewriter.cc
 index 904673038..eac7e0b99 100644
 --- a/xla/service/gpu/cusolver_rewriter.cc
@@ -2206,6 +2264,30 @@ index c6b76fd2b..1e85a5259 100644
      }
    }
  
+diff --git a/xla/service/gpu/precompiled_kernels.cc b/xla/service/gpu/precompiled_kernels.cc
+index d380a496c..3e6482bdd 100644
+--- a/xla/service/gpu/precompiled_kernels.cc
++++ b/xla/service/gpu/precompiled_kernels.cc
+@@ -158,6 +158,7 @@ class LazyKernel {
+ Status MakeBatchPointers(se::Stream* stream, const se::GpuAsmOpts& asm_opts,
+                          se::DeviceMemoryBase base_ptr, int stride_bytes, int n,
+                          se::DeviceMemoryBase ptrs_out) {
++#if !GOOGLE_SYCL
+ #if TENSORFLOW_USE_ROCM
+   stream_executor::gpu::rocm_MakeBatchPointers(
+       se::gpu::AsGpuStreamValue(stream),
+@@ -177,8 +178,9 @@ Status MakeBatchPointers(se::Stream* stream, const se::GpuAsmOpts& asm_opts,
+                          se::BlockDim(CeilOfRatio(n, kThreads), 1, 1), *kernel,
+                          base_ptr, stride_bytes, n, ptrs_out));
+ #endif
++#endif // !GOOGLE_SYCL
+   return OkStatus();
+ }
+ 
+ }  // namespace gpu
+-}  // namespace xla
++}  // namespace xla
+\ No newline at end of file
 diff --git a/xla/service/gpu/runtime3/BUILD b/xla/service/gpu/runtime3/BUILD
 index 6a66dd62f..6865d21aa 100644
 --- a/xla/service/gpu/runtime3/BUILD
@@ -2238,113 +2320,44 @@ index 6a66dd62f..6865d21aa 100644
          "//xla:types",
          "//xla:util",
 diff --git a/xla/service/gpu/runtime3/cholesky_thunk.cc b/xla/service/gpu/runtime3/cholesky_thunk.cc
-index b00d8ee29..805a2e1ef 100644
+index b00d8ee29..adc0c66d8 100644
 --- a/xla/service/gpu/runtime3/cholesky_thunk.cc
 +++ b/xla/service/gpu/runtime3/cholesky_thunk.cc
-@@ -33,7 +33,7 @@ namespace xla {
+@@ -33,11 +33,11 @@ namespace xla {
  namespace gpu {
  
  namespace {
 -
-+#if !GOOGLE_SYCL
  template <typename T>
  Status DoPotrfBatched(const se::GpuAsmOpts& asm_opts, CholeskyParams* params,
                        se::Stream* stream, GpuSolverContext& context) {
-@@ -61,7 +61,36 @@ Status DoPotrfBatched(const se::GpuAsmOpts& asm_opts, CholeskyParams* params,
+   T* a_base = static_cast<T*>(params->a_buffer.opaque());
++#if !GOOGLE_SYCL
+   se::DeviceMemory<int> infos(params->info_buffer);
+ #if TENSORFLOW_USE_ROCSOLVER
+   // hipsolver is not supported so allocate a GPU buffer
+@@ -60,8 +60,11 @@ Status DoPotrfBatched(const se::GpuAsmOpts& asm_opts, CholeskyParams* params,
+   // Now that we've set up the `as` array, we can call cusolver.
    return context.PotrfBatched(params->uplo, params->n, as, params->n, infos,
                                params->batch_size);
++#else // !GOOGLE_SYCL
++  return context.PotrfBatched(params->uplo, params->n, params->n,
++                              params->batch_size, &(params->workspace_buffer), a_base);  
++#endif // !GOOGLE_SYCL
  }
 -
-+#else // !GOOGLE_SYCL
-+template <typename T>
-+Status DoPotrfBatched(CholeskyParams* params, se::Stream* stream) {
-+  auto gpu_stream = stream_executor::gpu::AsGpuStreamValue(stream);
-+  T* a_base = static_cast<T*>(params->a_buffer.opaque());
-+  T* scratch_data = static_cast<T*>(params->workspace_buffer.opaque());
-+  int64_t scratchpad_size = params->workspace_buffer.size() / sizeof(T);
-+
-+  const int64_t stride_a = params->n * params->n;
-+  auto lda = params->n;
-+  try {
-+    oneapi::mkl::lapack::potrf_batch(*gpu_stream, params->uplo, params->n,
-+                                     a_base, lda, stride_a, params->batch_size,
-+                                     scratch_data, scratchpad_size);
-+  } catch (oneapi::mkl::lapack::batch_error const& be) {
-+    int i = 0;
-+    auto& ids = be.ids();
-+    for (auto const& e : be.exceptions()) {
-+      try {
-+        std::rethrow_exception(e);
-+      } catch (oneapi::mkl::lapack::exception& e) {
-+        LOG(ERROR) << "Exception " << ids[i++]
-+                   << " in a batch says: " << e.what()
-+                   << " (info code: " << e.info() << ")";
-+      }
-+    }
-+  }
-+  return OkStatus();
-+}
-+#endif // !GOOGLE_SYCL
  }  // namespace
  
  CholeskyThunk::CholeskyThunk(ThunkInfo thunk_info,
-@@ -73,8 +102,12 @@ CholeskyThunk::CholeskyThunk(ThunkInfo thunk_info,
-                              PrimitiveType type, int64_t batch_size, int64_t n)
-     : Thunk(Kind::kCholesky, thunk_info),
-       asm_opts_(asm_opts),
-+#if !GOOGLE_SYCL
-       uplo_(options.lower() ? se::blas::UpperLower::kLower
-                             : se::blas::UpperLower::kUpper),
-+#else // !GOOGLE_SYCL
-+      uplo_(options.lower() ? oneapi::mkl::uplo::L : oneapi::mkl::uplo::U),
-+#endif // !GOOGLE_SYCL
-       a_buffer_(a_buffer),
-       workspace_buffer_(workspace_buffer),
-       info_buffer_(info_buffer),
-@@ -84,7 +117,11 @@ CholeskyThunk::CholeskyThunk(ThunkInfo thunk_info,
- 
- Status CholeskyThunk::ExecuteOnStream(const ExecuteParams& params) {
-   VLOG(3) << "type=" << PrimitiveType_Name(type_)
-+#if !GOOGLE_SYCL
-           << " uplo=" << se::blas::UpperLowerString(uplo_)
-+#else // !GOOGLE_SYCL
-+          << " uplo=" << UpperLowerString(uplo_)
-+#endif // !GOOGLE_SYCL
-           << " batch_size=" << batch_size_ << " n=" << n_
-           << " a=" << a_buffer_.ToString()
-           << " workspace=" << workspace_buffer_.ToString()
-@@ -103,6 +140,7 @@ Status CholeskyThunk::ExecuteOnStream(const ExecuteParams& params) {
- 
- Status RunCholesky(const se::GpuAsmOpts& asm_opts, PrimitiveType type,
-                    CholeskyParams* cholesky_params, se::Stream* stream) {
-+#if !GOOGLE_SYCL
-   thread_local StatusOr<GpuSolverContext> context = GpuSolverContext::Create();
-   TF_RETURN_IF_ERROR(context.status());
-   TF_RETURN_IF_ERROR(context->SetStream(stream));
-@@ -123,6 +161,21 @@ Status RunCholesky(const se::GpuAsmOpts& asm_opts, PrimitiveType type,
-       return InvalidArgument("Invalid type for cholesky %s",
-                              PrimitiveType_Name(type));
-   }
-+#else // !GOOGLE_SYCL
-+  switch (type) {
-+    case F32:
-+      return DoPotrfBatched<float>(cholesky_params, stream);
-+    case F64:
-+      return DoPotrfBatched<double>(cholesky_params, stream);
-+    case C64:
-+      return DoPotrfBatched<std::complex<float>>(cholesky_params, stream);
-+    case C128:
-+      return DoPotrfBatched<std::complex<double>>(cholesky_params, stream);
-+    default:
-+      return InvalidArgument("Invalid type for cholesky %s",
-+                             PrimitiveType_Name(type));
-+  }
-+#endif // !GOOGLE_SYCL
+@@ -126,4 +129,4 @@ Status RunCholesky(const se::GpuAsmOpts& asm_opts, PrimitiveType type,
  }
  
  }  // namespace gpu
+-}  // namespace xla
++}  // namespace xla
+\ No newline at end of file
 diff --git a/xla/service/gpu/runtime3/cholesky_thunk.h b/xla/service/gpu/runtime3/cholesky_thunk.h
-index f226a25f7..5c3ce7b75 100644
+index f226a25f7..19b9f7c87 100644
 --- a/xla/service/gpu/runtime3/cholesky_thunk.h
 +++ b/xla/service/gpu/runtime3/cholesky_thunk.h
 @@ -30,6 +30,11 @@ limitations under the License.
@@ -2359,30 +2372,13 @@ index f226a25f7..5c3ce7b75 100644
  namespace xla {
  namespace gpu {
  
-@@ -55,7 +60,11 @@ class CholeskyThunk : public Thunk {
+@@ -80,4 +85,4 @@ Status RunCholesky(const se::GpuAsmOpts& asm_opts, PrimitiveType type,
+ }  // namespace gpu
+ }  // namespace xla
  
-  private:
-   se::GpuAsmOpts asm_opts_;
-+#if !GOOGLE_SYCL
-   se::blas::UpperLower uplo_;
-+#else
-+  oneapi::mkl::uplo uplo_;
-+#endif
- 
-   const BufferAllocation::Slice a_buffer_;
-   const BufferAllocation::Slice workspace_buffer_;
-@@ -69,7 +78,11 @@ class CholeskyThunk : public Thunk {
- struct CholeskyParams {
-   int64_t n;
-   int64_t batch_size;
-+#if !GOOGLE_SYCL
-   se::blas::UpperLower uplo;
-+#else // !GOOGLE_SYCL
-+  oneapi::mkl::uplo uplo;
-+#endif // !GOOGLE_SYCL
-   se::DeviceMemoryBase a_buffer;
-   se::DeviceMemoryBase workspace_buffer;
-   se::DeviceMemoryBase info_buffer;
+-#endif  // XLA_SERVICE_GPU_RUNTIME3_CHOLESKY_THUNK_H_
++#endif  // XLA_SERVICE_GPU_RUNTIME3_CHOLESKY_THUNK_H_
+\ No newline at end of file
 diff --git a/xla/service/gpu/runtime3/custom_call_thunk.cc b/xla/service/gpu/runtime3/custom_call_thunk.cc
 index b53a258a5..d6471080a 100644
 --- a/xla/service/gpu/runtime3/custom_call_thunk.cc
