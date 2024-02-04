@@ -29,7 +29,7 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-struct CclCollectivePermuteConfig {
+struct NcclCollectivePermuteConfig {
   // During a collective permute, every node optionally sends its data to
   // another node (including possibly itself) and received data from another
   // node. For each node, remember who it receives data from (source) and who
@@ -54,13 +54,13 @@ struct CclCollectivePermuteConfig {
     return SourceTargetMapEntry{};
   }
 
-  CclCollectiveConfig config;
+  NcclCollectiveConfig config;
   IdToSourceTargetMap id_to_source_target;
 };
 
-class CclCollectivePermuteStartThunk : public CclCollectiveThunk {
+class NcclCollectivePermuteStartThunk : public NcclCollectiveThunk {
  public:
-  static CclCollectivePermuteConfig GetCclCollectivePermuteConfig(
+  static NcclCollectivePermuteConfig GetNcclCollectivePermuteConfig(
       mlir::lmhlo_gpu::CollectivePermuteStartOp op, int64_t replica_count,
       int64_t partition_count);
 
@@ -73,23 +73,24 @@ class CclCollectivePermuteStartThunk : public CclCollectiveThunk {
       mlir::lmhlo_gpu::CollectivePermuteStartOp op);
   static const char* GetHloOpName() { return "collective-permute-start"; }
 
-  CclCollectivePermuteStartThunk(ThunkInfo thunk_info,
-                                 mlir::lmhlo_gpu::CollectivePermuteStartOp op,
-                                 int64_t replica_count, int64_t partition_count,
-                                 const Buffer& buffer);
+  NcclCollectivePermuteStartThunk(ThunkInfo thunk_info,
+                                  mlir::lmhlo_gpu::CollectivePermuteStartOp op,
+                                  int64_t replica_count,
+                                  int64_t partition_count,
+                                  const Buffer& buffer);
 
  protected:
-  const CclCollectiveConfig& config() const override { return config_.config; }
-  Status RunCclCollective(const ExecuteParams& params, se::Stream& stream,
-                          ncclComm_t comm) override;
+  const NcclCollectiveConfig& config() const override { return config_.config; }
+  Status RunNcclCollective(const ExecuteParams& params, se::Stream& stream,
+                           ncclComm_t comm) override;
 
  private:
-  const CclCollectivePermuteConfig config_;
+  const NcclCollectivePermuteConfig config_;
   const Buffer buffer_;
 };
 
 Status RunCollectivePermute(
-    CclCollectivePermuteConfig::SourceTargetMapEntry source_target,
+    NcclCollectivePermuteConfig::SourceTargetMapEntry source_target,
     DeviceBufferPair& buffer, se::Stream& stream, ncclComm_t comm,
     absl::string_view device_string, int64_t current_id);
 

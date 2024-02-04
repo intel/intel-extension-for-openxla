@@ -36,13 +36,14 @@ using mlir::lmhlo_gpu::AllGatherStartOp;
 
 namespace impl {
 template <typename OpT>
-CclAllGatherConfig GetCclAllGatherConfig(OpT op) {
-  CclAllGatherConfig config;
-  config.config = GetCclCollectiveConfigForMlir(op, op.getUseGlobalDeviceIds());
+NcclAllGatherConfig GetNcclAllGatherConfig(OpT op) {
+  NcclAllGatherConfig config;
+  config.config =
+      GetNcclCollectiveConfigForMlir(op, op.getUseGlobalDeviceIds());
   return config;
 }
 Status CheckImplementable(AllGatherStartOp op) {
-  TF_RETURN_IF_ERROR(CclCollectiveThunk::CheckImplementable());
+  TF_RETURN_IF_ERROR(NcclCollectiveThunk::CheckImplementable());
   for (mlir::Value operand : op.getInputs()) {
     TF_RETURN_IF_ERROR(IsValidOperand(operand, Thunk::kNcclAllGather));
     Shape shape = GetShape(operand);
@@ -64,8 +65,8 @@ Status RunAllGather(std::vector<DeviceBufferPair>& buffers, se::Stream& stream,
   VLOG(3) << "Performing all-gather from device ordinal: " << device_ordinal;
 
   se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(&stream);
-
-  for (size_t i = 0; i < buffers.size(); ++i) {
+  int buffer_size = buffers.size();
+  for (size_t i = 0; i < buffer_size; ++i) {
     DeviceBufferPair& buffer = buffers[i];
     const void* send_buffer = buffer.source_buffer.opaque();
     void* recv_buffer = buffer.destination_buffer.opaque();
@@ -81,44 +82,44 @@ Status RunAllGather(std::vector<DeviceBufferPair>& buffers, se::Stream& stream,
         gpu_stream);
 
     sycl_allgather(send_buffer, recv_buffer, element_count, element_type,
-                   gpu_stream, comm);
+                   gpu_stream, comm, i, buffer_size);
   }
 
   VLOG(3) << "Done performing all-gather for ordinal: " << device_ordinal;
   return OkStatus();
 }
 
-CclAllGatherStartThunk::CclAllGatherStartThunk(
+NcclAllGatherStartThunk::NcclAllGatherStartThunk(
     ThunkInfo thunk_info, AllGatherStartOp op,
-    std::vector<CclCollectiveThunk::Buffer> buffers)
-    : CclCollectiveThunk(Thunk::kNcclAllGatherStart, thunk_info,
-                         op.getIsSync()),
-      config_(impl::GetCclAllGatherConfig(op)),
+    std::vector<NcclCollectiveThunk::Buffer> buffers)
+    : NcclCollectiveThunk(Thunk::kNcclAllGatherStart, thunk_info,
+                          op.getIsSync()),
+      config_(impl::GetNcclAllGatherConfig(op)),
       buffers_(std::move(buffers)) {
   CHECK_EQ(config_.config.operand_count, buffers_.size());
 }
 
-/*static*/ Status CclAllGatherStartThunk::CheckImplementable(
+/*static*/ Status NcclAllGatherStartThunk::CheckImplementable(
     AllGatherStartOp op, int64_t replica_count, int64_t partition_count) {
-  return AddOpDescription<CclAllGatherStartThunk>(
+  return AddOpDescription<NcclAllGatherStartThunk>(
       impl::CheckImplementable(op), op, replica_count, partition_count);
 }
 
-/*static*/ bool CclAllGatherStartThunk::IsDegenerate(
+/*static*/ bool NcclAllGatherStartThunk::IsDegenerate(
     mlir::lmhlo_gpu::AllGatherStartOp op, int64_t replica_count,
     int64_t partition_count) {
-  return impl::GetCclAllGatherConfig(op).config.IsDegenerate(replica_count,
-                                                             partition_count);
+  return impl::GetNcclAllGatherConfig(op).config.IsDegenerate(replica_count,
+                                                              partition_count);
 }
 
-/*static*/ CollectiveOpGroupMode CclAllGatherStartThunk::GetGroupMode(
+/*static*/ CollectiveOpGroupMode NcclAllGatherStartThunk::GetGroupMode(
     mlir::lmhlo_gpu::AllGatherStartOp op) {
-  return impl::GetCclAllGatherConfig(op).config.group_mode;
+  return impl::GetNcclAllGatherConfig(op).config.group_mode;
 }
 
-Status CclAllGatherStartThunk::RunCclCollective(const ExecuteParams& params,
-                                                se::Stream& stream,
-                                                ncclComm_t comm) {
+Status NcclAllGatherStartThunk::RunNcclCollective(const ExecuteParams& params,
+                                                  se::Stream& stream,
+                                                  ncclComm_t comm) {
   TF_ASSIGN_OR_RETURN(
       std::vector<DeviceBufferPair> device_buffers,
       ConvertToDeviceBuffers(params, buffers_,

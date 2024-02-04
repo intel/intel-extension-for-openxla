@@ -23,10 +23,8 @@ limitations under the License.
 
 #include "dnnl.hpp"       // NOLINT(build/include_subdir)
 #include "dnnl_sycl.hpp"  // NOLINT(build/include_subdir)
-#include "tsl/framework/numeric_types.h"
-#include "tsl/platform/types.h"
 #include "tsl/util/env_var.h"
-#include "xla/stream_executor/sycl/sycl_types.h"
+#include "xla/stream_executor/gpu/gpu_types.h"
 
 namespace xla {
 inline dnnl::memory::dims CalculateTFStrides(
@@ -37,55 +35,6 @@ inline dnnl::memory::dims CalculateTFStrides(
     strides[d] = strides[d + 1] * dims_tf_order[d + 1];
   }
   return strides;
-}
-
-/// Return oneDNN data type (memory::data_type) for input type T
-///
-/// @input None
-/// @return dnnl::memory::data_type corresponding to type T
-template <typename T>
-inline dnnl::memory::data_type OneDnnType();
-
-/// Instantiation for float type. Add similar instantiations for other
-/// type if needed.
-template <>
-inline dnnl::memory::data_type OneDnnType<float>() {
-  return dnnl::memory::data_type::f32;
-}
-
-template <>
-inline dnnl::memory::data_type OneDnnType<double>() {
-  return dnnl::memory::data_type::f64;
-}
-
-template <>
-inline dnnl::memory::data_type OneDnnType<Eigen::half>() {
-  return dnnl::memory::data_type::f16;
-}
-
-template <>
-inline dnnl::memory::data_type OneDnnType<tsl::quint8>() {
-  return dnnl::memory::data_type::u8;
-}
-
-template <>
-inline dnnl::memory::data_type OneDnnType<tsl::uint8>() {
-  return dnnl::memory::data_type::u8;
-}
-
-template <>
-inline dnnl::memory::data_type OneDnnType<tsl::qint8>() {
-  return dnnl::memory::data_type::s8;
-}
-
-template <>
-inline dnnl::memory::data_type OneDnnType<tsl::qint32>() {
-  return dnnl::memory::data_type::s32;
-}
-
-template <>
-inline dnnl::memory::data_type OneDnnType<Eigen::bfloat16>() {
-  return dnnl::memory::data_type::bf16;
 }
 
 static dnnl::engine& FindOrCreateEngine(se::gpu::GpuStreamHandle stream) {
@@ -103,8 +52,8 @@ static dnnl::engine& FindOrCreateEngine(se::gpu::GpuStreamHandle stream) {
 
 inline dnnl::fpmath_mode GetFP32MathMode() {
   std::string fp32_math_mode = "fp32";
-  TF_CHECK_OK(tsl::ReadStringFromEnvVar("ITEX_FP32_MATH_MODE", "fp32",
-                                        &fp32_math_mode));
+  TF_CHECK_OK(
+      tsl::ReadStringFromEnvVar("XLA_FP32_MATH_MODE", "fp32", &fp32_math_mode));
   fp32_math_mode = tsl::str_util::Lowercase(fp32_math_mode);
   if (fp32_math_mode == "fp32") {
     return dnnl::fpmath_mode::strict;
@@ -116,7 +65,7 @@ inline dnnl::fpmath_mode GetFP32MathMode() {
     LOG(FATAL) << "Did not support BF32 math mode on GPU ";
   }
   LOG(FATAL)
-      << "Invalid ITEX_FP32_MATH_MODE, should be FP32, TF32 or BF32, but got "
+      << "Invalid XLA_FP32_MATH_MODE, should be FP32, TF32 or BF32, but got "
       << fp32_math_mode;
 }
 

@@ -42,61 +42,8 @@ Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
                se::DeviceMemoryBase rhs_buffer, se::DeviceMemoryBase add_buffer,
                se::DeviceMemoryBase output_buffer,
                se::DeviceMemoryBase bias_buffer, se::Stream* stream,
+               se::gpu::BlasLt::Epilogue epilogue,
                se::ScratchAllocator* scratch_allocator = nullptr);
-
-namespace cublas_lt {
-
-StatusOr<se::cuda::BlasLt::Epilogue> AsBlasLtEpilogue(
-    mlir::lmhlo_gpu::CublasLtMatmulEpilogue epilogue);
-
-class MatmulPlan {
- public:
-  template <typename CublasLtMatmulMaybeF8Op,
-            typename = std::enable_if<
-                std::is_same<CublasLtMatmulMaybeF8Op,
-                             mlir::lmhlo_gpu::CublasLtMatmulOp>::value ||
-                std::is_same<CublasLtMatmulMaybeF8Op,
-                             mlir::lmhlo_gpu::CublasLtMatmulF8Op>::value>>
-  static StatusOr<GemmConfig> For(CublasLtMatmulMaybeF8Op op) {
-    mlir::mhlo::DotDimensionNumbersAttr dot_dims = op.getDotDimensionNumbers();
-
-    int64_t compute_precision = 0;  // Default
-    if (op.getPrecisionConfig().has_value()) {
-      auto precision_config = op.getPrecisionConfig();
-      for (auto attr : precision_config.value()) {
-        int64_t value = static_cast<int64_t>(
-            attr.template cast<mlir::mhlo::PrecisionAttr>().getValue());
-        if (value > compute_precision) {
-          compute_precision = value;
-        }
-      }
-    }
-
-    Shape bias_shape;
-    if (op.getBias() != nullptr) {
-      bias_shape = GetShape(op.getBias());
-    }
-    TF_ASSIGN_OR_RETURN(
-        GemmConfig config,
-        GemmConfig::For(
-            GetShape(op.getA()), dot_dims.getLhsBatchingDimensions(),
-            dot_dims.getLhsContractingDimensions(), GetShape(op.getB()),
-            dot_dims.getRhsBatchingDimensions(),
-            dot_dims.getRhsContractingDimensions(), GetShape(op.getC()),
-            op.getBias() == nullptr ? nullptr : &bias_shape,
-            GetShape(op.getD()), op.getAlphaReal().convertToDouble(),
-            op.getAlphaImag().convertToDouble(), op.getBeta().convertToDouble(),
-            op.getAlgorithm(), compute_precision));
-
-    TF_ASSIGN_OR_RETURN(se::cuda::BlasLt::Epilogue epilogue,
-                        AsBlasLtEpilogue(op.getEpilogue()));
-    // return From(config, epilogue);
-    config.epilogue = epilogue;
-    return config;
-  }
-};
-
-}  // namespace cublas_lt
 
 }  // namespace gpu
 }  // namespace xla

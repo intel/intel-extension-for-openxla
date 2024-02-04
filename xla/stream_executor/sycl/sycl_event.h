@@ -18,46 +18,14 @@ limitations under the License.
 #ifndef XLA_STREAM_EXECUTOR_SYCL_SYCL_EVENT_H_
 #define XLA_STREAM_EXECUTOR_SYCL_SYCL_EVENT_H_
 
-#include "tsl/platform/status.h"
-#include "xla/stream_executor/event.h"
-#include "xla/stream_executor/sycl/sycl_stream.h"
+#include "xla/stream_executor/gpu/gpu_event.h"
 
 namespace stream_executor {
-namespace gpu {
+namespace sycl {
 
-// GpuEvent wraps a GpuEventHandle in the platform-independent EventInterface
-// interface.
-class GpuEvent : public internal::EventInterface {
- public:
-  explicit GpuEvent(GpuExecutor* parent);
+using SYCLEvent = gpu::GpuEvent;
 
-  ~GpuEvent() override;
-
-  // Populates the CUDA-platform-specific elements of this object.
-  tsl::Status Init();
-
-  // Deallocates any platform-specific elements of this object. This is broken
-  // out (not part of the destructor) to allow for error reporting.
-  tsl::Status Destroy();
-
-  // Inserts the event at the current position into the specified stream.
-  tsl::Status Record(GpuStream* stream);
-
-  // Polls the CUDA platform for the event's current status.
-  Event::Status PollForStatus();
-
-  // The underlying CUDA event element.
-  GpuEventHandle gpu_event();
-
- private:
-  // The Executor used to which this object and GpuEventHandle are bound.
-  GpuExecutor* parent_;
-
-  // The underlying CUDA event element.
-  GpuEventHandle gpu_event_;
-};
-
-}  // namespace gpu
+}  // namespace sycl
 }  // namespace stream_executor
 
 #endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_EVENT_H_

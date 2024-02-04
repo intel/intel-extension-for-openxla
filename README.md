@@ -26,27 +26,29 @@ This guide introduces the overview of OpenXLA high level integration structure a
 
 Verified Hardware Platforms:
 
-* Intel® Data Center GPU Max Series, Driver Version: [682](https://dgpu-docs.intel.com/releases/production_682.14_20230804.html)
+* Intel® Data Center GPU Max Series, Driver Version: [775](https://dgpu-docs.intel.com/releases/stable_775_20_20231219.html)
 
-* Intel® Data Center GPU Flex Series 170, Driver Version: [682](https://dgpu-docs.intel.com/releases/production_682.14_20230804.html)
+* Intel® Data Center GPU Flex Series 170, Driver Version: [775](https://dgpu-docs.intel.com/releases/stable_775_20_20231219.html)
 
 ### Software Requirements
 
-* Ubuntu 22.04, Red Hat 8.6/8.8/9.2 (64-bit)
+* Ubuntu 22.04 (64-bit)
   * Intel® Data Center GPU Flex Series
-* Ubuntu 22.04, Red Hat 8.6/8.8/9.2 (64-bit), SUSE Linux Enterprise Server(SLES) 15 SP4
+* Ubuntu 22.04, SUSE Linux Enterprise Server(SLES) 15 SP4
   * Intel® Data Center GPU Max Series
-* Intel® oneAPI Base Toolkit 2023.1
-* Jax/Jaxlib 0.4.13
+* Intel® oneAPI Base Toolkit 2024.0
+* Jax/Jaxlib 0.4.20
 * Python 3.9-3.11
 * pip 19.0 or later (requires manylinux2014 support)
+
+**NOTE: Since Jax has its own [platform limitation](https://jax.readthedocs.io/en/latest/installation.html#supported-platforms) (Ubuntu 20.04 or later), real software requirements is restricted when works with Jax.**
 
 ### Install Intel GPU Drivers
 
 |OS|Intel GPU|Install Intel GPU Driver|
 |-|-|-|
-|Ubuntu 22.04, Red Hat 8.6/8.8/9.2|Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-flex-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [682](https://dgpu-docs.intel.com/releases/production_682.14_20230804.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.22.26516.25-682~22.04`|
-|Ubuntu 22.04, Red Hat 8.6/8.8/9.2, SLES 15 SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-max-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [682](https://dgpu-docs.intel.com/releases/production_682.14_20230804.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.22.26516.25-682~22.04`|
+|Ubuntu 22.04 |Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-flex-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [775](https://dgpu-docs.intel.com/releases/stable_775_20_20231219.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.35.27191.42-775~22.04`|
+|Ubuntu 22.04, SLES 15 SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-max-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [775](https://dgpu-docs.intel.com/releases/stable_775_20_20231219.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.35.27191.42-775~22.04`|
 
 ### Install oneAPI Base Toolkit Packages
 
@@ -57,13 +59,19 @@ Need to install components of Intel® oneAPI Base Toolkit:
 * Intel® oneAPI Threading Building Blocks (TBB), dependency of DPC++ Compiler.
 
 ```bash
-wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/7deeaac4-f605-4bcf-a81b-ea7531577c61/l_BaseKit_p_2023.1.0.46401_offline.sh
-sudo sh ./l_BaseKit_p_2023.1.0.46401_offline.sh
+wget https://registrationcenter-download.intel.com/akdlm//IRC_NAS/20f4e6a1-6b0b-4752-b8c1-e5eacba10e01/l_BaseKit_p_2024.0.0.49564.sh
+# 2 components are necessary: DPC++/C++ Compiler and oneMKL
+sudo sh l_BaseKit_p_2024.0.0.49564.sh
 
 # Source OneAPI env
-source /opt/intel/oneapi/compiler/2023.1.0/env/vars.sh
-source /opt/intel/oneapi/mkl/2023.1.0/env/vars.sh
-source /opt/intel/oneapi/tbb/2021.9.0/env/vars.sh
+source /opt/intel/oneapi/compiler/2024.0/env/vars.sh
+source /opt/intel/oneapi/mkl/2024.0/env/vars.sh
+```
+
+### Install Jax and Jaxlib
+
+```bash
+pip install jax==0.4.20 jaxlib==0.4.20
 ```
 
 ## 3. Install
@@ -76,13 +84,13 @@ pip install --upgrade intel-extension-for-openxla
 
 ### Install from Source Build
 
+**NOTE: Extra software (GCC 10.0.0 or later) is required if want to build from source.**
 ```bash
 git clone https://github.com/intel/intel-extension-for-openxla.git
-pip install jax==0.4.13 jaxlib==0.4.13
 ./configure        # Choose Yes for all.
 bazel build //xla/tools/pip_package:build_pip_package
 ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-pip install intel_extension_for_openxla-0.1.0-cp39-cp39-linux_x86_64.whl
+pip install intel_extension_for_openxla-0.2.0-cp39-cp39-linux_x86_64.whl
 ```
 
 **Aditional Build Option**:
@@ -150,4 +158,12 @@ jax.local_devices():  [xpu(id=0), xpu(id=1)]
 
     ```bash
     conda install libstdcxx-ng==12.2.0 -c conda-forge
+    ```
+
+3. If there is an error '/usr/bin/ld: cannot find -lstdc++: No such file or directory' during source build under Ubuntu 22.04, check the selected GCC-toolchain path and the installed libstdc++.so library path, then create symbolic link of the selected GCC-toolchain path to the libstdc++.so path, for example:
+    ```bash
+    icx -v # For example, the output of the "Selected GCC installation" is "/usr/lib/gcc/x86_64-linux-gnu/12".
+    sudo apt install plocate
+    locate libstdc++.so |grep /usr/lib/ # For example, the output of the library path is "/usr/lib/x86_64-linux-gnu/libstdc++.so.6".
+    sudo ln -s /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /usr/lib/gcc/x86_64-linux-gnu/12/libstdc++.so
     ```

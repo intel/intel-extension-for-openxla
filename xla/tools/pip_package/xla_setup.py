@@ -38,7 +38,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'jax_p
 # result for pip.
 # Also update xla/xla.bzl
 # _VERSION = __version__
-_VERSION = "0.1.0"
+_VERSION = "0.2.1"
 
 REQUIRED_PACKAGES = []
 
@@ -48,13 +48,15 @@ if "--weekly_build" in sys.argv:
         today_number = date.today().strftime("%Y%m%d")
         DEV_VERSION_SUFFIX = ".dev" + today_number
         sys.argv.remove("--weekly_build")
-        project_name = "itex_lib_weekly"
+        project_name = "xla_lib_weekly"
 if '--project_name' in sys.argv:
   project_name_idx = sys.argv.index('--project_name')
   project_name = sys.argv[project_name_idx + 1] + "_lib"
   sys.argv.remove('--project_name')
   sys.argv.pop(project_name_idx)
 REQUIRED_PACKAGES.append('wheel')
+REQUIRED_PACKAGES.append('numpy>=1.24.0')
+REQUIRED_PACKAGES.append('scipy<1.12.0')
 CONSOLE_SCRIPTS = []
 
 _ext_path = 'jax_plugins.intel_extension_for_openxla'

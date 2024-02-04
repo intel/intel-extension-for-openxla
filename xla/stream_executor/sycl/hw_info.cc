@@ -18,56 +18,71 @@ limitations under the License.
 #include <string>
 
 const int32_t XeHPC_id = 0xbd0;
-const char* const XeHPC_name = "0x0bd";
-const char* const XeHPC_name_new = "Data Center GPU Max";
+const int32_t XeHPC_id_2 = 0xb60;
 
-bool IsXeHPC(sycl::device* device_ptr) {
+// PVC 1550VG does not have XeMatrix engine, we distinguish it from other PVCs
+// by device id.
+const int32_t XeHPC_no_xmx_id = 0xbd4;
+
+bool IsXeHPC(const sycl::device* device_ptr) {
   if (device_ptr == nullptr) {
     auto platform_list = sycl::platform::get_platforms();
     for (const auto& platform : platform_list) {
       auto device_list = platform.get_devices();
       for (const auto& device : device_list) {
         if (device.is_gpu()) {
-#if defined(SYCL_EXT_INTEL_DEVICE_INFO) && (SYCL_EXT_INTEL_DEVICE_INFO >= 5)
           auto id =
               device.get_info<sycl::ext::intel::info::device::device_id>();
-          if ((id & 0xff0) == XeHPC_id) {
+          if ((id & 0xff0) == XeHPC_id || (id & 0xff0) == XeHPC_id_2) {
             return true;
           }
-#else
-          std::string name = device.get_info<sycl::info::device::name>();
-          if (name.find(XeHPC_name) != std::string::npos ||
-              name.find(XeHPC_name_new) != std::string::npos) {
-            return true;
-          }
-#endif
         }
       }
     }
   } else {
-#if defined(SYCL_EXT_INTEL_DEVICE_INFO) && (SYCL_EXT_INTEL_DEVICE_INFO >= 5)
     auto id = device_ptr->get_info<sycl::ext::intel::info::device::device_id>();
-    if ((id & 0xff0) == XeHPC_id) {
+    if ((id & 0xff0) == XeHPC_id || (id & 0xff0) == XeHPC_id_2) {
       return true;
     }
-#else
-    std::string name = device_ptr->get_info<sycl::info::device::name>();
-    if (name.find(XeHPC_name) != std::string::npos ||
-        name.find(XeHPC_name_new) != std::string::npos) {
-      return true;
+  }
+  return false;
+}
+
+// TODO(intel): use sycl api like `devices.has(sycl::aspect::ext_intel_matrix)`
+// instead of device id once compiler supports XMX query interface.
+bool HasXMX(const sycl::device* device_ptr) {
+  if (device_ptr == nullptr) {
+    auto platform_list = sycl::platform::get_platforms();
+    for (const auto& platform : platform_list) {
+      auto device_list = platform.get_devices();
+      for (const auto& device : device_list) {
+        if (device.is_gpu()) {
+          auto id =
+              device.get_info<sycl::ext::intel::info::device::device_id>();
+          if (IsXeHPC(&device)) {
+            if (id == XeHPC_no_xmx_id) {
+              return false;
+            } else {
+              return true;
+            }
+          }
+        }
+      }
     }
-#endif
+  } else {
+    auto id = device_ptr->get_info<sycl::ext::intel::info::device::device_id>();
+    if (IsXeHPC(device_ptr)) {
+      if (id == XeHPC_no_xmx_id) {
+        return false;
+      } else {
+        return true;
+      }
+    }
   }
   return false;
 }
 
 bool IsXetlaHardwareSupport() {
-// TODO: there is bug for __LIBSYCL_MINOR_VERSION == 2.
-// Remove once it is fixed
-#if __LIBSYCL_MINOR_VERSION == 1
-  static bool flag = IsXeHPC(nullptr);
+  static bool flag = IsXeHPC(nullptr) && HasXMX(nullptr);
   return flag;
-#else
-  return false;
-#endif
 }

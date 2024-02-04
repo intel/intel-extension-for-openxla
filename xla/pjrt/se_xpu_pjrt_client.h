@@ -24,6 +24,12 @@ limitations under the License.
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/statusor.h"
 
+namespace stream_executor {
+
+class MultiDeviceAdapter;
+
+}
+
 namespace xla {
 
 class StreamExecutorXpuDevice : public PjRtStreamExecutorDevice {
@@ -48,7 +54,8 @@ StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorXpuClient(
     std::optional<std::string> platform_name = std::nullopt,
     bool should_stage_host_to_device_transfers = true,
     PjRtClient::KeyValueGetCallback kv_get = nullptr,
-    PjRtClient::KeyValuePutCallback kv_put = nullptr);
+    PjRtClient::KeyValuePutCallback kv_put = nullptr,
+    bool enable_mock_nccl = false);
 
 }  // namespace xla
 

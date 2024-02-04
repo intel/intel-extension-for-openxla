@@ -21,9 +21,21 @@ from flax.training.common_utils import shard
 from diffusers import FlaxStableDiffusionPipeline, FlaxDPMSolverMultistepScheduler
 import time
 from PIL import Image
+import argparse
 
-scheduler, scheduler_state = FlaxDPMSolverMultistepScheduler.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
-pipeline, params = FlaxStableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", scheduler=scheduler, revision="bf16", dtype=jax.numpy.bfloat16)
+# args
+parser = argparse.ArgumentParser("Stable diffusion generation script", add_help=False)
+parser.add_argument("-m", "--model-id", default="CompVis/stable-diffusion-v1-4", type=str, 
+    choices=["CompVis/stable-diffusion-v1-4", "stabilityai/stable-diffusion-2", "stabilityai/stable-diffusion-2-1"])
+parser.add_argument("--num-inference-steps", default=20, type=int, help="inference steps")
+parser.add_argument("--num-iter", default=10, type=int, help="num iter")
+parser.add_argument("--profile", action="store_true")
+args = parser.parse_args()
+print(args, file=sys.stderr)
+
+model_id = args.model_id
+scheduler, scheduler_state = FlaxDPMSolverMultistepScheduler.from_pretrained(model_id, subfolder="scheduler")
+pipeline, params = FlaxStableDiffusionPipeline.from_pretrained(model_id, scheduler=scheduler, revision="bf16", safety_checker=None, feature_extractor=None, dtype=jax.numpy.bfloat16)
 params["scheduler"] = scheduler_state
 
 prompt = "a photo of an astronaut riding a horse on mars"
@@ -39,15 +51,26 @@ params = replicate(params)
 prng_seed = jax.random.split(prng_seed, jax.device_count())
 prompt_ids = shard(prompt_ids)
 
-def elapsed_time(nb_pass=10, num_inference_steps=20):
+def elapsed_time(num_iter=10, num_inference_steps=20):
     # warmup
     images = pipeline(prompt_ids, params, prng_seed, num_inference_steps, jit=True).images
     start = time.time()
-    for _ in range(nb_pass):
+    if args.profile:
+        jax.profiler.start_trace("./trace")
+    for i in range(num_iter):
+        cur = time.time()
         images = pipeline(prompt_ids, params, prng_seed, num_inference_steps, jit=True).images
+        print("Latency of iter {}: {:.3f}s".format(i, time.time() - cur), file=sys.stderr)
+    if args.profile:
+        jax.profiler.stop_trace()
     end = time.time()
-    return (end - start) / nb_pass, images
+    return (end - start) / num_iter, images
 
-latency, images = elapsed_time(nb_pass=10, num_inference_steps=20)
-print("Latency per image is: {:.3f}s".format(latency), file=sys.stderr)
 
+num_inference_steps = args.num_inference_steps
+num_iter = args.num_iter
+latency, images = elapsed_time(num_iter, num_inference_steps)
+print("Average Latency per image is: {:.3f}s".format(latency), file=sys.stderr)
+images = images.reshape((images.shape[0],) + images.shape[-3:])
+images = pipeline.numpy_to_pil(images)
+images[0].save("img.png")

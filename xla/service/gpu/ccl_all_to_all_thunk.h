@@ -28,17 +28,17 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-struct CclAllToAllConfig {
-  CclCollectiveConfig config;
+struct NcclAllToAllConfig {
+  NcclCollectiveConfig config;
   bool has_split_dimension;
 };
 
 // Thunk that performs a NCCL-based All-to-All among CUDA GPU-based replicas.
-class CclAllToAllStartThunk : public CclCollectiveThunk {
+class NcclAllToAllStartThunk : public NcclCollectiveThunk {
  public:
-  CclAllToAllStartThunk(ThunkInfo thunk_info,
-                        mlir::lmhlo_gpu::AllToAllStartOp op,
-                        std::vector<Buffer> buffers);
+  NcclAllToAllStartThunk(ThunkInfo thunk_info,
+                         mlir::lmhlo_gpu::AllToAllStartOp op,
+                         std::vector<Buffer> buffers);
 
   // Returns whether the given instruction can be lowered to a nccl all-to-all
   // call.
@@ -53,19 +53,19 @@ class CclAllToAllStartThunk : public CclCollectiveThunk {
       mlir::lmhlo_gpu::AllToAllStartOp op);
 
  protected:
-  const CclCollectiveConfig& config() const override { return config_.config; }
-  Status RunCclCollective(const ExecuteParams& params, se::Stream& stream,
-                          ncclComm_t comm) override;
+  const NcclCollectiveConfig& config() const override { return config_.config; }
+  Status RunNcclCollective(const ExecuteParams& params, se::Stream& stream,
+                           ncclComm_t comm) override;
 
  private:
-  const CclAllToAllConfig config_;
+  const NcclAllToAllConfig config_;
   const std::vector<Buffer> buffers_;
 };
 
-class CclAllToAllDoneThunk : public CclCollectiveDoneThunk {
+class NcclAllToAllDoneThunk : public NcclCollectiveDoneThunk {
  public:
-  CclAllToAllDoneThunk(ThunkInfo thunk_info,
-                       CclCollectiveThunk::AsyncExecutor& async);
+  NcclAllToAllDoneThunk(ThunkInfo thunk_info,
+                        NcclCollectiveThunk::AsyncExecutor& async);
 };
 
 Status RunAllToAll(bool has_split_dimension,

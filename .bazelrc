@@ -7,31 +7,13 @@ build --announce_rc
 
 build --config=gpu
 
-# This config option is used for CPU backend.
-# build:cpu --define=build_with_onednn=true
-# build:cpu --define=build_with_graph_compiler=true
-# build:cpu --copt=-DINTEL_CPU_ONLY
-# build:cpu --copt=-march=native
-# build:cpu --cxxopt=-std=c++14
-# build:cpu --host_cxxopt=-std=c++14
-# build:cpu --define=device=cpu
-# build:cpu --config=onednn_v3
-# build:cpu -c opt
-
 # This config option is used for GPU backend.
-build:gpu --crosstool_top=@local_config_dpcpp//crosstool_dpcpp:toolchain
-build:gpu --define=using_dpcpp=true --define=using_xetla=true --define=build_with_dpcpp=true
-build:gpu --define=device=gpu
-build:gpu --config=onednn_v3
-
-# This config build with oneDNN V3 API, which is enabled by default
-build:onednn_v3 --copt=-DITEX_ONEDNN_3_0 --define=onednn_version=3
-
-# This config option is used for LLGA (OneDnnGraph) debugging
-#build:llga-debug --define=build_with_llga_debug=true
-
-# This config option is used for LLGA (OneDnnGraph) graph compiler backend,  currently only available for onednn graph v2
-# build:graph-compiler --define=build_with_graph_compiler=true
+build:gpu --crosstool_top=@local_config_sycl//crosstool:toolchain
+build:gpu --define=using_sycl=true
+build:gpu --repo_env TF_NEED_SYCL=1
+build:gpu --define=tensorflow_mkldnn_contraction_kernel=0
+build:gpu --cxxopt=-std=c++17
+build:gpu --host_cxxopt=-std=c++17
 
 build --define=use_fast_cpp_protos=true
 build --define=allow_oversize_protos=true
@@ -54,7 +36,7 @@ common --experimental_repo_remote_exec
 # Default options should come above this line
 
 # Options from ./configure
-try-import %workspace%/.itex_configure.bazelrc
+try-import %workspace%/.xla_extension_configure.bazelrc
 
 # Put user-specific options in .bazelrc.user
 try-import %workspace%/.bazelrc.user

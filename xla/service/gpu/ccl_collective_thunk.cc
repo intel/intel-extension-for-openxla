@@ -43,14 +43,14 @@ namespace gpu {
 //  - All threads that "go together" (i.e. are participating in the "same"
 //    collective op) choose the same Rendezvous object from a global map.
 //  - Once all threads have arrived at the Rendezvous, we know exactly which
-//    GPUs are participating in the op, so we get or create a CclClique
+//    GPUs are participating in the op, so we get or create a NcclClique
 //    containing those GPUs.
 //  - We perform the NCCL operation using the clique.
 
-CclCollectiveConfig::CclCollectiveConfig() = default;
-CclCollectiveConfig::CclCollectiveConfig(CclCollectiveConfig&&) = default;
-CclCollectiveConfig::~CclCollectiveConfig() = default;
-CclCollectiveConfig& CclCollectiveConfig::operator=(CclCollectiveConfig&&) =
+NcclCollectiveConfig::NcclCollectiveConfig() = default;
+NcclCollectiveConfig::NcclCollectiveConfig(NcclCollectiveConfig&&) = default;
+NcclCollectiveConfig::~NcclCollectiveConfig() = default;
+NcclCollectiveConfig& NcclCollectiveConfig::operator=(NcclCollectiveConfig&&) =
     default;
 
 // Returns if the collective communication operation is degenerate because all
@@ -71,8 +71,8 @@ CclCollectiveConfig& CclCollectiveConfig::operator=(CclCollectiveConfig&&) =
 //         degenerate if replica_groups are singleton or group emty and
 //         num_partitions == 1 (since replica groups contain partition ids).
 //
-bool CclCollectiveConfig::IsDegenerate(int64_t replica_count,
-                                       int64_t partition_count) const {
+bool NcclCollectiveConfig::IsDegenerate(int64_t replica_count,
+                                        int64_t partition_count) const {
   bool groups_empty = replica_groups.empty();
 
   // check if all replica_groups are singleton. If not, then the operation is
@@ -101,36 +101,40 @@ bool CclCollectiveConfig::IsDegenerate(int64_t replica_count,
   }
 }
 
-CclCollectiveThunk::CclCollectiveThunk(Kind kind, ThunkInfo thunk_info,
-                                       bool is_sync)
+NcclCollectiveThunk::NcclCollectiveThunk(Kind kind, ThunkInfo thunk_info,
+                                         bool is_sync)
     : Thunk(kind, thunk_info) {
   if (!is_sync) {
     async_ = std::make_unique<AsyncExecutor>();
   }
 }
 
-/* static */ bool CclCollectiveThunk::CclIsEnabled() { return true; }
+/* static */ bool NcclCollectiveThunk::NcclIsEnabled() { return true; }
 
-/* static */ Status CclCollectiveThunk::CheckImplementable() {
-  if (!CclIsEnabled()) {
+/* static */ Status NcclCollectiveThunk::CheckImplementable() {
+  if (!NcclIsEnabled()) {
     return tsl::errors::Unimplemented("NCCL is not enabled");
   }
   return OkStatus();
 }
 
-StatusOr<CclComm::Lock> LockCclComm(
+StatusOr<NcclComm::Lock> LockNcclComm(
     const NcclExecuteParams& params,
     const std::vector<ReplicaGroup>& replica_groups,
-    CollectiveOpGroupMode group_mode, int64_t op_id, int64_t stream_id) {
+    CollectiveOpGroupMode group_mode, int64_t op_id, int64_t stream_id,
+    bool enable_clique_optimization) {
   TF_ASSIGN_OR_RETURN(GlobalDeviceId global_device_id,
                       params.GetGlobalDeviceId());
-
   TF_ASSIGN_OR_RETURN(
       std::vector<GlobalDeviceId> participants,
       GetParticipatingDevices(global_device_id, *params.device_assn,
                               replica_groups, group_mode));
 
-  if (IsGlobalCclConfig() &&
+  if (participants.size() > MAX_RANK_SIZE)
+    LOG(FATAL) << "Rank size" << participants.size()
+               << "is greater than MAX_RANK_SIZE(" << MAX_RANK_SIZE << ")";
+
+  if (IsGlobalNcclConfig() &&
       (participants.size() != params.device_assn->replica_count())) {
     return InvalidArgument(
         "Partial replica groups are not allowed when using NCCL_COMM_ID "
@@ -152,18 +156,17 @@ StatusOr<CclComm::Lock> LockCclComm(
       participants, params.gpu_global_device_ids ? &local_devices : nullptr);
 
   bool is_local = participants.size() == num_local_participants;
-  TF_ASSIGN_OR_RETURN(
-      const NcclUniqueIdCallback* unique_id_callback,
-      GetNcclUniqueIdCallback(params.nccl_unique_id_callback, is_local));
+  CustomNcclUniqueIdCallback unique_id_callback(replica_groups, participants,
+                                                global_device_id);
 
-  return AcquireCclComm(params.run_id, OpId(op_id), std::move(participants),
-                        num_local_participants, *unique_id_callback, rank,
-                        stream_id);
+  return AcquireNcclComm(params.run_id, OpId(op_id), std::move(participants),
+                         num_local_participants, unique_id_callback, rank,
+                         stream_id, enable_clique_optimization);
 }
 
 StatusOr<std::vector<DeviceBufferPair>> ConvertToDeviceBuffers(
     const Thunk::ExecuteParams& params,
-    const std::vector<CclCollectiveThunk::Buffer>& buffers,
+    const std::vector<NcclCollectiveThunk::Buffer>& buffers,
     const std::vector<PrimitiveType>& element_types) {
   if (buffers.size() != element_types.size())
     return FailedPrecondition("Mismatch in operand buffer counts.");
@@ -180,26 +183,27 @@ StatusOr<std::vector<DeviceBufferPair>> ConvertToDeviceBuffers(
   }
   return device_buffers;
 }
-Status CclCollectiveThunk::ExecuteOnStream(const ExecuteParams& params) {
+Status NcclCollectiveThunk::ExecuteOnStream(const ExecuteParams& params) {
   VLOG(1) << absl::StreamFormat("Starting %s %s.", IsAsync() ? "async" : "sync",
                                 Thunk::KindToString(kind()));
   const int64_t stream_id = IsAsync() ? 1 : 0;
   TF_ASSIGN_OR_RETURN(
-      CclComm::Lock comm,
-      LockCclComm(params.nccl_params, config().replica_groups,
-                  config().group_mode, config().op_id, stream_id));
+      NcclComm::Lock comm,
+      LockNcclComm(params.nccl_params, config().replica_groups,
+                   config().group_mode, config().op_id, stream_id,
+                   /*enable_clique_optimization=*/false));
 
   // Run the collective on main stream or using the async executor.
   Status status = [&]() {
     if (!IsAsync()) {
-      return RunCclCollective(params, *params.stream, *comm);
+      return RunNcclCollective(params, *params.stream, *comm);
     }
     return async_->Execute(
         [this](const ExecuteParams& params, se::Stream& stream,
                ncclComm_t comm) {
-          return RunCclCollective(params, stream, comm);
+          return RunNcclCollective(params, stream, comm);
         },
-        params, *comm);
+        params, *comm, GetAsyncStreamKind());
   }();
   TF_RETURN_IF_ERROR(status);
 
@@ -208,14 +212,16 @@ Status CclCollectiveThunk::ExecuteOnStream(const ExecuteParams& params) {
   // continue enqueuing operations. Otherwise, the allocations can cause
   // deadlock in the CUDA driver (b/215649390).
   if (first_call_to_execute_) {
-    se::Stream* stream = IsAsync() ? params.async_comms_stream : params.stream;
+    se::Stream* stream = IsAsync()
+                             ? params.async_comms_streams[GetAsyncStreamKind()]
+                             : params.stream;
     TF_RETURN_IF_ERROR(stream->BlockHostUntilDone());
     first_call_to_execute_ = false;
   }
   return OkStatus();
 }
 
-std::string CclCollectiveThunk::GetDeviceString(
+std::string NcclCollectiveThunk::GetDeviceString(
     const NcclExecuteParams& nccl_params) {
   int device_ordinal = nccl_params.stream_executor->device_ordinal();
   GlobalDeviceId global_device_id = nccl_params.GetGlobalDeviceId().value();
@@ -226,10 +232,10 @@ std::string CclCollectiveThunk::GetDeviceString(
                          global_device_id.value(), device_ordinal);
 }
 
-Status CclCollectiveThunk::AsyncExecutor::Execute(
+Status NcclCollectiveThunk::AsyncExecutor::Execute(
     absl::FunctionRef<Status(const ExecuteParams&, se::Stream&, ncclComm_t)> fn,
-    const ExecuteParams& params, ncclComm_t comm) {
-  se::Stream& async_comms_stream = *params.async_comms_stream;
+    const ExecuteParams& params, ncclComm_t comm, AsyncStreamKind stream_kind) {
+  se::Stream& async_comms_stream = *params.async_comms_streams[stream_kind];
   // Wait until compute inputs are ready.
   async_comms_stream.ThenWaitFor(params.stream);
 
@@ -248,7 +254,7 @@ Status CclCollectiveThunk::AsyncExecutor::Execute(
   return OkStatus();
 }
 
-Status CclCollectiveThunk::AsyncExecutor::Await(const ExecuteParams& params) {
+Status NcclCollectiveThunk::AsyncExecutor::Await(const ExecuteParams& params) {
   int device_ordinal = params.stream->parent()->device_ordinal();
   auto done_event = [this, device_ordinal] {
     absl::MutexLock lock(&mu_);
@@ -259,12 +265,12 @@ Status CclCollectiveThunk::AsyncExecutor::Await(const ExecuteParams& params) {
   return OkStatus();
 }
 
-CclCollectiveDoneThunk::CclCollectiveDoneThunk(
+NcclCollectiveDoneThunk::NcclCollectiveDoneThunk(
     Thunk::Kind kind, ThunkInfo thunk_info,
-    CclCollectiveThunk::AsyncExecutor& async)
+    NcclCollectiveThunk::AsyncExecutor& async)
     : Thunk(kind, std::move(thunk_info)), async_(async) {}
 
-Status CclCollectiveDoneThunk::ExecuteOnStream(const ExecuteParams& params) {
+Status NcclCollectiveDoneThunk::ExecuteOnStream(const ExecuteParams& params) {
   return async_.Await(params);
 }
 

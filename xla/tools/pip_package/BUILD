@@ -4,15 +4,14 @@
 package(default_visibility = ["//visibility:private"])
 
 load("//xla:xla.bzl", "transitive_hdrs")
-load("@local_config_dpcpp//dpcpp:build_defs.bzl", "if_dpcpp")
 
 COMMON_PIP_DEPS = [
     "MANIFEST.in",
     "README.md",
     "xla_setup.py",
-] + if_dpcpp([
     "//xla:pjrt_plugin_xpu.so",
-])
+    "//xla/python:xpu_plugin_extension.so"
+]
 
 py_binary(
     name = "simple_console",

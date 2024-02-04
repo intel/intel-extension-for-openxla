@@ -35,19 +35,20 @@ except ImportError:
 # pylint: enable=g-import-not-at-top
 
 
-_DEFAULT_DPCPP_TOOLKIT_PATH = '/opt/intel/oneapi/compiler/latest/linux'
-_DEFAULT_MKL_PATH='/opt/intel/oneapi/mkl/latest'
+_DEFAULT_SYCL_TOOLKIT_PATH = '/opt/intel/oneapi/compiler/latest'
 _DEFAULT_AOT_CONFIG = ''
 _DEFAULT_GCC_TOOLCHAIN_PATH = ''
 _DEFAULT_GCC_TOOLCHAIN_TARGET = ''
 _DEFAULT_OCL_SDK_ROOT = ''
 
+
+
 _DEFAULT_PROMPT_ASK_ATTEMPTS = 10
 
-_ITEX_BAZELRC_FILENAME = '.itex_configure.bazelrc'
-_ITEX_WORKSPACE_ROOT = ''
-_ITEX_BAZELRC = ''
-_ITEX_CURRENT_BAZEL_VERSION = None
+_XLA_EXTENSION_BAZELRC_FILENAME = '.xla_extension_configure.bazelrc'
+_XLA_EXTENSION_WORKSPACE_ROOT = ''
+_XLA_EXTENSION_BAZELRC = ''
+_XLA_EXTENSION_CURRENT_BAZEL_VERSION = None
 
 _DENY_PATH_LIST = ['..', ';', '|', '$', "'", '%', '*', '&', ':', '?', '<', '>', 'http', 'ftp'] # pylint: disable=line-too-long
 
@@ -66,8 +67,8 @@ def is_linux():
 
 
 def remove_configure_file():
-  if os.path.exists(_ITEX_BAZELRC_FILENAME):
-    os.remove(_ITEX_BAZELRC_FILENAME)
+  if os.path.exists(_XLA_EXTENSION_BAZELRC_FILENAME):
+    os.remove(_XLA_EXTENSION_BAZELRC_FILENAME)
 
 
 def get_input(question):
@@ -121,7 +122,7 @@ def sed_in_place(filename, old, new):
 
 def write_to_bazelrc(line):
   try:
-    with open(_ITEX_BAZELRC, 'a') as f:
+    with open(_XLA_EXTENSION_BAZELRC, 'a') as f:
       f.write(line + '\n')
   finally:
     f.close()
@@ -266,6 +267,7 @@ def setup_python(environ_cp):
 
   # Get PYTHON_LIB_PATH
   python_lib_path = environ_cp.get('PYTHON_LIB_PATH')
+  checked_python_lib_path = python_lib_path
   if not python_lib_path:
     python_lib_paths = get_python_path(environ_cp, checked_python_bin_path)
     if environ_cp.get('USE_DEFAULT_PYTHON_LIB_PATH') == '1':
@@ -302,7 +304,7 @@ def create_build_configuration(environ_cp):
 def reset_configure_bazelrc():
   """Reset file that contains customized config settings."""
   try:
-    with open(_ITEX_BAZELRC, 'w') as f:
+    with open(_XLA_EXTENSION_BAZELRC, 'w') as f:
       pass
   finally:
     f.close()
@@ -649,8 +651,8 @@ def reformat_version_sequence(version_str, sequence_count):
   return '.'.join(v[:sequence_count])
 
 
-def set_dpcpp_toolkit_path(environ_cp):
-  """Set DPCPP_TOOLKIT_PATH."""
+def set_sycl_toolkit_path(environ_cp):
+  """Set SYCL_TOOLKIT_PATH."""
 
   def toolkit_exists(toolkit_path):
     """Check if a dpc++ toolkit path is valid."""
@@ -663,21 +665,21 @@ def set_dpcpp_toolkit_path(environ_cp):
             (sycl_rt_lib_path_full))
     return exists
 
-  dpcpp_toolkit_path = prompt_loop_or_load_from_env(
+  sycl_toolkit_path = prompt_loop_or_load_from_env(
       environ_cp,
-      var_name='DPCPP_TOOLKIT_PATH',
-      var_default=_DEFAULT_DPCPP_TOOLKIT_PATH,
+      var_name='SYCL_TOOLKIT_PATH',
+      var_default=_DEFAULT_SYCL_TOOLKIT_PATH,
       ask_for_var=(
           'Please specify the location where DPC++ is installed.'),
       check_success=toolkit_exists,
       error_msg='Invalid DPC++ compiler path. libsycl.so cannot be found.',
       suppress_default_error=True)
 
-  write_action_env_to_bazelrc('DPCPP_TOOLKIT_PATH',
-                              dpcpp_toolkit_path)
+  write_action_env_to_bazelrc('SYCL_TOOLKIT_PATH',
+                              sycl_toolkit_path)
   lib_path = '%s/lib:%s/compiler/lib/intel64_lin' %(
-      dpcpp_toolkit_path,
-      dpcpp_toolkit_path,
+      sycl_toolkit_path,
+      sycl_toolkit_path,
   )
 
   ld_lib_path = lib_path
@@ -689,36 +691,10 @@ def set_dpcpp_toolkit_path(environ_cp):
   if library_path is not None and len(library_path) > 0:
     lib_path += ':' + library_path
 
-  mkl_path = os.getenv('ONEAPI_MKL_PATH')
-  if mkl_path is not None and len(mkl_path) > 0:
-    mkl_lib = '%s/lib/intel64' % (mkl_path)
-    lib_path += ':' + mkl_lib
   write_action_env_to_bazelrc('LD_LIBRARY_PATH',
                               ld_lib_path)
   write_action_env_to_bazelrc('LIBRARY_PATH',
                               lib_path)
-
-def set_mkl_path(environ_cp):
-  """Set MKL Path."""
-  def valid_mkl_path(mkl_home):
-    exists = (
-        os.path.exists(os.path.join(mkl_home, 'include')) and
-        (os.path.exists(os.path.join(mkl_home, 'lib'))))
-    if not exists:
-      print(
-          'Invalid path to the MKL Toolkit. %s or %s cannot be found'
-          % (os.path.join(mkl_home, 'include'),
-             os.path.exists(os.path.join(mkl_home, 'lib'))))
-    return exists
-  mkl_path = prompt_loop_or_load_from_env(
-      environ_cp,
-      var_name='ONEAPI_MKL_PATH',
-      var_default=_DEFAULT_MKL_PATH,
-      ask_for_var='Please specify the MKL toolkit folder.',
-      check_success=valid_mkl_path,
-      error_msg='Invalid path to the MKL Toolkit.',
-      suppress_default_error=True)
-  write_action_env_to_bazelrc('ONEAPI_MKL_PATH', mkl_path)
 
 
 def system_specific_test_config(env):
@@ -728,7 +704,7 @@ def system_specific_test_config(env):
   write_to_bazelrc(
       'test --test_tag_filters=-benchmark-test,-no_oss,-oss_serial')
   write_to_bazelrc('test --build_tag_filters=-benchmark-test,-no_oss')
-  if env.get('TF_NEED_DPCPP', None) == '1':
+  if env.get('TF_NEED_SYCL', None) == '1':
     write_to_bazelrc('test --test_tag_filters=-no_gpu')
     write_to_bazelrc('test --build_tag_filters=-no_gpu')
     write_to_bazelrc('test --test_env=LD_LIBRARY_PATH')
@@ -780,9 +756,9 @@ def check_safe_workspace_path(workspace):
   raise Exception("Invalid workspace path!")
 
 def main():
-  global _ITEX_WORKSPACE_ROOT
-  global _ITEX_BAZELRC
-  global _ITEX_CURRENT_BAZEL_VERSION
+  global _XLA_EXTENSION_WORKSPACE_ROOT
+  global _XLA_EXTENSION_BAZELRC
+  global _XLA_EXTENSION_CURRENT_BAZEL_VERSION
 
   if not is_linux():
     print('Only support linux currently.')
@@ -795,28 +771,27 @@ def main():
       default=os.path.abspath(os.path.dirname(__file__)),
       help='The absolute path to your active Bazel workspace.')
 
-  _ITEX_WORKSPACE_ROOT = check_safe_workspace_path(
+  _XLA_EXTENSION_WORKSPACE_ROOT = check_safe_workspace_path(
       os.path.abspath(os.path.dirname(__file__)))
-  _ITEX_BAZELRC = os.path.join(_ITEX_WORKSPACE_ROOT, _ITEX_BAZELRC_FILENAME)
+  _XLA_EXTENSION_BAZELRC = os.path.join(
+      _XLA_EXTENSION_WORKSPACE_ROOT, _XLA_EXTENSION_BAZELRC_FILENAME)
 
   # Make a copy of os.environ to be clear when functions and getting and setting
   # environment variables.
   environ_cp = dict(os.environ)
 
   current_bazel_version = check_bazel_version('5.3.0')
-  _ITEX_CURRENT_BAZEL_VERSION = convert_version_to_int(current_bazel_version)
+  _XLA_EXTENSION_CURRENT_BAZEL_VERSION = convert_version_to_int(
+      current_bazel_version)
 
   reset_configure_bazelrc()
 
   setup_python(environ_cp)
   create_build_configuration(environ_cp)
 
-  set_action_env_var(environ_cp, 'TF_NEED_DPCPP', 'GPU', True)
-  if environ_cp.get('TF_NEED_DPCPP') == '1':
-    set_dpcpp_toolkit_path(environ_cp)
-    set_action_env_var(environ_cp, 'TF_NEED_MKL', 'MKL', False)
-    if environ_cp.get('TF_NEED_MKL') == '1':
-      set_mkl_path(environ_cp)
+  set_action_env_var(environ_cp, 'TF_NEED_SYCL', 'GPU', True)
+  if environ_cp.get('TF_NEED_SYCL') == '1':
+    set_sycl_toolkit_path(environ_cp)
   else:
     print('CPU is not supported.')
     sys.exit(1)

@@ -29,9 +29,10 @@ limitations under the License.
 #include "xla/service/gpu/gpu_executable_run_options.h"
 #include "xla/service/platform_util.h"
 #include "xla/statusor.h"
-#include "xla/stream_executor/device_host_allocator.h"
-#include "xla/stream_executor/device_mem_allocator.h"
 #include "xla/stream_executor/device_memory.h"
+#include "xla/stream_executor/integrations/device_host_allocator.h"
+#include "xla/stream_executor/integrations/device_mem_allocator.h"
+#include "xla/stream_executor/integrations/tf_allocator_adapter.h"
 
 namespace xla {
 namespace {
@@ -75,6 +76,49 @@ BuildLocalDeviceStates(LocalClient* xla_client) {
   return std::move(addressable_devices);
 }
 
+// Constructs a GPU device memory allocator to use, according to the allocator
+// configuration the client requested.
+StatusOr<std::unique_ptr<se::DeviceMemoryAllocator>>
+GetStreamExecutorXpuDeviceAllocator(
+    se::Platform* platform, const GpuAllocatorConfig& allocator_config,
+    const std::map<int, std::unique_ptr<LocalDeviceState>>&
+        addressable_devices) {
+  std::unique_ptr<se::DeviceMemoryAllocator> allocator;
+  switch (allocator_config.kind) {
+    case GpuAllocatorConfig::Kind::kCudaAsync: {
+      LOG(ERROR) << "Async allocator is not supported; falling back to BFC.";
+      [[fallthrough]];
+    }
+
+    case GpuAllocatorConfig::Kind::kDefault:
+    case GpuAllocatorConfig::Kind::kBFC: {
+      LOG(INFO) << "Using BFC allocator.";
+      std::vector<se::StreamExecutor*> executors;
+      executors.reserve(addressable_devices.size());
+      std::vector<se::MultiDeviceAdapter::AllocatorWithStream>
+          allocators_and_streams;
+      for (const auto& ordinal_and_device : addressable_devices) {
+        TF_ASSIGN_OR_RETURN(
+            auto bfc_allocator,
+            CreateBFCAllocator(ordinal_and_device.second->executor(),
+                               allocator_config.memory_fraction,
+                               allocator_config.preallocate));
+        allocators_and_streams.emplace_back(
+            std::move(bfc_allocator),
+            ordinal_and_device.second->compute_stream());
+      }
+      allocator = std::make_unique<se::MultiDeviceAdapter>(
+          platform, std::move(allocators_and_streams));
+      break;
+    }
+
+    case GpuAllocatorConfig::Kind::kPlatform:
+      LOG(INFO) << "Using platform allocator.";
+      break;
+  }
+  return std::move(allocator);
+}
+
 std::vector<std::unique_ptr<PjRtStreamExecutorDevice>> BuildLocalDevices(
     std::map<int, std::unique_ptr<LocalDeviceState>> local_device_states,
     int node_id) {
@@ -100,40 +144,6 @@ inline PjRtPlatformId XpuId() {
   return kXpuId;
 }
 
-// Builds an xla::LocalClient for the GPU platform.
-StatusOr<LocalClient*> GetXpuXlaClient(
-    const std::optional<std::string>& platform_name,
-    const std::optional<std::set<int>>& allowed_devices) {
-  TF_ASSIGN_OR_RETURN(
-      se::Platform * platform,
-      PlatformUtil::GetPlatform(platform_name ? *platform_name : "SYCL"));
-  if (platform->VisibleDeviceCount() <= 0) {
-    return FailedPrecondition("No visible XPU devices.");
-  }
-  LocalClientOptions options;
-  options.set_platform(platform);
-  options.set_allowed_devices(allowed_devices);
-  return ClientLibrary::GetOrCreateLocalClient(options);
-}
-
-// Returns a GPU pinned host memory allocator to use when staging host->GPU
-// transfers. We use a fixed 64GB pool of pinned memory.
-std::unique_ptr<tsl::BFCAllocator> GetXpuHostAllocator(
-    se::StreamExecutor* executor) {
-  std::unique_ptr<tsl::SubAllocator> sub_allocator(
-      new se::DeviceHostAllocator(executor, /*numa_node=*/0,
-                                  /*alloc_visitors=*/{},
-                                  /*free_visitors=*/{}));
-  // TODO(phawkins): allow the user to tune this.
-  const int64_t kXpuHostMemoryLimitBytes = 64 * (1LL << 30);
-
-  tsl::BFCAllocator::Options opts;
-  opts.allow_growth = true;
-  return std::make_unique<tsl::BFCAllocator>(std::move(sub_allocator),
-                                             kXpuHostMemoryLimitBytes,
-                                             /*name=*/"xla_xpu_host_bfc", opts);
-}
-
 }  // namespace
 
 StreamExecutorXpuDevice::StreamExecutorXpuDevice(
@@ -145,7 +155,7 @@ StreamExecutorXpuDevice::StreamExecutorXpuDevice(
       device_vendor_(std::move(device_vendor)),
       slice_index_(slice_index) {
   description().SetAttributes({
-      {"device_vendor", "Intel"},
+      {"device_vendor", std::string("Intel")},
       {"slice_index", static_cast<int64_t>(slice_index)},
   });
   description().SetToString(
@@ -165,18 +175,19 @@ StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorXpuClient(
     std::optional<std::string> platform_name,
     bool should_stage_host_to_device_transfers,
     PjRtClient::KeyValueGetCallback kv_get,
-    PjRtClient::KeyValuePutCallback kv_put) {
+    PjRtClient::KeyValuePutCallback kv_put, bool enable_mock_nccl) {
   TF_ASSIGN_OR_RETURN(LocalClient * xla_client,
-                      GetXpuXlaClient(platform_name, allowed_devices));
+                      GetGpuXlaClient(platform_name, allowed_devices));
   std::map<int, std::unique_ptr<LocalDeviceState>> local_device_states;
   TF_ASSIGN_OR_RETURN(local_device_states, BuildLocalDeviceStates(xla_client));
   // EnablePeerAccess(xla_client->backend().stream_executors());
-  // TF_ASSIGN_OR_RETURN(
-  //     auto allocator,
-  //     GetStreamExecutorXpuDeviceAllocator(
-  //         xla_client->platform(), local_device_states));
+  TF_ASSIGN_OR_RETURN(
+      // SYCL: hardcode to static variable due to a bug for sycl alloc api.
+      static std::unique_ptr<se::DeviceMemoryAllocator> allocator,
+      GetStreamExecutorXpuDeviceAllocator(
+          xla_client->platform(), allocator_config, local_device_states));
   auto host_memory_allocator =
-      GetXpuHostAllocator(local_device_states.begin()->second->executor());
+      GetGpuHostAllocator(local_device_states.begin()->second->executor());
 
   std::vector<std::unique_ptr<PjRtStreamExecutorDevice>> devices;
   auto gpu_run_options = std::make_unique<gpu::GpuExecutableRunOptions>();
@@ -192,8 +203,8 @@ StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorXpuClient(
   }
   return std::unique_ptr<PjRtClient>(std::make_unique<StreamExecutorXpuClient>(
       XpuName(), xla_client, std::move(devices),
-      /*node_id=*/node_id, nullptr, std::move(host_memory_allocator),
-      should_stage_host_to_device_transfers,
+      /*node_id=*/node_id, std::move(allocator),
+      std::move(host_memory_allocator), should_stage_host_to_device_transfers,
       /*gpu_run_options=*/std::move(gpu_run_options)));
 }
 

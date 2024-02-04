@@ -1,13 +1,13 @@
-load("//third_party/build_option:dpcpp_configure.bzl", "dpcpp_configure")
+load("//third_party/gpus:sycl_configure.bzl", "sycl_configure")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
 def workspace(path_prefix = "", tf_repo_name = ""):
-    dpcpp_configure(name = "local_config_dpcpp")
+    sycl_configure(name = "local_config_sycl")
 
     new_git_repository(
         name = "onednn_gpu",
-        # rls-v3.2
-        commit = "f88241a",
+        # rls-v3.4-pc
+        commit = "f92f0aab672ded7737cb72f0b39f65fe9424e483",
         remote = "https://github.com/oneapi-src/oneDNN.git",
         build_file = "//third_party/onednn:onednn_gpu.BUILD",
         verbose = True,
@@ -18,7 +18,7 @@ def workspace(path_prefix = "", tf_repo_name = ""):
 
     git_repository(
         name = "spir_headers",
-        commit = "1feaf4414eb2b353764d01d88f8aa4bcc67b60db",
+        commit = "9b527c0fb60124936d0906d44803bec51a0200fb",
         remote = "https://github.com/KhronosGroup/SPIRV-Headers.git",
         verbose = True,
         patch_cmds = [
@@ -28,7 +28,7 @@ def workspace(path_prefix = "", tf_repo_name = ""):
 
     new_git_repository(
         name = "llvm_spir",
-        commit = "34487407835afc1a8b7ad277935bf950c5adecde",
+        commit = "d021f7535060ab7fc548a1446036c171f490d311",
         remote = "https://github.com/KhronosGroup/SPIRV-LLVM-Translator.git",
         build_file = "//third_party/llvm_spir:llvm_spir.BUILD",
         verbose = True,
@@ -38,8 +38,8 @@ def workspace(path_prefix = "", tf_repo_name = ""):
 
     new_git_repository(
         name = "xetla",
-        # v0.3.1
-        commit = "2c29086eba7bf8369c49a6da8dd9b2912e954d20",
+        # v0.3.4.1
+        commit = "5d9a7886fc4a40a5c7bba28ea78c5dde4a35b44a",
         remote = "https://github.com/intel/xetla",
         verbose = True,
         build_file = "//third_party/xetla:BUILD",

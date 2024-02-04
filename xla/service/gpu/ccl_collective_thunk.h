@@ -38,14 +38,18 @@ using ncclComm_t = ccl::communicator*;
 namespace xla {
 namespace gpu {
 
-class CclClique;
+// Current HW only have 16 ranks in single node at most.
+// TODO(intel): Extend it for new HW in future.
+#define MAX_RANK_SIZE 16
 
-struct CclCollectiveConfig {
-  CclCollectiveConfig();
-  CclCollectiveConfig(CclCollectiveConfig&&);
-  ~CclCollectiveConfig();
+class NcclClique;
 
-  CclCollectiveConfig& operator=(CclCollectiveConfig&&);
+struct NcclCollectiveConfig {
+  NcclCollectiveConfig();
+  NcclCollectiveConfig(NcclCollectiveConfig&&);
+  ~NcclCollectiveConfig();
+
+  NcclCollectiveConfig& operator=(NcclCollectiveConfig&&);
 
   int64_t operand_count;
   std::vector<PrimitiveType> operand_element_type;
@@ -60,7 +64,7 @@ struct CclCollectiveConfig {
 };
 
 template <typename OpT>
-void CclCollectiveConfig::SetCollectiveOpKindAndID(OpT op) {
+void NcclCollectiveConfig::SetCollectiveOpKindAndID(OpT op) {
   if (op.getChannelId()) {
     collective_op_kind = RendezvousKey::kCrossModule;
     op_id = static_cast<int64_t>(op.getChannelId()->getHandle());
@@ -74,9 +78,9 @@ void CclCollectiveConfig::SetCollectiveOpKindAndID(OpT op) {
 }
 
 template <typename OpT>
-CclCollectiveConfig GetCclCollectiveConfigForMlir(
+NcclCollectiveConfig GetNcclCollectiveConfigForMlir(
     OpT op, std::optional<bool> use_global_device_ids) {
-  CclCollectiveConfig config;
+  NcclCollectiveConfig config;
   config.operand_count = op.getInputs().size();
   config.operand_element_type.reserve(config.operand_count);
   for (int i = 0; i < config.operand_count; i++) {
@@ -93,9 +97,9 @@ CclCollectiveConfig GetCclCollectiveConfigForMlir(
 
 // Thunk base class for NCCL collective operations.
 // Thunk base class for NCCL collective operations.
-class CclCollectiveThunk : public Thunk {
+class NcclCollectiveThunk : public Thunk {
  public:
-  CclCollectiveThunk(Kind kind, ThunkInfo thunk_info, bool is_sync);
+  NcclCollectiveThunk(Kind kind, ThunkInfo thunk_info, bool is_sync);
 
   struct Buffer {
     int64_t element_count;
@@ -112,7 +116,8 @@ class CclCollectiveThunk : public Thunk {
     Status Execute(
         absl::FunctionRef<Status(const ExecuteParams&, se::Stream&, ncclComm_t)>
             fn,
-        const ExecuteParams& params, ncclComm_t comm);
+        const ExecuteParams& params, ncclComm_t comm,
+        AsyncStreamKind stream_kind);
     // Blocks the compute stream until async communication is complete.
     Status Await(const ExecuteParams& params);
 
@@ -128,7 +133,7 @@ class CclCollectiveThunk : public Thunk {
   //
   // When this is false, the ExecuteOnStream() call will simply return a status
   // error.
-  static bool CclIsEnabled();
+  static bool NcclIsEnabled();
   static Status CheckImplementable();
 
   // Logging support.
@@ -138,9 +143,12 @@ class CclCollectiveThunk : public Thunk {
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
  protected:
-  virtual Status RunCclCollective(const ExecuteParams& params,
-                                  se::Stream& stream, ncclComm_t comm) = 0;
-  virtual const CclCollectiveConfig& config() const = 0;
+  virtual Status RunNcclCollective(const ExecuteParams& params,
+                                   se::Stream& stream, ncclComm_t comm) = 0;
+  virtual const NcclCollectiveConfig& config() const = 0;
+  virtual AsyncStreamKind GetAsyncStreamKind() const {
+    return kAsyncStreamCollective;
+  }
 
  private:
   bool IsAsync() const { return async_ != nullptr; }
@@ -150,15 +158,15 @@ class CclCollectiveThunk : public Thunk {
 
 Status IsValidOperand(mlir::Value operand, Thunk::Kind reduction_op);
 
-class CclCollectiveDoneThunk : public Thunk {
+class NcclCollectiveDoneThunk : public Thunk {
  public:
-  CclCollectiveDoneThunk(Thunk::Kind kind, ThunkInfo thunk_info,
-                         CclCollectiveThunk::AsyncExecutor& async);
+  NcclCollectiveDoneThunk(Thunk::Kind kind, ThunkInfo thunk_info,
+                          NcclCollectiveThunk::AsyncExecutor& async);
 
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
  private:
-  CclCollectiveThunk::AsyncExecutor& async_;
+  NcclCollectiveThunk::AsyncExecutor& async_;
 };
 
 // Returns if the given data type is supported by NCCL.
@@ -166,26 +174,26 @@ class CclCollectiveDoneThunk : public Thunk {
 bool IsTypeSupportedByNccl(PrimitiveType element_type,
                            Thunk::Kind reduction_op);
 
-template <typename CclThunkType, typename OpT>
+template <typename NcclThunkType, typename OpT>
 Status AddOpDescription(Status status, OpT op, int64_t replica_count,
                         int64_t partition_count) {
   if (status.ok()) {
     return status;
   }
-  CollectiveOpGroupMode group_mode = CclThunkType::GetGroupMode(op);
+  CollectiveOpGroupMode group_mode = NcclThunkType::GetGroupMode(op);
   return Status(
       status.code(),
       absl::StrFormat(
           "%s\n"
           "%s with replica_count: %d, partition_count: %d, group_mode: %s, "
           "operand_count: %d\n%s",
-          status.message(), CclThunkType::GetHloOpName(), replica_count,
+          status.message(), NcclThunkType::GetHloOpName(), replica_count,
           partition_count, CollectiveOpGroupModeToString(group_mode),
           op->getNumOperands() / 2, llvm_ir::DumpToString(op.getOperation())));
 }
 
 // TODO(hanbinyoon): Consider moving to ccl_utils.h when deprecating Thunks.
-StatusOr<CclComm::Lock> LockCclComm(
+StatusOr<NcclComm::Lock> LockNcclComm(
     const NcclExecuteParams& params,
     const std::vector<ReplicaGroup>& replica_groups,
     CollectiveOpGroupMode group_mode, int64_t op_id);
@@ -198,7 +206,7 @@ struct DeviceBufferPair {
 };
 StatusOr<std::vector<DeviceBufferPair>> ConvertToDeviceBuffers(
     const Thunk::ExecuteParams& params,
-    const std::vector<CclCollectiveThunk::Buffer>& buffers,
+    const std::vector<NcclCollectiveThunk::Buffer>& buffers,
     const std::vector<PrimitiveType>& element_types);
 
 }  // namespace gpu
