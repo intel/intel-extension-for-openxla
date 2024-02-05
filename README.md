@@ -26,9 +26,9 @@ This guide introduces the overview of OpenXLA high level integration structure a
 
 Verified Hardware Platforms:
 
-* Intel® Data Center GPU Max Series, Driver Version: [775](https://dgpu-docs.intel.com/releases/stable_775_20_20231219.html)
+* Intel® Data Center GPU Max Series, Driver Version: [803](https://dgpu-docs.intel.com/releases/LTS_803.29_20240131.html)
 
-* Intel® Data Center GPU Flex Series 170, Driver Version: [775](https://dgpu-docs.intel.com/releases/stable_775_20_20231219.html)
+* Intel® Data Center GPU Flex Series 170, Driver Version: [803](https://dgpu-docs.intel.com/releases/LTS_803.29_20240131.html)
 
 ### Software Requirements
 
@@ -47,8 +47,8 @@ Verified Hardware Platforms:
 
 |OS|Intel GPU|Install Intel GPU Driver|
 |-|-|-|
-|Ubuntu 22.04 |Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-flex-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [775](https://dgpu-docs.intel.com/releases/stable_775_20_20231219.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.35.27191.42-775~22.04`|
-|Ubuntu 22.04, SLES 15 SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-max-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [775](https://dgpu-docs.intel.com/releases/stable_775_20_20231219.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.35.27191.42-775~22.04`|
+|Ubuntu 22.04 |Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-flex-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [803](https://dgpu-docs.intel.com/releases/LTS_803.29_20240131.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.43.27642.38-803~22.04`|
+|Ubuntu 22.04, SLES 15 SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-max-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [803](https://dgpu-docs.intel.com/releases/LTS_803.29_20240131.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.43.27642.38-803~22.04`|
 
 ### Install oneAPI Base Toolkit Packages
 
