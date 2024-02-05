@@ -32,6 +32,8 @@ limitations under the License.
 #include "xla/stream_executor/device_host_allocator.h"
 #include "xla/stream_executor/device_mem_allocator.h"
 #include "xla/stream_executor/device_memory.h"
+#include "xla/stream_executor/sycl/hw_info.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/tf_allocator_adapter.h"
 
 namespace xla {
@@ -106,9 +108,19 @@ GetStreamExecutorXpuDeviceAllocator(
         allocators_and_streams.emplace_back(
             std::move(bfc_allocator),
             ordinal_and_device.second->compute_stream());
+
+        static std::once_flag check_hardware_flag;
+        std::call_once(check_hardware_flag, [&]() {
+          sycl::device* sycl_dev = nullptr;
+          SYCLGetDevice(&sycl_dev, ordinal_and_device.second->device_ordinal());
+          if (IsXeHPC(sycl_dev)) {
+            setenv("ITEX_USING_DATA_CENTER_GPU_MAX", "1", 0);
+          }
+        });
       }
       allocator = std::make_unique<se::MultiDeviceAdapter>(
           platform, std::move(allocators_and_streams));
+
       break;
     }
 
@@ -155,7 +167,7 @@ StreamExecutorXpuDevice::StreamExecutorXpuDevice(
       device_vendor_(std::move(device_vendor)),
       slice_index_(slice_index) {
   description().SetAttributes({
-      {"device_vendor", "Intel"},
+      {"device_vendor", std::string("Intel")},
       {"slice_index", static_cast<int64_t>(slice_index)},
   });
   description().SetToString(

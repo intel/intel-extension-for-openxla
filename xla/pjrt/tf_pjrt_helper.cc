@@ -1,9 +1,14 @@
 #include "xla/pjrt/tf_pjrt_helper.h"
 
+#include "xla/pjrt/itex_pjrt_buffer.h"
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/pjrt/tf_xpu_pjrt_client.h"
+#include "xla/stream_executor/device_memory_allocator.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
+#include "xla/stream_executor/tf_allocator_adapter.h"
 #include "xla/stream_executor/tpu/c_api_conversions.h"
+
 xla::PrimitiveType XlaDataTypeFromString(std::string data_type) {
   if (data_type == "bool")
     return xla::PRED;
@@ -46,10 +51,10 @@ void* ITEXOpaqueDataPointerFromPjRtBuffer(PJRT_Buffer* pjrt_c_buffer) {
   return external_reference_hold->OpaqueDeviceMemoryDataPointer();
 }
 
-PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
-                                  std::vector<int64_t> dimentions,
-                                  std::vector<int64_t> layout,
-                                  PJRT_Client* pjrt_c_client) {
+PJRT_Buffer* ITEXCreateSEPjRtBuffer(int device_id, std::string data_type,
+                                    std::vector<int64_t> dimentions,
+                                    std::vector<int64_t> layout,
+                                    PJRT_Client* pjrt_c_client) {
   xla::PjRtDevice* pjrt_device =
       pjrt_c_client->client->LookupDevice(device_id).value();
   xla::PrimitiveType type = XlaDataTypeFromString(data_type);
@@ -62,6 +67,20 @@ PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
       pjrt_c_client};
 }
 
+PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
+                                  std::vector<int64_t>* dimentions, size_t size,
+                                  PJRT_Client* pjrt_c_client) {
+  xla::PjRtDevice* pjrt_device =
+      pjrt_c_client->client->LookupDevice(device_id).value();
+  xla::PrimitiveType type = XlaDataTypeFromString(data_type);
+  std::unique_ptr<xla::ITEXPjRtBuffer> buffer =
+      AllocateITEXDestinationBuffer(device_id, pjrt_device,
+                                    pjrt_c_client->client.get(), *dimentions,
+                                    type, size)
+          .value();
+  return new PJRT_Buffer{std::move(buffer), pjrt_c_client};
+}
+
 void* ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client) {
   xla::PjRtDevice* pjrt_device =
       std::move(pjrt_c_client->client->LookupDevice(device_id).value());
@@ -72,8 +91,30 @@ void* ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client) {
   return stream;
 }
 
+void* ITEXBFCAllocateOnSyclDevice(const sycl::device& device,
+                                  PJRT_Client* pjrt_c_client, size_t n) {
+  int device_id = SYCLGetDeviceOrdinal(device, &device_id);
+  auto pjrt_client = reinterpret_cast<xla::PjRtStreamExecutorClient*>(
+      pjrt_c_client->client.get());
+  auto* allocator = reinterpret_cast<stream_executor::MultiDeviceAdapter*>(
+      pjrt_client->allocator());
+  void* device_mem = allocator->AllocateRaw(device_id, n, true, 0);
+  return device_mem;
+}
+
+void ITEXBFCDeallocateOnSyclDevice(const sycl::device& device,
+                                   PJRT_Client* pjrt_c_client, void* addr) {
+  int device_id = SYCLGetDeviceOrdinal(device, &device_id);
+  auto pjrt_client = reinterpret_cast<xla::PjRtStreamExecutorClient*>(
+      pjrt_c_client->client.get());
+  auto* allocator = reinterpret_cast<stream_executor::MultiDeviceAdapter*>(
+      pjrt_client->allocator());
+  allocator->DeallocateRaw(device_id, addr);
+}
+
 extern "C" {
 struct PjRtBuffer_Info {
+  size_t size;
   std::string datatype;
   std::vector<int64_t> dimensions;
   std::vector<int64_t> layout;
@@ -87,12 +128,25 @@ PJRT_Buffer* C_ITEXCreatePjRtBuffer(int device_id,
                                     PjRtBuffer_Info* pjrt_buffer_info,
                                     PJRT_Client* pjrt_c_client) {
   return ITEXCreatePjRtBuffer(device_id, pjrt_buffer_info->datatype,
-                              pjrt_buffer_info->dimensions,
-                              pjrt_buffer_info->layout, pjrt_c_client);
+                              &(pjrt_buffer_info->dimensions),
+                              pjrt_buffer_info->size, pjrt_c_client);
+}
+
+PJRT_Buffer* C_ITEXCreateSEPjRtBuffer(int device_id,
+                                      PjRtBuffer_Info* pjrt_buffer_info,
+                                      PJRT_Client* pjrt_c_client) {
+  return ITEXCreateSEPjRtBuffer(device_id, pjrt_buffer_info->datatype,
+                                pjrt_buffer_info->dimensions,
+                                pjrt_buffer_info->layout, pjrt_c_client);
 }
 
 void* C_ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client) {
   return ITEXGetStreamFromPjRtDevice(device_id, pjrt_c_client);
+}
+
+void C_RegisterCustomCallTarget(const char* symbol, void* address,
+                                const char* platform) {
+  xla::CustomCallTargetRegistry::Global()->Register(symbol, address, platform);
 }
 }
 
@@ -222,11 +276,46 @@ PJRT_Buffer* SameDevicePjRtBufferCopy(PJRT_Buffer* src_buffer,
   return new PJRT_Buffer{std::move(py_dst_buffer), c_client};
 }
 
+PJRT_Buffer* SameDeviceITEXBufferCopy(PJRT_Buffer* src_buffer,
+                                      PJRT_Client* c_client) {
+  ITEXPjRtBuffer* itex_src_buffer =
+      static_cast<ITEXPjRtBuffer*>(src_buffer->buffer.get());
+  PjRtStreamExecutorDevice* pjrt_device = itex_src_buffer->device();
+
+  LocalDeviceState* transfer_local_device = pjrt_device->local_device_state();
+  auto* se_client =
+      static_cast<PjRtStreamExecutorClient*>(c_client->client.get());
+
+  se::Stream* transfer_stream =
+      transfer_local_device->GetDeviceToDeviceStream();
+  std::unique_ptr<ITEXPjRtBuffer> dst_buffer =
+      AllocateITEXDestinationBuffer(
+          transfer_local_device->device_ordinal(), pjrt_device, se_client,
+          itex_src_buffer->dimensions(), itex_src_buffer->element_type(),
+          itex_src_buffer->buffer_size())
+          .value();
+
+  transfer_stream->ThenMemcpyD2D(&dst_buffer->buffer(),
+                                 itex_src_buffer->buffer(),
+                                 dst_buffer->buffer_size());
+  if (!transfer_stream->ok()) {
+    LOG(FATAL) << "NextPluggableDevice->NextPluggableDevice Memcpy "
+               << "failed.";
+  }
+
+  return new PJRT_Buffer{std::move(dst_buffer), c_client};
+}
+
 }  // namespace xla
 
 PJRT_Buffer* ITEXSameDevicePjRtBufferCopy(PJRT_Buffer* src_buffer,
-                                          PJRT_Client* c_client) {
-  return xla::SameDevicePjRtBufferCopy(src_buffer, c_client);
+                                          PJRT_Client* c_client,
+                                          bool xla_enabled) {
+  if (xla_enabled) {
+    return xla::SameDevicePjRtBufferCopy(src_buffer, c_client);
+  } else {
+    return xla::SameDeviceITEXBufferCopy(src_buffer, c_client);
+  }
 }
 
 void ITEXXlaShapeToDeviceShapeRepresentation(void* serialized_xla_shape,

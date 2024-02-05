@@ -32,6 +32,8 @@ cc_library(
     name = "se_xpu_client",
     srcs = ["se_xpu_pjrt_client.cc"],
     hdrs = ["se_xpu_pjrt_client.h"],
+    visibility = ["//visibility:public"],
+    linkstatic = 1,
     deps = [
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -63,7 +65,10 @@ cc_library(
         "@xla//xla/stream_executor:device_mem_allocator",
         "@xla//xla/stream_executor:device_memory",
         "@xla//xla/stream_executor:tf_allocator_adapter",
+        "//xla/stream_executor/sycl:sycl_gpu_runtime_imp",
+        "//xla/stream_executor/sycl:hw_info",
     ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -73,7 +78,9 @@ cc_library(
     linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
+        ":itex_pjrt_buffer",
         ":tf_xpu_pjrt_client",
+        "//xla/stream_executor/sycl:sycl_gpu_runtime_imp",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
@@ -82,6 +89,7 @@ cc_library(
         "@xla//xla/service/gpu:gpu_executable_run_options",
         "@xla//xla/stream_executor:device_mem_allocator",
         "@xla//xla/stream_executor:device_memory",
+        "@xla//xla/stream_executor:tf_allocator_adapter",
     ],
     alwayslink = True,
 )
@@ -102,6 +110,7 @@ cc_library(
     linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
+        ":itex_pjrt_buffer",
         ":se_xpu_client",
         "//xla/service/gpu:gpu_computation_placer",
         "//xla/service/gpu:gpu_transfer_manager",
@@ -119,6 +128,26 @@ cc_library(
         "@xla//xla/service:compiler",
         "@xla//xla/service:computation_placer",
         "@xla//xla/stream_executor/tpu:c_api_conversions",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "itex_pjrt_buffer",
+    srcs = ["itex_pjrt_buffer.cc"],
+    hdrs = ["itex_pjrt_buffer.h"],
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings",
+        "@xla//xla/pjrt:pjrt_stream_executor_client",
+        "@xla//xla/service:platform_util",
+        "@xla//xla/service/gpu:gpu_executable_run_options",
+        "@xla//xla/stream_executor:device_mem_allocator",
+        "@xla//xla/stream_executor:device_memory",
+        "@xla//xla/stream_executor:tf_allocator_adapter",
     ],
     alwayslink = True,
 )
