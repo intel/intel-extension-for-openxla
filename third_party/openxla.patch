@@ -249,7 +249,7 @@ index e055a619f..fa5e93af6 100644
          "@com_google_absl//absl/strings",
          "@com_google_absl//absl/types:optional",
 diff --git a/third_party/tsl/tsl/framework/bfc_allocator.cc b/third_party/tsl/tsl/framework/bfc_allocator.cc
-index 9e4447108..96c439641 100644
+index 9e4447108..9c9fbb35a 100644
 --- a/third_party/tsl/tsl/framework/bfc_allocator.cc
 +++ b/third_party/tsl/tsl/framework/bfc_allocator.cc
 @@ -48,7 +48,7 @@ BFCAllocator::BFCAllocator(std::unique_ptr<SubAllocator> sub_allocator,
@@ -276,19 +276,21 @@ index 9e4447108..96c439641 100644
  bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
    size_t available_bytes = memory_limit_ - *stats_.pool_bytes;
    // Rounds available_bytes down to the nearest multiple of kMinAllocationSize.
-@@ -133,6 +141,11 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
+@@ -133,6 +141,13 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
  
    // Try allocating.
    size_t bytes = std::min(curr_region_allocation_bytes_, available_bytes);
 +
 +  if (CheckIfUsingMachineWithLimitMem()) {
 +    bytes = std::min(bytes, GetLimitAlloc());
++  } else {
++    bytes = std::min(bytes, static_cast<size_t>(memory_limit_ * 0.75)); 
 +  }
 +
    size_t bytes_received;
    void* mem_addr = sub_allocator_->Alloc(alignment, bytes, &bytes_received);
    if (mem_addr == nullptr && !started_backpedal_) {
-@@ -1248,4 +1261,33 @@ AllocatorMemoryType BFCAllocator::GetMemoryType() const {
+@@ -1248,4 +1263,33 @@ AllocatorMemoryType BFCAllocator::GetMemoryType() const {
    return sub_allocator_->GetMemoryType();
  }
  
@@ -718,7 +720,7 @@ index 4feaf28bb..1b532b74a 100644
  StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(const HloCustomCallInstruction* instr);
  
 diff --git a/xla/service/gpu/gpu_layout_assignment.cc b/xla/service/gpu/gpu_layout_assignment.cc
-index ad2d7ffa6..06c8ab79b 100644
+index ad2d7ffa6..8b176910a 100644
 --- a/xla/service/gpu/gpu_layout_assignment.cc
 +++ b/xla/service/gpu/gpu_layout_assignment.cc
 @@ -69,7 +69,7 @@ HeuristicLayoutAssignment(const HloInstruction* instr,
@@ -730,6 +732,16 @@ index ad2d7ffa6..06c8ab79b 100644
                        DataLayout::kBatchYXDepth);
  
    // Integer convolution must use NHWC or NCHW_VECT_C.
+@@ -111,8 +111,7 @@ HeuristicLayoutAssignment(const HloInstruction* instr,
+   // If we're not Volta or not fp16/bfloat16, or not conv2D, the decision is
+   // easy: Use NCHW.
+   const bool isFloat16 = (input_ty == F16) || (input_ty == BF16);
+-  if (!isFloat16 ||
+-      !stream_executor->GetDeviceDescription()
++  if (!stream_executor->GetDeviceDescription()
+            .cuda_compute_capability()
+            .IsAtLeast(se::CudaComputeCapability::VOLTA) ||
+       instr->shape().tuple_shapes(0).dimensions_size() != 4) {
 diff --git a/xla/service/gpu/hlo_fusion_analysis.cc b/xla/service/gpu/hlo_fusion_analysis.cc
 index 36006855d..b7d3222f4 100644
 --- a/xla/service/gpu/hlo_fusion_analysis.cc
