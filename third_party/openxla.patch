@@ -1230,7 +1230,7 @@ index 318e34fea..e55b1eeb5 100644
        TF_RETURN_IF_ERROR(ksl.IfWithStatus(
            absl::StrCat("reduce-group-", i),
 diff --git a/xla/service/gpu/gemm_rewriter.cc b/xla/service/gpu/gemm_rewriter.cc
-index 0e41cfdcb..be0559e3f 100644
+index 0e41cfdcb..50a0534c1 100644
 --- a/xla/service/gpu/gemm_rewriter.cc
 +++ b/xla/service/gpu/gemm_rewriter.cc
 @@ -561,6 +561,7 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
@@ -1303,6 +1303,17 @@ index 0e41cfdcb..be0559e3f 100644
  
      // cublasLt is enabled, check if other internal conditions are met.
      const HloInstruction *lhs = instr.operand(0);
+@@ -1861,10 +1873,6 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
+     for (auto batch_dimension : batch_dimensions) {
+       batch_count *= lhs->shape().dimensions(batch_dimension);
+     }
+-    if (batch_count > kMaxBatchCount) {
+-      // This is not supported by cublasLt.
+-      return false;
+-    }
+
+     TF_ASSIGN_OR_RETURN(bool output_is_column_major,
+                         MatrixIsColumnMajor(instr, gemm_backend_config));
 diff --git a/xla/service/gpu/gemm_thunk.cc b/xla/service/gpu/gemm_thunk.cc
 index b774280a2..d7fbb3006 100644
 --- a/xla/service/gpu/gemm_thunk.cc
