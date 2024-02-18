@@ -726,7 +726,7 @@ index d7f731302..063638587 100644
    absl::flat_hash_map<const stream_executor::Stream*,
                        std::unique_ptr<GenericConvRunner>>
 diff --git a/xla/service/gpu/cudnn_fused_conv_rewriter.cc b/xla/service/gpu/cudnn_fused_conv_rewriter.cc
-index 2cd279b68..5b803d065 100644
+index 2cd279b68..0fcb36c90 100644
 --- a/xla/service/gpu/cudnn_fused_conv_rewriter.cc
 +++ b/xla/service/gpu/cudnn_fused_conv_rewriter.cc
 @@ -824,6 +824,13 @@ StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
@@ -737,7 +737,7 @@ index 2cd279b68..5b803d065 100644
 +    if (can_accept_side_input) {
 +      xla::Cast<HloCustomCallInstruction>(new_conv)
 +          ->set_output_to_operand_aliasing(
-+              {{{}, {new_operands.size() - 1, {}}}});
++              {{{}, {static_cast<long>(new_operands.size()) - 1, {}}}});
 +    }
 +#endif
      TF_ASSIGN_OR_RETURN(HloInstruction * new_instr,
@@ -861,7 +861,7 @@ index 099e6776a..1d76a0708 100644
    }
  
 diff --git a/xla/service/gpu/cusolver_context.cc b/xla/service/gpu/cusolver_context.cc
-index 282bfa295..a1f6ad396 100644
+index 282bfa295..fdfae3890 100644
 --- a/xla/service/gpu/cusolver_context.cc
 +++ b/xla/service/gpu/cusolver_context.cc
 @@ -26,6 +26,7 @@ limitations under the License.
@@ -872,7 +872,7 @@ index 282bfa295..a1f6ad396 100644
  namespace {
  
  // Type traits to get CUDA complex types from std::complex<T>.
-@@ -414,6 +415,64 @@ Status GpuSolverContext::PotrfBatched(
+@@ -414,6 +415,19 @@ Status GpuSolverContext::PotrfBatched(
  #endif
        ToDevicePointer(lapack_info), batch_size));
  }
@@ -889,58 +889,11 @@ index 282bfa295..a1f6ad396 100644
 +
 +GpuSolverContext::GpuSolverContext() {}
 +
-+std::string TransposeString(oneapi::mkl::transpose t) {
-+  switch (t) {
-+    case oneapi::mkl::transpose::N:
-+      return "NoTranspose";
-+    case oneapi::mkl::transpose::T:
-+      return "Transpose";
-+    case oneapi::mkl::transpose::C:
-+      return "ConjugateTranspose";
-+    default:
-+      LOG(FATAL) << "Unknown transpose " << static_cast<tsl::int32>(t);
-+  }
-+}
-+
-+std::string UpperLowerString(oneapi::mkl::uplo ul) {
-+  switch (ul) {
-+    case oneapi::mkl::uplo::U:
-+      return "Upper";
-+    case oneapi::mkl::uplo::L:
-+      return "Lower";
-+    default:
-+      LOG(FATAL) << "Unknown upperlower " << static_cast<tsl::int32>(ul);
-+  }
-+}
-+
-+std::string DiagonalString(oneapi::mkl::diag d) {
-+  switch (d) {
-+    case oneapi::mkl::diag::U:
-+      return "Unit";
-+    case oneapi::mkl::diag::N:
-+      return "NonUnit";
-+    default:
-+      LOG(FATAL) << "Unknown diagonal " << static_cast<tsl::int32>(d);
-+  }
-+}
-+
-+std::string SideString(oneapi::mkl::side s) {
-+  switch (s) {
-+    case oneapi::mkl::side::L:
-+      return "Left";
-+    case oneapi::mkl::side::R:
-+      return "Right";
-+    default:
-+      LOG(FATAL) << "Unknown side " << static_cast<tsl::int32>(s);
-+  }
-+}
 +#endif // !GOOGLE_SYCL
  }  // namespace gpu
--}  // namespace xla
-+}  // namespace xla
-\ No newline at end of file
+ }  // namespace xla
 diff --git a/xla/service/gpu/cusolver_context.h b/xla/service/gpu/cusolver_context.h
-index 63138f5fd..e47de6238 100644
+index 63138f5fd..1d85de4e4 100644
 --- a/xla/service/gpu/cusolver_context.h
 +++ b/xla/service/gpu/cusolver_context.h
 @@ -26,6 +26,12 @@ limitations under the License.
@@ -976,7 +929,7 @@ index 63138f5fd..e47de6238 100644
  
  class GpuSolverContext {
   public:
-@@ -104,7 +112,64 @@ class GpuSolverContext {
+@@ -104,6 +112,59 @@ class GpuSolverContext {
    std::unique_ptr<std::remove_pointer_t<gpusolverHandle_t>, Deleter> handle_;
  };
  
@@ -1032,17 +985,10 @@ index 63138f5fd..e47de6238 100644
 +  stream_executor::gpu::GpuStreamHandle gpu_stream_;
 +};
 +
-+std::string TransposeString(oneapi::mkl::transpose t);
-+std::string UpperLowerString(oneapi::mkl::uplo ul);
-+std::string DiagonalString(oneapi::mkl::diag d);
-+std::string SideString(oneapi::mkl::side s);
 +#endif // !GOOGLE_SYCL
  }  // namespace gpu
  }  // namespace xla
  
--#endif  // XLA_SERVICE_GPU_CUSOLVER_CONTEXT_H_
-+#endif  // XLA_SERVICE_GPU_CUSOLVER_CONTEXT_H_
-\ No newline at end of file
 diff --git a/xla/service/gpu/cusolver_rewriter.cc b/xla/service/gpu/cusolver_rewriter.cc
 index 904673038..eac7e0b99 100644
 --- a/xla/service/gpu/cusolver_rewriter.cc
@@ -1230,7 +1176,7 @@ index 318e34fea..e55b1eeb5 100644
        TF_RETURN_IF_ERROR(ksl.IfWithStatus(
            absl::StrCat("reduce-group-", i),
 diff --git a/xla/service/gpu/gemm_rewriter.cc b/xla/service/gpu/gemm_rewriter.cc
-index 0e41cfdcb..50a0534c1 100644
+index 0e41cfdcb..96c21f8ba 100644
 --- a/xla/service/gpu/gemm_rewriter.cc
 +++ b/xla/service/gpu/gemm_rewriter.cc
 @@ -561,6 +561,7 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
@@ -1303,7 +1249,7 @@ index 0e41cfdcb..50a0534c1 100644
  
      // cublasLt is enabled, check if other internal conditions are met.
      const HloInstruction *lhs = instr.operand(0);
-@@ -1861,10 +1873,6 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
+@@ -1861,11 +1873,6 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
      for (auto batch_dimension : batch_dimensions) {
        batch_count *= lhs->shape().dimensions(batch_dimension);
      }
@@ -1311,9 +1257,10 @@ index 0e41cfdcb..50a0534c1 100644
 -      // This is not supported by cublasLt.
 -      return false;
 -    }
-
+-
      TF_ASSIGN_OR_RETURN(bool output_is_column_major,
                          MatrixIsColumnMajor(instr, gemm_backend_config));
+ 
 diff --git a/xla/service/gpu/gemm_thunk.cc b/xla/service/gpu/gemm_thunk.cc
 index b774280a2..d7fbb3006 100644
 --- a/xla/service/gpu/gemm_thunk.cc
@@ -2276,29 +2223,53 @@ index c6b76fd2b..1e85a5259 100644
    }
  
 diff --git a/xla/service/gpu/precompiled_kernels.cc b/xla/service/gpu/precompiled_kernels.cc
-index d380a496c..3e6482bdd 100644
+index d380a496c..c4f165ef9 100644
 --- a/xla/service/gpu/precompiled_kernels.cc
 +++ b/xla/service/gpu/precompiled_kernels.cc
-@@ -158,6 +158,7 @@ class LazyKernel {
+@@ -155,6 +155,7 @@ class LazyKernel {
+ 
+ }  // anonymous namespace
+ 
++#if !GOOGLE_SYCL
  Status MakeBatchPointers(se::Stream* stream, const se::GpuAsmOpts& asm_opts,
                           se::DeviceMemoryBase base_ptr, int stride_bytes, int n,
                           se::DeviceMemoryBase ptrs_out) {
-+#if !GOOGLE_SYCL
- #if TENSORFLOW_USE_ROCM
-   stream_executor::gpu::rocm_MakeBatchPointers(
-       se::gpu::AsGpuStreamValue(stream),
-@@ -177,8 +178,9 @@ Status MakeBatchPointers(se::Stream* stream, const se::GpuAsmOpts& asm_opts,
-                          se::BlockDim(CeilOfRatio(n, kThreads), 1, 1), *kernel,
-                          base_ptr, stride_bytes, n, ptrs_out));
+@@ -179,6 +180,13 @@ Status MakeBatchPointers(se::Stream* stream, const se::GpuAsmOpts& asm_opts,
  #endif
-+#endif // !GOOGLE_SYCL
    return OkStatus();
  }
- 
+-
++#else
++Status MakeBatchPointers(se::Stream* stream, const se::GpuAsmOpts& asm_opts,
++                         const se::DeviceMemoryBase& base_ptr, int stride_bytes, int n,
++                         se::DeviceMemoryBase& ptrs_out) {
++  ptrs_out = base_ptr;
++  return OkStatus();
++}
++#endif // !GOOGLE_SYCL
  }  // namespace gpu
--}  // namespace xla
-+}  // namespace xla
-\ No newline at end of file
+ }  // namespace xla
+diff --git a/xla/service/gpu/precompiled_kernels.h b/xla/service/gpu/precompiled_kernels.h
+index 3d1e96afa..5edcd750f 100644
+--- a/xla/service/gpu/precompiled_kernels.h
++++ b/xla/service/gpu/precompiled_kernels.h
+@@ -51,10 +51,15 @@ namespace gpu {
+ //    driver and slow down *all* work on the GPU.  So to do this right, we'd
+ //    need to allocate the host memory as pinned, one alloc per stream.  Then
+ //    we'd need to manage this memory without leaks.  This becomes complex!
++#if !GOOGLE_SYCL
+ Status MakeBatchPointers(se::Stream* stream, const se::GpuAsmOpts& asm_opts,
+                          se::DeviceMemoryBase base_ptr, int stride_bytes, int n,
+                          se::DeviceMemoryBase ptrs_out);
+-
++#else
++Status MakeBatchPointers(se::Stream* stream, const se::GpuAsmOpts& asm_opts,
++                         const se::DeviceMemoryBase& base_ptr, int stride_bytes, int n,
++                         se::DeviceMemoryBase& ptrs_out);
++#endif
+ }  // namespace gpu
+ }  // namespace xla
+ #endif  // XLA_SERVICE_GPU_PRECOMPILED_KERNELS_H_
 diff --git a/xla/service/gpu/runtime3/BUILD b/xla/service/gpu/runtime3/BUILD
 index 6a66dd62f..6865d21aa 100644
 --- a/xla/service/gpu/runtime3/BUILD
@@ -2331,7 +2302,7 @@ index 6a66dd62f..6865d21aa 100644
          "//xla:types",
          "//xla:util",
 diff --git a/xla/service/gpu/runtime3/cholesky_thunk.cc b/xla/service/gpu/runtime3/cholesky_thunk.cc
-index b00d8ee29..adc0c66d8 100644
+index b00d8ee29..13e0b57c7 100644
 --- a/xla/service/gpu/runtime3/cholesky_thunk.cc
 +++ b/xla/service/gpu/runtime3/cholesky_thunk.cc
 @@ -33,11 +33,11 @@ namespace xla {
@@ -2360,15 +2331,8 @@ index b00d8ee29..adc0c66d8 100644
  }  // namespace
  
  CholeskyThunk::CholeskyThunk(ThunkInfo thunk_info,
-@@ -126,4 +129,4 @@ Status RunCholesky(const se::GpuAsmOpts& asm_opts, PrimitiveType type,
- }
- 
- }  // namespace gpu
--}  // namespace xla
-+}  // namespace xla
-\ No newline at end of file
 diff --git a/xla/service/gpu/runtime3/cholesky_thunk.h b/xla/service/gpu/runtime3/cholesky_thunk.h
-index f226a25f7..19b9f7c87 100644
+index f226a25f7..bab773e8b 100644
 --- a/xla/service/gpu/runtime3/cholesky_thunk.h
 +++ b/xla/service/gpu/runtime3/cholesky_thunk.h
 @@ -30,6 +30,11 @@ limitations under the License.
@@ -2383,13 +2347,6 @@ index f226a25f7..19b9f7c87 100644
  namespace xla {
  namespace gpu {
  
-@@ -80,4 +85,4 @@ Status RunCholesky(const se::GpuAsmOpts& asm_opts, PrimitiveType type,
- }  // namespace gpu
- }  // namespace xla
- 
--#endif  // XLA_SERVICE_GPU_RUNTIME3_CHOLESKY_THUNK_H_
-+#endif  // XLA_SERVICE_GPU_RUNTIME3_CHOLESKY_THUNK_H_
-\ No newline at end of file
 diff --git a/xla/service/gpu/runtime3/custom_call_thunk.cc b/xla/service/gpu/runtime3/custom_call_thunk.cc
 index b53a258a5..d6471080a 100644
 --- a/xla/service/gpu/runtime3/custom_call_thunk.cc
@@ -2824,170 +2781,8 @@ index 4e0de39e1..14ae7fdf5 100644
    const se::fft::Type fft_type_;
    const std::vector<int64_t> fft_length_;
  
-diff --git a/xla/service/gpu/runtime3/triangular_solve_thunk.cc b/xla/service/gpu/runtime3/triangular_solve_thunk.cc
-index 36794b866..c8c0204f7 100644
---- a/xla/service/gpu/runtime3/triangular_solve_thunk.cc
-+++ b/xla/service/gpu/runtime3/triangular_solve_thunk.cc
-@@ -38,12 +38,19 @@ TriangularSolveThunk::TriangularSolveThunk(
-     int64_t a_batch_stride, int64_t b_batch_stride)
-     : Thunk(Kind::kTriangularSolve, thunk_info),
-       asm_opts_(asm_opts),
-+#if !GOOGLE_SYCL
-       uplo_(options.lower() ? se::blas::UpperLower::kLower
-                             : se::blas::UpperLower::kUpper),
-       side_(options.left_side() ? se::blas::Side::kLeft
-                                 : se::blas::Side::kRight),
-       unit_diagonal_(options.unit_diagonal() ? se::blas::Diagonal::kUnit
-                                              : se::blas::Diagonal::kNonUnit),
-+#else
-+      uplo_(options.lower() ? oneapi::mkl::uplo::L : oneapi::mkl::uplo::U),
-+      side_(options.left_side() ? oneapi::mkl::side::L : oneapi::mkl::side::R),
-+      unit_diagonal_(options.unit_diagonal() ? oneapi::mkl::diag::U
-+                                             : oneapi::mkl::diag::N),
-+#endif
-       a_buffer_(a_buffer),
-       b_buffer_(b_buffer),
-       temp_buffer_(temp_buffer),
-@@ -55,6 +62,7 @@ TriangularSolveThunk::TriangularSolveThunk(
-       b_batch_stride_(b_batch_stride) {
-   transpose_a_ = [&] {
-     switch (options.transpose_a()) {
-+#if !GOOGLE_SYCL
-       case TriangularSolveOptions::NO_TRANSPOSE:
-         return se::blas::Transpose::kNoTranspose;
-       case TriangularSolveOptions::TRANSPOSE:
-@@ -65,6 +73,18 @@ TriangularSolveThunk::TriangularSolveThunk(
-         LOG(ERROR) << "Invalid triangular solve transpose value "
-                    << options.transpose_a();
-         return se::blas::Transpose::kNoTranspose;
-+#else
-+      case TriangularSolveOptions::NO_TRANSPOSE:
-+        return oneapi::mkl::transpose::N;
-+      case TriangularSolveOptions::TRANSPOSE:
-+        return oneapi::mkl::transpose::T;
-+      case TriangularSolveOptions::ADJOINT:
-+        return oneapi::mkl::transpose::C;
-+      default:
-+        LOG(ERROR) << "Invalid triangular solve transpose value "
-+                   << options.transpose_a();
-+        return oneapi::mkl::transpose::N;
-+#endif
-     }
-   }();
- }
-@@ -78,7 +98,7 @@ Status TriangularSolveThunk::ExecuteOnStream(const ExecuteParams& params) {
-                             transpose_a_, type_, batch_size_, m_, n_,
-                             a_batch_stride_, b_batch_stride_, params.stream);
- }
--
-+#if !GOOGLE_SYCL
- Status RunTriangularSolve(se::DeviceMemoryBase a_data,
-                           se::DeviceMemoryBase b_data,
-                           se::DeviceMemoryBase temp_data,
-@@ -218,6 +238,101 @@ Status RunTriangularSolve(se::DeviceMemoryBase a_data,
-   }
-   return OkStatus();
- }
-+#else // !GOOGLE_SYCL
-+Status RunTriangularSolve(se::DeviceMemoryBase a_data,
-+                          se::DeviceMemoryBase b_data,
-+                          se::DeviceMemoryBase temp_data,
-+                          se::GpuAsmOpts asm_opts, oneapi::mkl::uplo uplo,
-+                          oneapi::mkl::side side, oneapi::mkl::diag unit_diagonal,
-+                          oneapi::mkl::transpose transpose_a, PrimitiveType type,
-+                          int64_t batch_size, int64_t m, int64_t n,
-+                          int64_t a_batch_stride, int64_t b_batch_stride,
-+                          se::Stream* stream) {
-+  VLOG(3) << "uplo=" << UpperLowerString(uplo) << " side=" << SideString(side)
-+          << " diagonal=" << DiagonalString(unit_diagonal)
-+          << " batch_size=" << batch_size << " m=" << m << " n=" << n
-+          << " a_batch_stride=" << a_batch_stride
-+          << " b_batch_stride=" << b_batch_stride;
-+
-+  const int lda = side == oneapi::mkl::side::L ? m : n;
-+  const int ldb = m;
-+  const int stride_a = lda * lda;
-+  const int stride_b = m * n;
-+
-+  auto gpu_stream = stream_executor::gpu::AsGpuStreamValue(stream);
-+  if (batch_size == 1) {
-+    switch (type) {
-+      case F32: {
-+        oneapi::mkl::blas::trsm(*gpu_stream, side, uplo, transpose_a,
-+                                unit_diagonal, m, n, 1.0f,
-+                                static_cast<float*>(a_data.opaque()), lda,
-+                                static_cast<float*>(b_data.opaque()), ldb);
-+        break;
-+      }
-+      case F64: {
-+        oneapi::mkl::blas::trsm(*gpu_stream, side, uplo, transpose_a,
-+                                unit_diagonal, m, n, 1.0f,
-+                                static_cast<double*>(a_data.opaque()), lda,
-+                                static_cast<double*>(b_data.opaque()), ldb);
-+        break;
-+      }
-+      case C64: {
-+        oneapi::mkl::blas::trsm(
-+            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
-+            1.0f, static_cast<std::complex<float>*>(a_data.opaque()), lda,
-+            static_cast<std::complex<float>*>(b_data.opaque()), ldb);
-+        break;
-+      }
-+      case C128: {
-+        oneapi::mkl::blas::trsm(
-+            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
-+            1.0f, static_cast<std::complex<double>*>(a_data.opaque()), lda,
-+            static_cast<std::complex<double>*>(b_data.opaque()), ldb);
-+        break;
-+      }
-+      default:
-+        return InvalidArgument("Invalid type for triangular solve %d", type);
-+    }
-+  } else {
-+    switch (type) {
-+      case F32: {
-+        oneapi::mkl::blas::trsm_batch(
-+            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
-+            1.0f, static_cast<float*>(a_data.opaque()), lda, stride_a,
-+            static_cast<float*>(b_data.opaque()), ldb, stride_b, batch_size);
-+        break;
-+      }
-+      case F64: {
-+        oneapi::mkl::blas::trsm_batch(
-+            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
-+            1.0f, static_cast<double*>(a_data.opaque()), lda, stride_a,
-+            static_cast<double*>(b_data.opaque()), ldb, stride_b, batch_size);
-+        break;
-+      }
-+      case C64: {
-+        oneapi::mkl::blas::trsm_batch(
-+            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
-+            1.0f, static_cast<std::complex<float>*>(a_data.opaque()), lda,
-+            stride_a, static_cast<std::complex<float>*>(b_data.opaque()), ldb,
-+            stride_b, batch_size);
-+        break;
-+      }
-+      case C128: {
-+        oneapi::mkl::blas::trsm_batch(
-+            *gpu_stream, side, uplo, transpose_a, unit_diagonal, m, n,
-+            1.0f, static_cast<std::complex<double>*>(a_data.opaque()), lda,
-+            stride_a, static_cast<std::complex<double>*>(b_data.opaque()), ldb,
-+            stride_b, batch_size);
-+        break;
-+      }
-+      default:
-+        return InvalidArgument("Invalid type for triangular solve %d", type);
-+    }
-+  }
-+
-+  return OkStatus();
-+}
-+#endif // !GOOGLE_SYCL
- 
- }  // namespace gpu
- }  // namespace xla
 diff --git a/xla/service/gpu/runtime3/triangular_solve_thunk.h b/xla/service/gpu/runtime3/triangular_solve_thunk.h
-index 8f582db16..417550119 100644
+index 8f582db16..4fc7bad4b 100644
 --- a/xla/service/gpu/runtime3/triangular_solve_thunk.h
 +++ b/xla/service/gpu/runtime3/triangular_solve_thunk.h
 @@ -29,6 +29,11 @@ limitations under the License.
@@ -3002,49 +2797,19 @@ index 8f582db16..417550119 100644
  namespace xla {
  namespace gpu {
  
-@@ -55,10 +60,17 @@ class TriangularSolveThunk : public Thunk {
- 
-  private:
-   se::GpuAsmOpts asm_opts_;
-+#if !GOOGLE_SYCL
-   const se::blas::UpperLower uplo_;
-   const se::blas::Side side_;
-   const se::blas::Diagonal unit_diagonal_;
-   se::blas::Transpose transpose_a_;
-+#else
-+  const oneapi::mkl::uplo uplo_;
-+  const oneapi::mkl::side side_;
-+  const oneapi::mkl::diag unit_diagonal_;
-+  oneapi::mkl::transpose transpose_a_;
-+#endif
- 
-   const BufferAllocation::Slice a_buffer_;
-   const BufferAllocation::Slice b_buffer_;
-@@ -71,7 +83,7 @@ class TriangularSolveThunk : public Thunk {
+@@ -71,7 +76,6 @@ class TriangularSolveThunk : public Thunk {
    const int64_t a_batch_stride_;
    const int64_t b_batch_stride_;
  };
 -
-+#if !GOOGLE_SYCL
  Status RunTriangularSolve(se::DeviceMemoryBase a_data,
                            se::DeviceMemoryBase b_data,
                            se::DeviceMemoryBase temp_data,
-@@ -81,7 +93,17 @@ Status RunTriangularSolve(se::DeviceMemoryBase a_data,
+@@ -81,7 +85,6 @@ Status RunTriangularSolve(se::DeviceMemoryBase a_data,
                            int64_t batch_size, int64_t m, int64_t n,
                            int64_t a_batch_stride, int64_t b_batch_stride,
                            se::Stream* stream);
 -
-+#else
-+Status RunTriangularSolve(se::DeviceMemoryBase a_data,
-+                          se::DeviceMemoryBase b_data,
-+                          se::DeviceMemoryBase temp_data,
-+                          se::GpuAsmOpts asm_opts, oneapi::mkl::uplo uplo,
-+                          oneapi::mkl::side side, oneapi::mkl::diag unit_diagonal,
-+                          oneapi::mkl::transpose transpose_a, PrimitiveType type,
-+                          int64_t batch_size, int64_t m, int64_t n,
-+                          int64_t a_batch_stride, int64_t b_batch_stride,
-+                          se::Stream* stream);
-+#endif
  }  // namespace gpu
  }  // namespace xla
  

@@ -144,6 +144,7 @@ cc_library(
         ":sycl_stream",
         "@com_google_absl//absl/strings",
         "@xla//xla/stream_executor:event",
+        "@xla//xla/stream_executor:plugin_registry",
         "@xla//xla/stream_executor:stream_executor_internal",
         "@xla//xla/stream_executor:stream_executor_headers",
         "@xla//xla/stream_executor/platform",
@@ -155,10 +156,33 @@ cc_library(
 )
 
 cc_library(
+    name = "syclblas_plugin",
+    srcs = ["sycl_blas.cc"],
+    hdrs = ["sycl_blas.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":sycl_executor",
+        ":sycl_platform_id",
+        "@xla//xla/stream_executor:blas",
+        "@xla//xla/stream_executor:plugin_registry",
+        "@xla//xla/stream_executor/gpu:gpu_stream",
+        "@xla//xla/stream_executor/gpu:gpu_executor_header",
+        "@xla//xla/stream_executor/platform",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@local_config_sycl//sycl:sycl_headers",
+    ] + if_sycl_is_configured([
+        "@local_config_sycl//sycl:mkl",
+    ]),
+    alwayslink = True,
+)
+
+cc_library(
     name = "all_runtime",
     visibility = ["//visibility:public"],
     deps = [
         ":sycl_platform",
+        ":syclblas_plugin",
     ],
     alwayslink = 1,
 )
