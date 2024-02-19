@@ -406,6 +406,23 @@ index d1c7c7ac5..601bcd631 100644
    let genSpecializedAttr = 0;
    let cppNamespace = "::mlir::lmhlo_gpu";
  }
+diff --git a/xla/pjrt/event_pool.cc b/xla/pjrt/event_pool.cc
+index 4a07a6ee7..b7f264c01 100644
+--- a/xla/pjrt/event_pool.cc
++++ b/xla/pjrt/event_pool.cc
+@@ -53,8 +53,11 @@ StatusOr<EventPool::Handle> EventPool::AllocateEvent(
+ }
+ 
+ void EventPool::ThenRecordEvent(se::Stream* stream, EventPool::Handle& handle) {
+-  absl::MutexLock lock(&mu_);
++  // We should not lock event pool mutex before submitting a sycl barrier to a
++  // stream, otherwise it may lead to a dead lock if there is a host task
++  // requiring this mutex in the same stream.
+   stream->ThenRecordEvent(handle.event_.get());
++  absl::MutexLock lock(&mu_);
+   handle.sequence_number_ = next_sequence_number_++;
+ }
+ 
 diff --git a/xla/pjrt/gpu/BUILD b/xla/pjrt/gpu/BUILD
 index fd18d73bf..93a5b61c4 100644
 --- a/xla/pjrt/gpu/BUILD
