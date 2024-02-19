@@ -261,11 +261,19 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
 }
 
 template <typename InputT>
+<<<<<<< HEAD
 std::enable_if_t<std::is_same_v<InputT, float>, absl::StatusOr<bool>>
 RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
              const MatrixDescriptor& rhs, const MatrixDescriptor& c,
              const MatrixDescriptor& out, se::DeviceMemoryBase bias,
              se::gpu::BlasLt::Epilogue epilogue, float beta) {
+=======
+std::enable_if_t<std::is_same_v<InputT, float>, absl::StatusOr<bool>> RunXetlaGemm(
+    se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
+    const MatrixDescriptor& rhs, const MatrixDescriptor& c,
+    const MatrixDescriptor& out, se::DeviceMemoryBase bias,
+    se::gpu::BlasLt::Epilogue epilogue, float beta) {
+>>>>>>> f4baa5e51 (Rebase to jax-v0.4.24)
   return Internal("Unsupported Datatype in XeTLA");
 }
 
@@ -308,6 +316,7 @@ std::unique_ptr<OneDnnMatMulParams> CreateMatMulParams(
       out_strides, bias_strides);
 }
 
+<<<<<<< HEAD
 template <typename InputT, typename OutputT>
 absl::Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
                     const MatrixDescriptor& lhs, const MatrixDescriptor& rhs,
@@ -316,6 +325,16 @@ absl::Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
                     se::gpu::BlasLt::Epilogue epilogue, se::Stream* stream,
                     se::ScratchAllocator* scratch_allocator,
                     se::blas::ComputePrecision compute_precision) {
+=======
+template <typename InputT>
+absl::Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
+              const MatrixDescriptor& lhs, const MatrixDescriptor& rhs,
+              const MatrixDescriptor& c, const MatrixDescriptor& output,
+              se::DeviceMemoryBase bias, float alpha, float beta,
+              se::gpu::BlasLt::Epilogue epilogue, se::Stream* stream,
+              se::ScratchAllocator* scratch_allocator,
+              se::blas::ComputePrecision compute_precision) {
+>>>>>>> f4baa5e51 (Rebase to jax-v0.4.24)
   CHECK(output.transpose == se::blas::Transpose::kNoTranspose);
   se::gpu::GpuStreamHandle stream_handle =
       stream_executor::gpu::AsGpuStreamValue(stream);
