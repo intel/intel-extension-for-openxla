@@ -84,6 +84,9 @@ jobs:
           git clone https://github.com/google/jax.git
           cd jax && git checkout jaxlib-v0.4.20
           patch -p1 -i ../test/jax_ut.patch
+          pip install hypothesis
+          pip install -e .
+          pip install -r build/test-requirements.txt 
           mkdir -p ./logs/ut
           find ./tests -name "*.py" | sed 's#\./##g' |& tee ut_list.txt
           file_path=./ut_list.txt
