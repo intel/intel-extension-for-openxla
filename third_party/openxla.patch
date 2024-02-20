@@ -737,7 +737,7 @@ index 4feaf28bb..1b532b74a 100644
  StatusOr<CudnnfMHAKind> GetCudnnfMHAKind(const HloCustomCallInstruction* instr);
  
 diff --git a/xla/service/gpu/gpu_conv_rewriter.cc b/xla/service/gpu/gpu_conv_rewriter.cc
-index 838de8067..ca1388e13 100644
+index 838de8067..0bed9501c 100644
 --- a/xla/service/gpu/gpu_conv_rewriter.cc
 +++ b/xla/service/gpu/gpu_conv_rewriter.cc
 @@ -1,4 +1,4 @@
@@ -850,20 +850,7 @@ index 838de8067..ca1388e13 100644
    CHECK_EQ(conv->opcode(), HloOpcode::kConvolution);
  
    TF_ASSIGN_OR_RETURN(HloInstruction * custom_call,
-@@ -705,8 +750,10 @@ StatusOr<bool> RunOnInstruction(HloInstruction* conv) {
-     return false;
-   }
- 
--  TF_RETURN_IF_ERROR(
--      custom_call->set_backend_config(GetDefaultBackendConfig()));
-+  GpuBackendConfig gpu_backend_config;
-+  *gpu_backend_config.mutable_cudnn_conv_backend_config() =
-+      GetDefaultBackendConfig();
-+  TF_RETURN_IF_ERROR(custom_call->set_backend_config(gpu_backend_config));
- 
-   VLOG(1) << "Replacing convolution " << conv->ToString() << " with "
-           << custom_call->ToString();
-@@ -722,7 +769,7 @@ StatusOr<bool> RunOnInstruction(HloInstruction* conv) {
+@@ -722,7 +767,7 @@ StatusOr<bool> RunOnInstruction(HloInstruction* conv) {
  // Rewrites the convolutions in the given computation into calls to
  // cudnn/miopen.
  // Returns true if it made any changes.
@@ -872,7 +859,7 @@ index 838de8067..ca1388e13 100644
    std::vector<HloInstruction*> convs;
    for (auto* hlo : computation->instructions()) {
      if (hlo->opcode() == HloOpcode::kConvolution) {
-@@ -739,7 +786,7 @@ StatusOr<bool> RunOnComputation(HloComputation* computation) {
+@@ -739,7 +784,7 @@ StatusOr<bool> RunOnComputation(HloComputation* computation) {
  }
  }  // namespace
  
