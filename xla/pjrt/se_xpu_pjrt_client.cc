@@ -24,6 +24,7 @@ limitations under the License.
 
 #include "absl/base/attributes.h"
 #include "absl/container/flat_hash_map.h"
+#include "tsl/util/env_var.h"
 #include "xla/client/client_library.h"
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/service/gpu/gpu_executable_run_options.h"
@@ -97,13 +98,26 @@ GetStreamExecutorXpuDeviceAllocator(
       executors.reserve(addressable_devices.size());
       std::vector<se::MultiDeviceAdapter::AllocatorWithStream>
           allocators_and_streams;
+      int64_t default_limit_MB = -1;
+      TF_CHECK_OK(tsl::ReadInt64FromEnvVar("XLA_LIMIT_MEMORY_SIZE_IN_MB",
+                                        default_limit_MB, &default_limit_MB));
+      if (IsARC() && default_limit_MB > 4095) {
+        default_limit_MB = 4095;
+        LOG(WARNING)<< "ARC or FLEX series allocation size should be less than 4096MB. "
+                    << "Set as default 4095MB.";
+      }
+      uint64_t limit_byte = default_limit_MB > 0 ? 
+                            std::min(static_cast<uint64_t>(default_limit_MB * 1024 * 1024),
+                                     GetMaxAllocateLimitByte()) :
+                            GetMaxAllocateLimitByte();
       for (const auto& ordinal_and_device : addressable_devices) {
         TF_ASSIGN_OR_RETURN(
             auto bfc_allocator,
             CreateBFCAllocator(ordinal_and_device.second->executor(),
                                allocator_config.memory_fraction,
                                allocator_config.preallocate));
-        allocators_and_streams.emplace_back(
+        bfc_allocator->SetAllocateLimit(limit_byte);
+	      allocators_and_streams.emplace_back(
             std::move(bfc_allocator),
             ordinal_and_device.second->compute_stream());
       }
