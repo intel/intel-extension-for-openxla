@@ -1535,9 +1535,14 @@ PJRT_Error* PJRT_Buffer_Destroy(PJRT_Buffer_Destroy_Args* args) {
   // delete args->buffer;
   //printf("CBOSS DGB I am in PJRT_Buffer_Destroy!\r\n");
   //fflush(stdout);
-  auto* pjrt_buffer = reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(args->buffer->buffer.get());
-  pjrt_buffer->deallocate_buffer();
-  //args->buffer->buffer->deallocate_buffer();
+  //auto* pjrt_buffer = reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(args->buffer->buffer.get());
+  //pjrt_buffer->deallocate_buffer();
+  xla::ITEXPjRtBuffer& buffer = *(arg->buffer->buffer.get());
+  if (buffer.isAllocatedByThirdPartyFramework()) {
+    buffer.Delete();
+  } else {
+    delete args->buffer; 
+  }
   return nullptr;
 }
 

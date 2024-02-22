@@ -42,6 +42,35 @@ StatusOr<std::unique_ptr<ITEXPjRtBuffer>> AllocateITEXDestinationBuffer(
       device_id, memory.Release(), dimensions, element_type, client, device);
 }
 
+void ITEXPjrtBuffer::recover_buffer() {
+  if (need_bfc_deallocate_) {
+    LOG(ERROR) << "Try to recover a buffer with unrelease memory!";
+  } else {
+     void* device_mem = allocator_->AllocateRaw(device_ordinal_, size, true, 0);
+     buffer.Reset(device_mem, size);
+     if (!device_mem) {
+       LOG(WARNING) << "Buffer allocation get nullptr!";
+     }
+     need_bfc_deallocate_ = true;
+  }
+}
+
+void ITEXPjrtBuffer::Delete() {
+  if (!need_bfc_deallocate_) {
+    LOG(WARNING) << "Try to deallocate a released buffer!";
+  } else {
+    Status status = allocator_->Deallocate(device_ordinal_, buffer_);
+    if (!status.ok()) {
+      LOG(ERROR) << "Buffer deallocation failed: " << status;
+    }
+    need_bfc_deallocate_ = false
+  }
+}
+
+bool ITEXPjrtBuffer::isAllocatedByThirdPartyFramework() {
+  return isAllocatedByThirdPartyFramwork_;
+}
+
 ITEXPjRtBuffer::ITEXPjRtBuffer(int device_id,
                                se::DeviceMemoryBase device_memory,
                                absl::Span<const int64_t> dimensions,
@@ -60,6 +89,14 @@ ITEXPjRtBuffer::ITEXPjRtBuffer(int device_id,
 }
 
 ITEXPjRtBuffer::~ITEXPjRtBuffer() { Delete(); }
+
+void ITEXPjRtBuffer::set_allocate_by_third_party_framework() {
+  isAllocatedByThirdPartyFramwork_ = true;
+}
+
+void ITEXPjRtBuffer::record_memory_allocation_size(size_t size) {
+  MemoryAllocationByteSize_ = size;
+}
 
 StatusOr<std::unique_ptr<PjRtBuffer>> ITEXPjRtBuffer::CopyToDevice(
     PjRtDevice* dst_device) {
@@ -97,14 +134,6 @@ StatusOr<std::unique_ptr<PjRtBuffer>> ITEXPjRtBuffer::CopyToDevice(
 
 StatusOr<size_t> ITEXPjRtBuffer::GetOnDeviceSizeInBytes() const {
   return buffer_.size();
-}
-
-void ITEXPjRtBuffer::Delete() {
-  VLOG(1) << "ITEXPjRtBuffer::Delete";
-  Status status = allocator_->Deallocate(device_ordinal_, buffer_);
-  if (!status.ok()) {
-    LOG(ERROR) << "Buffer deallocation failed: " << status;
-  }
 }
 
 bool ITEXPjRtBuffer::IsOnCpu() const {

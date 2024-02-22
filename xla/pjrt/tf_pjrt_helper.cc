@@ -92,27 +92,29 @@ PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
                                     pjrt_c_client->client.get(), *dimentions,
                                     type, size)
           .value();
+  (*buffer).set_allocate_by_third_party_framework();
+  (*buffer).record_memory_allocation_size(size);
   return new PJRT_Buffer{std::move(buffer), pjrt_c_client};
 }
 
-PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
-                                    std::vector<int64_t> dimentions,
-                                    std::vector<int64_t> layout,
-                                    PJRT_Client* pjrt_c_client) {
-  xla::PjRtDevice* pjrt_device =
-      pjrt_c_client->client->LookupDevice(device_id).value();
-  xla::PrimitiveType type = XlaDataTypeFromString(data_type);
-  xla::Shape shape =
-      xla::ShapeUtil::MakeShapeWithDenseLayout(type, dimentions, layout);
-  auto* pjrt_buffer = new PJRT_Buffer{
-      std::move(
-          pjrt_c_client->client->CreateUninitializedBuffer(shape, pjrt_device)
-              .value()),
-      pjrt_c_client};
-  auto* pjrt_se_buffer = dynamic_cast<xla::PjRtStreamExecutorBuffer*>(pjrt_buffer->buffer.get());
-  pjrt_se_buffer->set_allocate_by_third_party_framework();
-  return pjrt_buffer;
-}
+//PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
+//                                    std::vector<int64_t> dimentions,
+//                                    std::vector<int64_t> layout,
+//                                    PJRT_Client* pjrt_c_client) {
+//  xla::PjRtDevice* pjrt_device =
+//      pjrt_c_client->client->LookupDevice(device_id).value();
+//  xla::PrimitiveType type = XlaDataTypeFromString(data_type);
+//  xla::Shape shape =
+//      xla::ShapeUtil::MakeShapeWithDenseLayout(type, dimentions, layout);
+//  auto* pjrt_buffer = new PJRT_Buffer{
+//      std::move(
+//          pjrt_c_client->client->CreateUninitializedBuffer(shape, pjrt_device)
+//              .value()),
+//      pjrt_c_client};
+//  auto* pjrt_se_buffer = dynamic_cast<xla::PjRtStreamExecutorBuffer*>(pjrt_buffer->buffer.get());
+//  pjrt_se_buffer->set_allocate_by_third_party_framework();
+//  return pjrt_buffer;
+//}
 
 void ITEXDeletePjRtBuffer(PJRT_Buffer* pjrt_buffer) {
   //printf("CBOSS I am in ITEXDeletePjRtBuffer!\r\n");
@@ -121,8 +123,9 @@ void ITEXDeletePjRtBuffer(PJRT_Buffer* pjrt_buffer) {
 }
 
 void ITEXRecoverPjRtBuffer(PJRT_Buffer* pjrt_buffer) {
-  auto* buffer = reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(pjrt_buffer->buffer.get());
-  buffer->recover_buffer();
+  //auto* buffer = reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(pjrt_buffer->buffer.get());
+  xla::ITEXPjRtBuffer& buffer = *pjrt_buffer->buffer;
+  buffer.recover_buffer();
 }
 
 
