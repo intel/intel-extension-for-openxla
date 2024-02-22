@@ -52,6 +52,50 @@ void* ITEXOpaqueDataPointerFromPjRtBuffer(PJRT_Buffer* pjrt_c_buffer) {
 }
 
 PJRT_Buffer* ITEXCreateSEPjRtBuffer(int device_id, std::string data_type,
+                                  std::vector<int64_t>* dimentions, size_t size,
+                                  PJRT_Client* pjrt_c_client) {
+  xla::PjRtDevice* pjrt_device =
+      pjrt_c_client->client->LookupDevice(device_id).value();
+  xla::PrimitiveType type = XlaDataTypeFromString(data_type);
+  std::unique_ptr<xla::ITEXPjRtBuffer> buffer =
+      AllocateITEXDestinationBuffer(device_id, pjrt_device,
+                                    pjrt_c_client->client.get(), *dimentions,
+                                    type, size)
+          .value();
+  return new PJRT_Buffer{std::move(buffer), pjrt_c_client};
+}
+
+PJRT_Buffer* ITEXCreateSEPjRtBuffer(int device_id, std::string data_type,
+                                    std::vector<int64_t> dimentions,
+                                    std::vector<int64_t> layout,
+                                    PJRT_Client* pjrt_c_client) {
+  xla::PjRtDevice* pjrt_device =
+      pjrt_c_client->client->LookupDevice(device_id).value();
+  xla::PrimitiveType type = XlaDataTypeFromString(data_type);
+  xla::Shape shape =
+      xla::ShapeUtil::MakeShapeWithDenseLayout(type, dimentions, layout);
+  return new PJRT_Buffer{
+      std::move(
+          pjrt_c_client->client->CreateUninitializedBuffer(shape, pjrt_device)
+              .value()),
+      pjrt_c_client};
+}
+
+PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
+                                  std::vector<int64_t>* dimentions, size_t size,
+                                  PJRT_Client* pjrt_c_client) {
+  xla::PjRtDevice* pjrt_device =
+      pjrt_c_client->client->LookupDevice(device_id).value();
+  xla::PrimitiveType type = XlaDataTypeFromString(data_type);
+  std::unique_ptr<xla::ITEXPjRtBuffer> buffer =
+      AllocateITEXDestinationBuffer(device_id, pjrt_device,
+                                    pjrt_c_client->client.get(), *dimentions,
+                                    type, size)
+          .value();
+  return new PJRT_Buffer{std::move(buffer), pjrt_c_client};
+}
+
+PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
                                     std::vector<int64_t> dimentions,
                                     std::vector<int64_t> layout,
                                     PJRT_Client* pjrt_c_client) {
@@ -68,20 +112,6 @@ PJRT_Buffer* ITEXCreateSEPjRtBuffer(int device_id, std::string data_type,
   auto* pjrt_se_buffer = dynamic_cast<xla::PjRtStreamExecutorBuffer*>(pjrt_buffer->buffer.get());
   pjrt_se_buffer->set_allocate_by_third_party_framework();
   return pjrt_buffer;
-}
-
-PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
-                                  std::vector<int64_t>* dimentions, size_t size,
-                                  PJRT_Client* pjrt_c_client) {
-  xla::PjRtDevice* pjrt_device =
-      pjrt_c_client->client->LookupDevice(device_id).value();
-  xla::PrimitiveType type = XlaDataTypeFromString(data_type);
-  std::unique_ptr<xla::ITEXPjRtBuffer> buffer =
-      AllocateITEXDestinationBuffer(device_id, pjrt_device,
-                                    pjrt_c_client->client.get(), *dimentions,
-                                    type, size)
-          .value();
-  return new PJRT_Buffer{std::move(buffer), pjrt_c_client};
 }
 
 void ITEXDeletePjRtBuffer(PJRT_Buffer* pjrt_buffer) {
