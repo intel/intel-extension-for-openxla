@@ -178,11 +178,33 @@ cc_library(
 )
 
 cc_library(
+    name = "syclfft_plugin",
+    srcs = ["sycl_fft.cc"],
+    hdrs = ["sycl_fft.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":sycl_executor",
+        ":sycl_platform_id",
+        "@xla//xla/stream_executor:fft",
+        "@xla//xla/stream_executor:plugin_registry",
+        "@xla//xla/stream_executor/gpu:gpu_stream",
+        "@xla//xla/stream_executor/gpu:gpu_executor_header",
+        "@xla//xla/stream_executor/gpu:gpu_helpers_header",
+        "@xla//xla/stream_executor/platform",
+        "@local_config_sycl//sycl:sycl_headers",
+    ] + if_sycl_is_configured([
+        "@local_config_sycl//sycl:mkl",
+    ]),
+    alwayslink = True,
+)
+
+cc_library(
     name = "all_runtime",
     visibility = ["//visibility:public"],
     deps = [
         ":sycl_platform",
         ":syclblas_plugin",
+        ":syclfft_plugin",
     ],
     alwayslink = 1,
 )

@@ -579,7 +579,18 @@ blas::BlasSupport* GpuExecutor::CreateBlas() {
 
 dnn::DnnSupport* GpuExecutor::CreateDnn() { return nullptr; }
 
-fft::FftSupport* GpuExecutor::CreateFft() { return nullptr; }
+fft::FftSupport* GpuExecutor::CreateFft() {   
+  PluginRegistry* registry = PluginRegistry::Instance();
+  tsl::StatusOr<PluginRegistry::FftFactory> status =
+      registry->GetFactory<PluginRegistry::FftFactory>(stream_executor::sycl::kSyclPlatformId);
+  if (!status.ok()) {
+    LOG(ERROR) << "Unable to retrieve FFT factory: "
+               << status.status().message();
+    return nullptr;
+  }
+
+  return status.value()(this);
+}
 
 bool GpuExecutor::CanEnablePeerAccessTo(StreamExecutorInterface* other) {
   return false;
