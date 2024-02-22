@@ -95,6 +95,10 @@ void ITEXPjRtBuffer::set_allocate_by_third_party_framework() {
   isAllocatedByThirdPartyFramwork_ = true;
 }
 
+void ITEXPjRtBuffer::record_memory_allocation_size(size_t size) {
+  MemoryAllocationByteSize_ = size;
+}
+
 size_t ITEXPjRtBuffer::get_recorded_memory_allocation_size() {
   return MemoryAllocationByteSize_;
 }

@@ -124,8 +124,8 @@ void ITEXDeletePjRtBuffer(PJRT_Buffer* pjrt_buffer) {
 
 void ITEXRecoverPjRtBuffer(PJRT_Buffer* pjrt_buffer) {
   //auto* buffer = reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(pjrt_buffer->buffer.get());
-  xla::ITEXPjRtBuffer& buffer = *pjrt_buffer->buffer;
-  buffer.recover_buffer();
+  xla::ITEXPjRtBuffer* buffer = static_cast<xla::ITEXPjRtBuffer*>(pjrt_buffer->buffer.get());
+  buffer->recover_buffer();
 }
 
 

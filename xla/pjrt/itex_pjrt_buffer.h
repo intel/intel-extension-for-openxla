@@ -94,11 +94,11 @@ class ITEXPjRtBuffer : public PjRtBuffer {
     return Unimplemented("Implement ReleaseDeviceMemoryOwnership");
   };
 
+ void record_memory_allocation_size(size_t size);
  size_t get_recorded_memory_allocation_size();
  void set_allocate_by_third_party_framework();
  void recover_buffer();
  bool isAllocatedByThirdPartyFramework();
- 
 
  private:
   int device_ordinal_;
