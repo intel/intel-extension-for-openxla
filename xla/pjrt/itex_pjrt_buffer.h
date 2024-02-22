@@ -94,17 +94,17 @@ class ITEXPjRtBuffer : public PjRtBuffer {
     return Unimplemented("Implement ReleaseDeviceMemoryOwnership");
   };
 
- void record_memory_allocation_size(size_t size) override;
- void set_allocate_by_third_party_framework() override;
- void recover_buffer() override;
- bool isAllocatedByThirdPartyFramework() override;
+ size_t get_recorded_memory_allocation_size();
+ void set_allocate_by_third_party_framework();
+ void recover_buffer();
+ bool isAllocatedByThirdPartyFramework();
  
 
  private:
   int device_ordinal_;
   bool isAllocatedByThirdPartyFramwork_ = false;
   bool need_bfc_deallocate_ = true;
-  size_t MemoryAllocationByteSize_;
+  size_t MemoryAllocationByteSize_ = 0;
   Shape shape_;
   absl::InlinedVector<int64_t, 6> dimensions_;
   PrimitiveType element_type_;

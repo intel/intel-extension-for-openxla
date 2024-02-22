@@ -42,12 +42,13 @@ StatusOr<std::unique_ptr<ITEXPjRtBuffer>> AllocateITEXDestinationBuffer(
       device_id, memory.Release(), dimensions, element_type, client, device);
 }
 
-void ITEXPjrtBuffer::recover_buffer() {
+void ITEXPjRtBuffer::recover_buffer() {
   if (need_bfc_deallocate_) {
     LOG(ERROR) << "Try to recover a buffer with unrelease memory!";
   } else {
+     auto& size = MemoryAllocationByteSize_;
      void* device_mem = allocator_->AllocateRaw(device_ordinal_, size, true, 0);
-     buffer.Reset(device_mem, size);
+     buffer_.Reset(device_mem, size);
      if (!device_mem) {
        LOG(WARNING) << "Buffer allocation get nullptr!";
      }
@@ -55,7 +56,7 @@ void ITEXPjrtBuffer::recover_buffer() {
   }
 }
 
-void ITEXPjrtBuffer::Delete() {
+void ITEXPjRtBuffer::Delete() {
   if (!need_bfc_deallocate_) {
     LOG(WARNING) << "Try to deallocate a released buffer!";
   } else {
@@ -63,11 +64,11 @@ void ITEXPjrtBuffer::Delete() {
     if (!status.ok()) {
       LOG(ERROR) << "Buffer deallocation failed: " << status;
     }
-    need_bfc_deallocate_ = false
+    need_bfc_deallocate_ = false;
   }
 }
 
-bool ITEXPjrtBuffer::isAllocatedByThirdPartyFramework() {
+bool ITEXPjRtBuffer::isAllocatedByThirdPartyFramework() {
   return isAllocatedByThirdPartyFramwork_;
 }
 
@@ -94,8 +95,8 @@ void ITEXPjRtBuffer::set_allocate_by_third_party_framework() {
   isAllocatedByThirdPartyFramwork_ = true;
 }
 
-void ITEXPjRtBuffer::record_memory_allocation_size(size_t size) {
-  MemoryAllocationByteSize_ = size;
+size_t ITEXPjRtBuffer::get_recorded_memory_allocation_size() {
+  return MemoryAllocationByteSize_;
 }
 
 StatusOr<std::unique_ptr<PjRtBuffer>> ITEXPjRtBuffer::CopyToDevice(

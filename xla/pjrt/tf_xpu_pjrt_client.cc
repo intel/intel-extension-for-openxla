@@ -1537,7 +1537,7 @@ PJRT_Error* PJRT_Buffer_Destroy(PJRT_Buffer_Destroy_Args* args) {
   //fflush(stdout);
   //auto* pjrt_buffer = reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(args->buffer->buffer.get());
   //pjrt_buffer->deallocate_buffer();
-  xla::ITEXPjRtBuffer& buffer = *(arg->buffer->buffer.get());
+  xla::ITEXPjRtBuffer& buffer = *(args->buffer->buffer.get());
   if (buffer.isAllocatedByThirdPartyFramework()) {
     buffer.Delete();
   } else {
