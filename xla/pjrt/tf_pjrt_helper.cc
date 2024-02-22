@@ -60,11 +60,14 @@ PJRT_Buffer* ITEXCreateSEPjRtBuffer(int device_id, std::string data_type,
   xla::PrimitiveType type = XlaDataTypeFromString(data_type);
   xla::Shape shape =
       xla::ShapeUtil::MakeShapeWithDenseLayout(type, dimentions, layout);
-  return new PJRT_Buffer{
+  auto* pjrt_buffer = new PJRT_Buffer{
       std::move(
           pjrt_c_client->client->CreateUninitializedBuffer(shape, pjrt_device)
               .value()),
       pjrt_c_client};
+  auto* pjrt_se_buffer = dynamic_cast<xla::PjRtStreamExecutorBuffer*>(pjrt_buffer->buffer.get());
+  pjrt_se_buffer->set_allocate_by_third_party_framework();
+  return pjrt_buffer;
 }
 
 PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
