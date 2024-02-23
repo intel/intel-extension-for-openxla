@@ -422,18 +422,7 @@ index 4a07a6ee7..b7f264c01 100644
 +  absl::MutexLock lock(&mu_);
    handle.sequence_number_ = next_sequence_number_++;
  }
-diff --git a/xla/pjrt/BUILD b/xla/pjrt/BUILD
-index 75b7a060d..c870bb3c6 100644
---- a/xla/pjrt/BUILD
-+++ b/xla/pjrt/BUILD
-@@ -435,6 +435,7 @@ cc_library(
-         "//xla/service/gpu:gpu_executable_run_options",
-         "//xla/stream_executor",
-         "//xla/stream_executor:stream_executor_internal",
-+        "//xla/stream_executor:tf_allocator_adapter",
-         "//xla/stream_executor/host:host_platform_id",
-         "@com_google_absl//absl/algorithm:container",
-         "@com_google_absl//absl/base",
+ 
 diff --git a/xla/pjrt/gpu/BUILD b/xla/pjrt/gpu/BUILD
 index fd18d73bf..93a5b61c4 100644
 --- a/xla/pjrt/gpu/BUILD
@@ -535,78 +524,11 @@ index 69443f326..6161ec8c7 100644
      callback_thread_->Schedule(std::move(callback));
    });
  }
-diff --git a/xla/pjrt/pjrt_stream_executor_client.cc b/xla/pjrt/pjrt_stream_executor_client.cc
-index a331e00e6..89df7b706 100644
---- a/xla/pjrt/pjrt_stream_executor_client.cc
-+++ b/xla/pjrt/pjrt_stream_executor_client.cc
-@@ -1272,6 +1272,7 @@ PjRtStreamExecutorBuffer::PjRtStreamExecutorBuffer(
-       on_device_shape_(std::move(on_device_shape)),
-       device_(tensorflow::down_cast<PjRtStreamExecutorDevice*>(device)),
-       device_buffer_(std::move(device_buffer)) {
-+
-   for (int i = 0; i < ScopedHold::Type::kMaxValue; ++i) {
-     holds_[i] = 0;
-   }
 diff --git a/xla/pjrt/pjrt_stream_executor_client.h b/xla/pjrt/pjrt_stream_executor_client.h
-index b91269c3e..6211b6a29 100644
+index b91269c3e..151ab678d 100644
 --- a/xla/pjrt/pjrt_stream_executor_client.h
 +++ b/xla/pjrt/pjrt_stream_executor_client.h
-@@ -52,6 +52,7 @@ limitations under the License.
- #include "xla/status.h"
- #include "xla/statusor.h"
- #include "xla/stream_executor/stream.h"
-+#include "xla/stream_executor/tf_allocator_adapter.h"
- #include "xla/util.h"
- #include "xla/xla_data.pb.h"
- #include "tsl/framework/allocator.h"
-@@ -606,6 +607,46 @@ class PjRtStreamExecutorBuffer : public PjRtBuffer {
-     std::shared_ptr<TrackedDeviceBuffer> buffer_;
-   };
- 
-+  void recover_buffer() {
-+
-+      auto* allocator = dynamic_cast<stream_executor::MultiDeviceAdapter*>(
-+        device_buffer_->allocator());
-+        int index = 0;
-+        int device_ordinal = device_buffer_->device_ordinal();
-+
-+        absl::MutexLock lock(&mu_);
-+        WaitForOutstandingDonationHold();
-+
-+        auto& memoryByteSizeRecorded = device_buffer_->memoryAllocationByteSize_; 
-+        for (se::DeviceMemoryBase& buffer : device_buffer_->device_memory()) {
-+          int64_t size = memoryByteSizeRecorded[index++];
-+          void* device_mem = allocator->AllocateRaw(device_ordinal, size, true, 0);
-+          buffer.Reset(device_mem, size);
-+          if (!device_mem) {
-+            LOG(WARNING) << "Buffer allocation get nullptr!";
-+          }
-+        }
-+        device_buffer_->need_bfc_deallocate = true;
-+        WaitForOutstandingUsageHolds();
-+  }
-+
-+  void deallocate_buffer() {
-+    auto* allocator = dynamic_cast<stream_executor::MultiDeviceAdapter*>(
-+      device_buffer_->allocator());
-+
-+      int device_ordinal = device_buffer_->device_ordinal();
-+      absl::MutexLock lock(&mu_);
-+      WaitForOutstandingDonationHold();
-+      for (const se::DeviceMemoryBase& buffer : device_buffer_->device_memory()) {
-+        Status status = allocator->Deallocate(device_ordinal, buffer);
-+        if (!status.ok()) {
-+          LOG(ERROR) << "Buffer deallocation failed: " << status;
-+        }
-+      }
-+      device_buffer_->need_bfc_deallocate = false;
-+      WaitForOutstandingUsageHolds();
-+  }
-+
-   PjRtStreamExecutorBuffer(Shape on_device_shape,
-                            std::shared_ptr<TrackedDeviceBuffer> device_buffer,
-                            PjRtClient* client, PjRtDevice* device);
-@@ -874,6 +915,10 @@ class PjRtStreamExecutorLoadedExecutable : public PjRtLoadedExecutable {
+@@ -874,6 +874,10 @@ class PjRtStreamExecutorLoadedExecutable : public PjRtLoadedExecutable {
      return executables_;
    }
  
@@ -617,92 +539,6 @@ index b91269c3e..6211b6a29 100644
   protected:
    bool parameter_is_tupled_arguments() const {
      return parameter_is_tupled_arguments_;
-diff --git a/xla/pjrt/tracked_device_buffer.cc b/xla/pjrt/tracked_device_buffer.cc
-index c071a7d8a..e779a2c63 100644
---- a/xla/pjrt/tracked_device_buffer.cc
-+++ b/xla/pjrt/tracked_device_buffer.cc
-@@ -153,10 +153,13 @@ TrackedDeviceBuffer::FromScopedShapedBuffer(
-         iterator->second = se::DeviceMemoryBase();
-         ++iterator;
-       });
-+  
-   CHECK(iterator == shaped_buffer->buffers().end());
-   return std::make_shared<TrackedDeviceBuffer>(
-       shaped_buffer->memory_allocator(), shaped_buffer->device_ordinal(),
--      absl::Span<se::DeviceMemoryBase>(buffers), definition_events,
-+      absl::Span<se::DeviceMemoryBase>(buffers), 
-+      std::move(shaped_buffer->MemoryAllocationByteSize),
-+      definition_events,
-       /*on_delete_callback=*/nullptr);
- }
- 
-@@ -216,13 +219,31 @@ TrackedDeviceBuffer::TrackedDeviceBuffer(
-       in_use_(true),
-       on_delete_callback_(std::move(on_delete_callback)) {}
- 
-+TrackedDeviceBuffer::TrackedDeviceBuffer(
-+    se::DeviceMemoryAllocator* allocator, int device_ordinal,
-+    absl::Span<se::DeviceMemoryBase const> device_memory,
-+    std::vector<int64_t>&& memoryAllocationByteSize,
-+    absl::Span<const std::shared_ptr<BufferSequencingEvent>> definition_events,
-+    std::function<void()> on_delete_callback)
-+    : allocator_(allocator),
-+      device_ordinal_(device_ordinal),
-+      device_memory_(device_memory.begin(), device_memory.end()),
-+      definition_events_(std::make_move_iterator(definition_events.begin()),
-+                         std::make_move_iterator(definition_events.end())),
-+      in_use_(true),
-+      memoryAllocationByteSize_(memoryAllocationByteSize),
-+      on_delete_callback_(std::move(on_delete_callback)) {}
-+
- TrackedDeviceBuffer::~TrackedDeviceBuffer() {
-   if (allocator_) {
--    for (const se::DeviceMemoryBase& buffer : device_memory_) {
--      Status status = allocator_->Deallocate(device_ordinal_, buffer);
--      if (!status.ok()) {
--        LOG(ERROR) << "Buffer deallocation failed: " << status;
--      }
-+    // If using NPD, device buffer memory is deallocated by TensorFlow.
-+    if (need_bfc_deallocate) {
-+        for (const se::DeviceMemoryBase& buffer : device_memory_) {
-+          Status status = allocator_->Deallocate(device_ordinal_, buffer);
-+          if (!status.ok()) {
-+            LOG(ERROR) << "Buffer deallocation failed: " << status;
-+          }
-+        }
-     }
-   }
-   if (on_delete_callback_) {
-diff --git a/xla/pjrt/tracked_device_buffer.h b/xla/pjrt/tracked_device_buffer.h
-index d3a7761f9..cdf4b0614 100644
---- a/xla/pjrt/tracked_device_buffer.h
-+++ b/xla/pjrt/tracked_device_buffer.h
-@@ -228,6 +228,8 @@ class TrackedDeviceBuffer {
- 
-   se::DeviceMemoryAllocator* allocator() const { return allocator_; }
-   int device_ordinal() const { return device_ordinal_; }
-+  std::vector<int64_t> memoryAllocationByteSize_;
-+
-   absl::InlinedVector<se::DeviceMemoryBase, 1>& device_memory() {
-     return device_memory_;
-   }
-@@ -272,8 +274,16 @@ class TrackedDeviceBuffer {
-                       absl::Span<const std::shared_ptr<BufferSequencingEvent>>
-                           definition_events,
-                       std::function<void()> on_delete_callback);
-+  TrackedDeviceBuffer(se::DeviceMemoryAllocator* allocator, int device_ordinal,
-+                      absl::Span<se::DeviceMemoryBase const> device_memory,
-+                      std::vector<int64_t>&& memoryAllocationByteSize,
-+                      absl::Span<const std::shared_ptr<BufferSequencingEvent>>
-+                          definition_events,
-+                      std::function<void()> on_delete_callback);                   
-   ~TrackedDeviceBuffer();
- 
-+  bool need_bfc_deallocate = true;
-+  
-  private:
-   // Are the buffers in device_memory_ owned? If so, which allocator and device
-   // ordinal? May be nullptr, indicating the buffers are not owned.
 diff --git a/xla/service/algebraic_simplifier.h b/xla/service/algebraic_simplifier.h
 index 232074497..8b304b6e2 100644
 --- a/xla/service/algebraic_simplifier.h
@@ -1889,75 +1725,6 @@ index 676c9c379..5e07bee28 100644
    return inst;
  }
  
-diff --git a/xla/service/shaped_buffer.cc b/xla/service/shaped_buffer.cc
-index e01132ed8..445497b67 100644
---- a/xla/service/shaped_buffer.cc
-+++ b/xla/service/shaped_buffer.cc
-@@ -131,18 +131,24 @@ ScopedShapedBuffer::ScopedShapedBuffer(ShapedBuffer shaped_buffer,
-     : ShapedBuffer(std::move(shaped_buffer)), allocator_(allocator) {}
- 
- ScopedShapedBuffer::ScopedShapedBuffer(ScopedShapedBuffer&& s)
--    : ShapedBuffer(static_cast<ShapedBuffer&&>(s)), allocator_(s.allocator_) {
-+    : MemoryAllocationByteSize(std::move(s.MemoryAllocationByteSize)),
-+  isMemoryAllocationRecorded(s.isMemoryAllocationRecorded),
-+  ShapedBuffer(static_cast<ShapedBuffer&&>(s)), allocator_(s.allocator_) {
-+
-   // Null out s.allocator_ so it doesn't try to free anything in its destructor.
-   s.allocator_ = nullptr;
- }
- 
- ScopedShapedBuffer& ScopedShapedBuffer::operator=(ScopedShapedBuffer&& s) {
-+  MemoryAllocationByteSize = std::move(s.MemoryAllocationByteSize);
-+  isMemoryAllocationRecorded = s.isMemoryAllocationRecorded;
-   Deallocate();
- 
-   *static_cast<ShapedBuffer*>(this) = std::move(static_cast<ShapedBuffer&>(s));
-   allocator_ = s.allocator_;
-   // Null out s.allocator_ so it doesn't try to free anything in its destructor.
-   s.allocator_ = nullptr;
-+
-   return *this;
- }
- 
-diff --git a/xla/service/shaped_buffer.h b/xla/service/shaped_buffer.h
-index e3e32001d..cdfe7d6c7 100644
---- a/xla/service/shaped_buffer.h
-+++ b/xla/service/shaped_buffer.h
-@@ -199,6 +199,8 @@ class ScopedShapedBuffer : public ShapedBuffer {
-   // subtree to null in 'this'.
-   ScopedShapedBuffer TakeSubTree(ShapeIndexView index);
- 
-+  bool isMemoryAllocationRecorded = false;
-+  std::vector<int64_t> MemoryAllocationByteSize;
-  protected:
-   void Deallocate();
- 
-diff --git a/xla/service/transfer_manager.cc b/xla/service/transfer_manager.cc
-index 90fd31f4e..08ab0b19d 100644
---- a/xla/service/transfer_manager.cc
-+++ b/xla/service/transfer_manager.cc
-@@ -338,14 +338,20 @@ StatusOr<ScopedShapedBuffer> TransferManager::AllocateScopedShapedBuffer(
-     se::DeviceMemoryBase& memory_base = pair.second;
-     const Shape& subshape =
-         ShapeUtil::GetSubshape(shaped_buffer.on_device_shape(), index);
-+    int64_t byteSize = GetByteSizeRequirement(subshape);
-     TF_ASSIGN_OR_RETURN(auto memory,
-                         allocator->Allocate(shaped_buffer.device_ordinal(),
--                                            GetByteSizeRequirement(subshape),
-+                                            byteSize,
-                                             /*retry_on_failure=*/true,
-                                             LayoutUtil::MemorySpace(subshape)));
-+    if (!shaped_buffer.isMemoryAllocationRecorded) {
-+      shaped_buffer.MemoryAllocationByteSize.push_back(byteSize);
-+    } 
-     // Move the allocated buffer into the ScopedShapedBuffer, which owns it.
-     memory_base = memory.Release();
-   }
-+  if (!shaped_buffer.isMemoryAllocationRecorded)
-+    shaped_buffer.isMemoryAllocationRecorded = true;
- 
-   return std::move(shaped_buffer);
- }
 diff --git a/xla/stream_executor/build_defs.bzl b/xla/stream_executor/build_defs.bzl
 index 8e75a5532..38e2f5b7a 100644
 --- a/xla/stream_executor/build_defs.bzl
@@ -1997,7 +1764,7 @@ index dcb6a3c8c..981a66a82 100644
                                                             CUdeviceptr location,
                                                             uint8_t value,
 diff --git a/xla/stream_executor/device_memory.h b/xla/stream_executor/device_memory.h
-index f69fe8148..85da151a4 100644
+index f69fe8148..6df3b4dc5 100644
 --- a/xla/stream_executor/device_memory.h
 +++ b/xla/stream_executor/device_memory.h
 @@ -85,9 +85,6 @@ class DeviceMemoryBase {
@@ -2010,18 +1777,17 @@ index f69fe8148..85da151a4 100644
    // Resets the internal values of the opaque pointer and number of bytes in the
    // memory region, just as in the constructor.
    void Reset(void *opaque, uint64_t bytes) {
-@@ -95,7 +92,10 @@ class DeviceMemoryBase {
+@@ -95,6 +92,10 @@ class DeviceMemoryBase {
      size_ = bytes;
    }
  
-- private:
 + protected:
 +  friend class StreamExecutor;
 +
-+   private:
++
+  private:
    void *opaque_;  // Platform-dependent value representing allocated memory.
    uint64_t size_;         // Size in bytes of this allocation.
-   uint64_t payload_ = 0;  // Payload data associated with this allocation.
 diff --git a/xla/stream_executor/gpu/BUILD b/xla/stream_executor/gpu/BUILD
 index c8cd4f558..9947a718a 100644
 --- a/xla/stream_executor/gpu/BUILD
