@@ -1537,12 +1537,13 @@ PJRT_Error* PJRT_Buffer_Destroy(PJRT_Buffer_Destroy_Args* args) {
   //fflush(stdout);
   //auto* pjrt_buffer = reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(args->buffer->buffer.get());
   //pjrt_buffer->deallocate_buffer();
-  auto* buffer = static_cast<xla::ITEXPjRtBuffer*>(args->buffer->buffer.get());
-  if (buffer->isAllocatedByThirdPartyFramework()) {
-    buffer->Delete();
-  } else {
-    delete args->buffer; 
-  }
+    auto *buffer = static_cast<xla::ITEXPjRtBuffer*>(args->buffer->buffer.get());
+    if (buffer->is_hold_by_third_party_framework()) {
+      buffer->set_hold_by_framework(false);
+      buffer->Delete();
+    } else {
+        delete args->buffer; 
+    }
   return nullptr;
 }
 

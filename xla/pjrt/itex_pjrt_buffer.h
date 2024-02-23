@@ -96,13 +96,16 @@ class ITEXPjRtBuffer : public PjRtBuffer {
 
  void record_memory_allocation_size(size_t size);
  size_t get_recorded_memory_allocation_size();
- void set_allocate_by_third_party_framework();
- void recover_buffer();
- bool isAllocatedByThirdPartyFramework();
+ void set_hold_by_third_party_framework(bool value);
+ void set_hold_by_framework(bool value);
+ bool recover_buffer();
+ bool is_hold_by_third_party_framework();
+ bool is_hold_by_framework();
 
  private:
   int device_ordinal_;
-  bool isAllocatedByThirdPartyFramwork_ = false;
+  bool isHoldByThirdPartyFramwork_ = false;
+  bool isHoldByFramwork_ = true;
   bool need_bfc_deallocate_ = true;
   size_t MemoryAllocationByteSize_ = 0;
   Shape shape_;

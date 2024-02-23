@@ -42,9 +42,10 @@ StatusOr<std::unique_ptr<ITEXPjRtBuffer>> AllocateITEXDestinationBuffer(
       device_id, memory.Release(), dimensions, element_type, client, device);
 }
 
-void ITEXPjRtBuffer::recover_buffer() {
+bool ITEXPjRtBuffer::recover_buffer() {
   if (need_bfc_deallocate_) {
-    LOG(ERROR) << "Try to recover a buffer with unrelease memory!";
+    VLOG(1) << "Try to recover a buffer with unrelease memory!";
+    return false;
   } else {
      auto& size = MemoryAllocationByteSize_;
      void* device_mem = allocator_->AllocateRaw(device_ordinal_, size, true, 0);
@@ -53,12 +54,14 @@ void ITEXPjRtBuffer::recover_buffer() {
        LOG(WARNING) << "Buffer allocation get nullptr!";
      }
      need_bfc_deallocate_ = true;
+     set_hold_by_framework(true);
+     return true;
   }
 }
 
 void ITEXPjRtBuffer::Delete() {
   if (!need_bfc_deallocate_) {
-    LOG(WARNING) << "Try to deallocate a released buffer!";
+    VLOG(1) << "Try to deallocate a released buffer!";
   } else {
     Status status = allocator_->Deallocate(device_ordinal_, buffer_);
     if (!status.ok()) {
@@ -68,8 +71,16 @@ void ITEXPjRtBuffer::Delete() {
   }
 }
 
-bool ITEXPjRtBuffer::isAllocatedByThirdPartyFramework() {
-  return isAllocatedByThirdPartyFramwork_;
+bool ITEXPjRtBuffer::is_hold_by_third_party_framework() {
+  return isHoldByThirdPartyFramwork_;
+}
+
+bool ITEXPjRtBuffer::is_hold_by_framework() {
+  return isHoldByFramwork_;
+}
+
+void ITEXPjRtBuffer::set_hold_by_framework(bool value) {
+  isHoldByFramwork_ = value;
 }
 
 ITEXPjRtBuffer::ITEXPjRtBuffer(int device_id,
@@ -91,8 +102,8 @@ ITEXPjRtBuffer::ITEXPjRtBuffer(int device_id,
 
 ITEXPjRtBuffer::~ITEXPjRtBuffer() { Delete(); }
 
-void ITEXPjRtBuffer::set_allocate_by_third_party_framework() {
-  isAllocatedByThirdPartyFramwork_ = true;
+void ITEXPjRtBuffer::set_hold_by_third_party_framework(bool value) {
+  isHoldByThirdPartyFramwork_ = value;
 }
 
 void ITEXPjRtBuffer::record_memory_allocation_size(size_t size) {
