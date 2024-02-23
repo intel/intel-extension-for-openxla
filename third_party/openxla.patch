@@ -1922,7 +1922,7 @@ index af3a8530b..7a74c6fa2 100644
  
    info.symbol_name.assign(symbol_name);
 diff --git a/xla/service/gpu/ir_emitter_nested.cc b/xla/service/gpu/ir_emitter_nested.cc
-index ad83ba15a..114e2765d 100644
+index ad83ba15a..65d7001ab 100644
 --- a/xla/service/gpu/ir_emitter_nested.cc
 +++ b/xla/service/gpu/ir_emitter_nested.cc
 @@ -33,6 +33,11 @@ limitations under the License.
@@ -1937,7 +1937,25 @@ index ad83ba15a..114e2765d 100644
  namespace xla {
  namespace gpu {
  namespace {
-@@ -380,6 +385,14 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
+@@ -298,7 +303,7 @@ void EmitAMDGPUAtomicAdd(llvm::IRBuilder<>* builder,
+ 
+   builder->CreateAtomicRMW(
+       llvm::AtomicRMWInst::FAdd, output_ptr, source, llvm::MaybeAlign(),
+-      llvm::AtomicOrdering::SequentiallyConsistent,
++      llvm::AtomicOrdering::Monotonic,
+       builder->getContext().getOrInsertSyncScopeID("agent"));
+ }
+ 
+@@ -366,7 +371,7 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
+       if (atomic_add_supported) {
+         builder->CreateAtomicRMW(llvm::AtomicRMWInst::FAdd, output_address,
+                                  source, llvm::MaybeAlign(),
+-                                 llvm::AtomicOrdering::SequentiallyConsistent);
++                                 llvm::AtomicOrdering::Monotonic);
+         return true;
+       }
+     }
+@@ -380,11 +385,19 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
        return true;
      }
  
@@ -1945,13 +1963,66 @@ index ad83ba15a..114e2765d 100644
 +        element_type == F32) {
 +      builder->CreateAtomicRMW(llvm::AtomicRMWInst::FAdd, output_address,
 +                               source, llvm::MaybeAlign(),
-+                               llvm::AtomicOrdering::SequentiallyConsistent);
++                               llvm::AtomicOrdering::Monotonic);
 +      return true;
 +    }
 +
      if (is_atomic_integral) {
        // integral + integral
        builder->CreateAtomicRMW(
+           llvm::AtomicRMWInst::Add, output_address, source, llvm::MaybeAlign(),
+-          llvm::AtomicOrdering::SequentiallyConsistent, sync_scope);
++          llvm::AtomicOrdering::Monotonic, sync_scope);
+       return true;
+     }
+   }
+@@ -401,7 +414,7 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
+                         : llvm::AtomicRMWInst::UMax;
+       builder->CreateAtomicRMW(
+           opcode, output_address, source, llvm::MaybeAlign(),
+-          llvm::AtomicOrdering::SequentiallyConsistent, sync_scope);
++          llvm::AtomicOrdering::Monotonic, sync_scope);
+       return true;
+     } else if (element_type == F32) {
+       // max(float, float) via AtomicMax and AtomicMin on int
+@@ -461,7 +474,7 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
+                     builder->CreateAtomicRMW(
+                         llvm::AtomicRMWInst::Max, output_address,
+                         source_float_as_int, llvm::MaybeAlign(),
+-                        llvm::AtomicOrdering::SequentiallyConsistent,
++                        llvm::AtomicOrdering::Monotonic,
+                         sync_scope);
+                   },
+                   [&]() {
+@@ -469,7 +482,7 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
+                     builder->CreateAtomicRMW(
+                         llvm::AtomicRMWInst::UMin, output_address,
+                         source_float_as_int, llvm::MaybeAlign(),
+-                        llvm::AtomicOrdering::SequentiallyConsistent,
++                        llvm::AtomicOrdering::Monotonic,
+                         sync_scope);
+                   });
+             });
+@@ -485,7 +498,7 @@ bool MaybeEmitDirectAtomicOperation(llvm::IRBuilder<>* builder,
+                       ? llvm::AtomicRMWInst::Min
+                       : llvm::AtomicRMWInst::UMin;
+     builder->CreateAtomicRMW(opcode, output_address, source, llvm::MaybeAlign(),
+-                             llvm::AtomicOrdering::SequentiallyConsistent,
++                             llvm::AtomicOrdering::Monotonic,
+                              sync_scope);
+     return true;
+   }
+@@ -657,8 +670,8 @@ Status EmitAtomicOperationUsingCAS(llvm::IRBuilder<>* builder,
+   //                                       cas_new_output);
+   llvm::Value* ret_value = builder->CreateAtomicCmpXchg(
+       atomic_memory_address, cas_old_output, cas_new_output, llvm::MaybeAlign(),
+-      llvm::AtomicOrdering::SequentiallyConsistent,
+-      llvm::AtomicOrdering::SequentiallyConsistent, DetermineSyncScope(module));
++      llvm::AtomicOrdering::Monotonic,
++      llvm::AtomicOrdering::Monotonic, DetermineSyncScope(module));
+ 
+   // Extract the memory value returned from atomicCAS and store it as
+   // cas_old_output.
 diff --git a/xla/service/gpu/ir_emitter_unnested.cc b/xla/service/gpu/ir_emitter_unnested.cc
 index 53d02c62d..cf72aa8b0 100644
 --- a/xla/service/gpu/ir_emitter_unnested.cc
