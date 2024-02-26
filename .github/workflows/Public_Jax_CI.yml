@@ -35,7 +35,7 @@ jobs:
         git clone -b yang/runtime https://github.com/Intel-tensorflow/xla  
         git clone https://github.com/google/jax.git && cd jax && git checkout ceb198582b62b9e6f6bdf20ab74839b0cf1db16e
         git apply ../test/jax.patch  
-        pip install -r jax/build/test-requirements.txt
+        pip install -r ./build/test-requirements.txt
     - name: Build Jax
       run: |
         set +e
