@@ -46,8 +46,7 @@ jobs:
         cd jax
         #python build/build.py   #CPU
         basekit_path=/home/sdp
-        source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
-        source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
+        export SYCL_TOOLKIT_PATH=${basekit_path}/intel/oneapi/compiler/latest
         current_path=$(pwd)
         parent_path=$(dirname "$current_path")
         python build/build.py --enable_sycl --bazel_options=--override_repository=xla=$parent_path/yang_xla
