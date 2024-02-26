@@ -32,7 +32,7 @@ jobs:
         pip install numpy wheel build  
         #This CI is for public jax 
         #git clone https://github.com/google/jax.git && cd jax && git checkout ${{ inputs.gha_runner }}
-        git clone -b yang/runtime https://github.com/Intel-tensorflow/xla  
+        git clone -b yang/runtime https://github.com/Intel-tensorflow/xla  yang_xla
         git clone https://github.com/google/jax.git && cd jax && git checkout ceb198582b62b9e6f6bdf20ab74839b0cf1db16e
         git apply ../test/jax.patch  
         pip install -r ./build/test-requirements.txt
@@ -49,7 +49,7 @@ jobs:
         source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
         current_path=$(pwd)
         parent_path=$(dirname "$current_path")
-        python build/build.py --enable_sycl --bazel_options=--override_repository=xla=$parent_path/xla
+        python build/build.py --enable_sycl --bazel_options=--override_repository=xla=$parent_path/yang_xla
         build_result=${PIPESTATUS[0]}
         echo $build_result
         if [ "$build_result" = "0" ];then
