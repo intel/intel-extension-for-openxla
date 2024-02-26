@@ -29,16 +29,16 @@ from setuptools import setup
 from setuptools.command.install import install as InstallCommandBase
 from setuptools.dist import Distribution
 
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'jax_plugins/python')) # pylint: disable=line-too-long
-# from version import __version__
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                'jax_plugins/intel_extension_for_openxla'))
+from version import VersionClass
 
 
 # This version string is semver compatible, but incompatible with pip.
 # For pip, we will remove all '-' characters from this string, and use the
 # result for pip.
 # Also update xla/xla.bzl
-# _VERSION = __version__
-_VERSION = "0.2.1"
+_VERSION = VersionClass().get_version()
 
 REQUIRED_PACKAGES = []
 
