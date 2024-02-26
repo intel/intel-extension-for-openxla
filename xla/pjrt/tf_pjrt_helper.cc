@@ -99,10 +99,10 @@ PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
 void ITEXDeletePjRtBuffer(PJRT_Buffer* pjrt_buffer) {
   auto* buffer = static_cast<xla::ITEXPjRtBuffer*>(pjrt_buffer->buffer.get());
   if (buffer->is_hold_by_framework()) {
-    VLOG(1) << "Calling ITEXDeletePjRtBuffer and release hold of PJRT_Buffer.";
+    VLOG(1) << "Calling ITEXDeletePjRtBuffer and release hold of PJRT_Buffer " << pjrt_buffer;
     buffer->set_hold_by_third_party_framework(false);
   } else {
-    VLOG(1) << "Calling ITEXDeletePjRtBuffer and deleting PJRT_Buffer.";
+    VLOG(1) << "Calling ITEXDeletePjRtBuffer and deleting PJRT_Buffer " << pjrt_buffer;
     delete pjrt_buffer;
   }
 }
