@@ -20,7 +20,7 @@ jobs:
     - name: Prepare Conda Environment
       run: |
         set +e
-        CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
+        CONDA_ENV=jax_preCI_patch_${{ runner.name }}
         source /opt/miniconda/bin/activate ${CONDA_ENV}
         if [ $? -ne 0 ]; then
             echo 'conda env does not exist'
@@ -30,6 +30,7 @@ jobs:
         sudo apt install g++ python python3-dev -y | true
         pip uninstall jax jaxlib -y
         pip install numpy wheel build  
+        conda install -c conda-forge libstdcxx-ng=12.1.0
         #This CI is for public jax 
         #git clone https://github.com/google/jax.git && cd jax && git checkout ${{ inputs.gha_runner }}
         git clone -b yang/runtime https://github.com/Intel-tensorflow/xla  yang_xla
@@ -68,7 +69,6 @@ jobs:
         basekit_path=/home/sdp
         source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
         source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
-        conda install -c conda-forge gcc=12.1.0
         cd ~/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax
         commit_hash=$(git rev-parse --short HEAD)
         mkdir -p ./logs/ut
