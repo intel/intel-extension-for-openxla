@@ -1,6 +1,5 @@
 load("//xla:xla.bzl", "xpu_library")
 load("//xla:xla.bzl", "xetla_library")
-load("//third_party/onednn:build_defs.bzl", "onednn_deps")
 load(
     "@local_config_sycl//sycl:build_defs.bzl",
     "if_sycl_is_configured",
@@ -23,6 +22,7 @@ cc_library(
     ],
     deps = [
         ":gpu_compiler",
+        "//xla/stream_executor/sycl:hw_info",
         "//xla/stream_executor/sycl:sycl_platform_id",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/container:node_hash_map",
@@ -474,6 +474,7 @@ xetla_library(
         "//xla/stream_executor/sycl:sycl_executor",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/types:span",
+        "@onednn_gpu//:onednn_gpu",
         "@tsl//tsl/framework:numeric_types",
         "@tsl//tsl/platform:statusor",
         "@tsl//tsl/platform:types",
@@ -491,7 +492,7 @@ xetla_library(
         "@xla//xla/service/gpu:ir_emission_utils",
         "@xla//xla/service/gpu:matmul_utils",
         "@xla//xla/stream_executor:stream_executor_headers",
-    ] + onednn_deps(),
+    ],
 )
 
 cc_library(

@@ -18,7 +18,9 @@ limitations under the License.
 
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 
-bool IsXeHPC(sycl::device* device_ptr = nullptr);
+bool IsXeHPC(const sycl::device* device_ptr = nullptr);
+
+bool HasXMX(const sycl::device* device_ptr = nullptr);
 
 bool IsXetlaHardwareSupport();
 
