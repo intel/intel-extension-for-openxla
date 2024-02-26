@@ -92,7 +92,7 @@ PJRT_Buffer* ITEXCreatePjRtBuffer(int device_id, std::string data_type,
                                     pjrt_c_client->client.get(), *dimentions,
                                     type, size)
           .value();
-  (*buffer).set_hold_by_third_party_framework(true);
+  //(*buffer).set_hold_by_third_party_framework(true);
   (*buffer).record_memory_allocation_size(size);
   return new PJRT_Buffer{std::move(buffer), pjrt_c_client};
 }
@@ -128,6 +128,11 @@ void ITEXDeletePjRtBuffer(PJRT_Buffer* pjrt_buffer) {
     VLOG(1) << "Calling ITEXDeletePjRtBuffer and deleting PJRT_Buffer.";
     delete pjrt_buffer;
   }
+}
+
+void ITEXSetHoldPjRtBuffer(PJRT_Buffer* pjrt_buffer) {
+  auto* buffer = static_cast<xla::ITEXPjRtBuffer*>(pjrt_buffer->buffer.get());
+  buffer->set_hold_by_third_party_framework(true); 
 }
 
 bool ITEXRecoverPjRtBuffer(PJRT_Buffer* pjrt_buffer) {

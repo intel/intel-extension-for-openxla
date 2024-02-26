@@ -100,7 +100,10 @@ ITEXPjRtBuffer::ITEXPjRtBuffer(int device_id,
       client_->allocator());
 }
 
-ITEXPjRtBuffer::~ITEXPjRtBuffer() { Delete(); }
+ITEXPjRtBuffer::~ITEXPjRtBuffer() { 
+  VLOG(1) << "ITEXPjRtBuffer::~ITEXPjRtBuffer"
+  Delete(); 
+}
 
 void ITEXPjRtBuffer::set_hold_by_third_party_framework(bool value) {
   isHoldByThirdPartyFramwork_ = value;

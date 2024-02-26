@@ -1537,8 +1537,10 @@ PJRT_Error* PJRT_Buffer_Destroy(PJRT_Buffer_Destroy_Args* args) {
   //fflush(stdout);
   //auto* pjrt_buffer = reinterpret_cast<xla::PjRtStreamExecutorBuffer*>(args->buffer->buffer.get());
   //pjrt_buffer->deallocate_buffer();
+    VLOG(1) << "Destroy PJRT_Buffer " << args->buffer;
     auto *buffer = static_cast<xla::ITEXPjRtBuffer*>(args->buffer->buffer.get());
     if (buffer->is_hold_by_third_party_framework()) {
+      VLOG(1) << "PJRT_Buffer " << args->buffer << " is still hold by third party framework, so just free it's memory."
       buffer->set_hold_by_framework(false);
       buffer->Delete();
     } else {
