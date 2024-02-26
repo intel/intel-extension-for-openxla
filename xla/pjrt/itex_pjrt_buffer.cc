@@ -101,7 +101,7 @@ ITEXPjRtBuffer::ITEXPjRtBuffer(int device_id,
 }
 
 ITEXPjRtBuffer::~ITEXPjRtBuffer() { 
-  VLOG(1) << "ITEXPjRtBuffer::~ITEXPjRtBuffer"
+  VLOG(1) << "ITEXPjRtBuffer::~ITEXPjRtBuffer";
   Delete(); 
 }
 
