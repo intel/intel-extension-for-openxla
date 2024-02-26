@@ -55,7 +55,7 @@ jobs:
         if [ "$build_result" = "0" ];then
           echo "Build successful"
           #pip install tests/*.whl   #cpu
-          pip install -e . && pip install dist/jaxlib_xxx.whl        
+          pip install -e . && pip install dist/*.whl        
         else
           echo "Build Failed"
           exit 1
