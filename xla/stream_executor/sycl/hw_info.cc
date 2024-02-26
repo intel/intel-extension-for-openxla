@@ -24,6 +24,8 @@ const int32_t XeHPC_id_2 = 0xb60;
 // by device id.
 const int32_t XeHPC_no_xmx_id = 0xbd4;
 
+const int32_t ARC_id = 0x5600;
+
 bool IsXeHPC(const sycl::device* device_ptr) {
   if (device_ptr == nullptr) {
     auto platform_list = sycl::platform::get_platforms();
@@ -85,4 +87,47 @@ bool HasXMX(const sycl::device* device_ptr) {
 bool IsXetlaHardwareSupport() {
   static bool flag = IsXeHPC(nullptr) && HasXMX(nullptr);
   return flag;
+}
+
+bool IsARC(sycl::device* device_ptr) {
+  if (device_ptr == nullptr) {
+    auto platform_list = sycl::platform::get_platforms();
+    for (const auto& platform : platform_list) {
+      auto device_list = platform.get_devices();
+      for (const auto& device : device_list) {
+        if (device.is_gpu()) {
+          auto id =
+              device.get_info<sycl::ext::intel::info::device::device_id>();
+          if ((id & 0xff00) == ARC_id) {
+            return true;
+          }
+        }
+      }
+    }
+  } else {
+    auto id = device_ptr->get_info<sycl::ext::intel::info::device::device_id>();
+    if ((id & 0xff00) == ARC_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+uint64_t GetMaxAllocateLimitByte(sycl::device* device_ptr) {
+  uint64_t limit = std::numeric_limits<uint64_t>::max();
+  if (device_ptr == nullptr) {
+    auto platform_list = sycl::platform::get_platforms();
+    for (const auto& platform : platform_list) {
+      auto device_list = platform.get_devices();
+      for (const auto& device : device_list) {
+        if (device.is_gpu()) {
+          limit = std::min(limit,
+                           device.get_info<sycl::info::device::max_mem_alloc_size>());
+        }
+      }
+    }
+  } else {
+    limit = device_ptr->get_info<sycl::info::device::max_mem_alloc_size>();
+  }
+  return limit;
 }

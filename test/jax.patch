@@ -1,14 +1,14 @@
-commit 1181dca8f959d38a7e97c684043ea560d8b4c954
+commit 0af533c2c0aca319abd2e3104960e77b0118769b
 Author: Wang, Quintin <quintin.wang@intel.com>
 Date:   Wed Jan 31 23:14:57 2024 -0800
 
     Add sycl
 
 diff --git a/.bazelrc b/.bazelrc
-index 858fc96b2..087b544b2 100644
+index a50178b3d..035401d45 100644
 --- a/.bazelrc
 +++ b/.bazelrc
-@@ -111,6 +111,13 @@ build:rocm --define=xla_python_enable_gpu=true
+@@ -118,6 +118,13 @@ build:rocm --define=xla_python_enable_gpu=true
  build:rocm --repo_env TF_NEED_ROCM=1
  build:rocm --action_env TF_ROCM_AMDGPU_TARGETS="gfx900,gfx906,gfx908,gfx90a,gfx1030"
  
@@ -23,7 +23,7 @@ index 858fc96b2..087b544b2 100644
  
  # Windows has a relatively short command line limit, which JAX has begun to hit.
 diff --git a/build/build.py b/build/build.py
-index dfdf33ec8..5caad3a84 100755
+index dfdf33ec8..2aa21cd37 100755
 --- a/build/build.py
 +++ b/build/build.py
 @@ -263,7 +263,7 @@ def write_bazelrc(*, python_bin_path, remote_build,
@@ -45,7 +45,7 @@ index dfdf33ec8..5caad3a84 100755
 +        f.write("build --config=nonccl\n")
      if build_gpu_plugin:
        f.write("build --config=cuda_plugin\n")
-
+ 
 @@ -479,6 +483,10 @@ def main():
        parser,
        "enable_rocm",
@@ -57,8 +57,7 @@ index dfdf33ec8..5caad3a84 100755
    add_boolean_argument(
        parser,
        "enable_nccl",
-@@ -629,7 +637,7 @@ def main():
-     if rocm_toolkit_path:
+@@ -630,6 +638,8 @@ def main():
        print(f"ROCm toolkit path: {rocm_toolkit_path}")
      print(f"ROCm amdgpu targets: {args.rocm_amdgpu_targets}")
 -
@@ -66,7 +65,7 @@ index dfdf33ec8..5caad3a84 100755
    write_bazelrc(
        python_bin_path=python_bin_path,
        remote_build=args.remote_build,
-@@ -651,6 +659,7 @@ def main():
+@@ -651,6 +661,7 @@ def main():
        enable_cuda=args.enable_cuda,
        enable_nccl=args.enable_nccl,
        enable_rocm=args.enable_rocm,
@@ -75,7 +74,7 @@ index dfdf33ec8..5caad3a84 100755
    )
  
 diff --git a/jax/__init__.py b/jax/__init__.py
-index 009477d6b..35acf4373 100644
+index ece7c7611..945197f6d 100644
 --- a/jax/__init__.py
 +++ b/jax/__init__.py
 @@ -14,7 +14,7 @@
@@ -88,7 +87,7 @@ index 009477d6b..35acf4373 100644
  
  # Import version first, because other submodules may reference it.
 diff --git a/jax/_src/xla_bridge.py b/jax/_src/xla_bridge.py
-index b82fb1219..535749c8d 100644
+index 945b7d030..f892b97e6 100644
 --- a/jax/_src/xla_bridge.py
 +++ b/jax/_src/xla_bridge.py
 @@ -84,6 +84,10 @@ _ROCM_VISIBLE_DEVICES = config.DEFINE_string(
@@ -119,7 +118,7 @@ index b82fb1219..535749c8d 100644
  
  
  if hasattr(xla_client, "make_tpu_client"):
-@@ -561,6 +575,7 @@ def register_pjrt_plugin_factories_from_env() -> None:
+@@ -580,6 +594,7 @@ def register_pjrt_plugin_factories_from_env() -> None:
  _platform_aliases = {
    "cuda": "gpu",
    "rocm": "gpu",

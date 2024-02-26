@@ -49,6 +49,7 @@ limitations under the License.
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
+#include "xla/stream_executor/plugin_registry.h"
 
 namespace stream_executor {
 namespace gpu {
@@ -564,11 +565,32 @@ tsl::Status GpuExecutor::BlockHostUntilDone(Stream* stream) {
   return ::tsl::OkStatus();
 }
 
-blas::BlasSupport* GpuExecutor::CreateBlas() { return nullptr; }
+blas::BlasSupport* GpuExecutor::CreateBlas() { 
+  PluginRegistry* registry = PluginRegistry::Instance();
+  tsl::StatusOr<PluginRegistry::BlasFactory> status =
+      registry->GetFactory<PluginRegistry::BlasFactory>(stream_executor::sycl::kSyclPlatformId);
+  if (!status.ok()) {
+    LOG(ERROR) << "Unable to retrieve BLAS factory: "
+               << status.status().message();
+    return nullptr;
+  }
+  return status.value()(this);
+}
 
 dnn::DnnSupport* GpuExecutor::CreateDnn() { return nullptr; }
 
-fft::FftSupport* GpuExecutor::CreateFft() { return nullptr; }
+fft::FftSupport* GpuExecutor::CreateFft() {   
+  PluginRegistry* registry = PluginRegistry::Instance();
+  tsl::StatusOr<PluginRegistry::FftFactory> status =
+      registry->GetFactory<PluginRegistry::FftFactory>(stream_executor::sycl::kSyclPlatformId);
+  if (!status.ok()) {
+    LOG(ERROR) << "Unable to retrieve FFT factory: "
+               << status.status().message();
+    return nullptr;
+  }
+
+  return status.value()(this);
+}
 
 bool GpuExecutor::CanEnablePeerAccessTo(StreamExecutorInterface* other) {
   return false;
