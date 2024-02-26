@@ -40,7 +40,7 @@ jobs:
     - name: Build Jax
       run: |
         set +e
-        CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
+        CONDA_ENV=jax_preCI_patch_${{ runner.name }}
         source /opt/miniconda/bin/activate ${CONDA_ENV}
         #build jax 
         cd jax
@@ -63,8 +63,9 @@ jobs:
     - name: UT testing
       run: |
         set +e
-        CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
+        CONDA_ENV=jax_preCI_patch_${{ runner.name }}
         source /opt/miniconda/bin/activate ${CONDA_ENV}
+        conda install libstdcxx-ng==12.2.0 -c conda-forge -y
         basekit_path=/home/sdp
         source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
         source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
