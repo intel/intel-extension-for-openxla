@@ -33,7 +33,7 @@ jobs:
         #This CI is for public jax 
         #git clone https://github.com/google/jax.git && cd jax && git checkout ${{ inputs.gha_runner }}
         git clone -b yang/runtime https://github.com/Intel-tensorflow/xla  
-        git clone -b path-to-jax https://github.com/google/jax.git && cd jax && git checkout ceb198582b62b9e6f6bdf20ab74839b0cf1db16e
+        git clone https://github.com/google/jax.git && cd jax && git checkout ceb198582b62b9e6f6bdf20ab74839b0cf1db16e
         git apply ../test/jax.patch  
         pip install -r jax/build/test-requirements.txt
     - name: Build Jax
@@ -44,6 +44,9 @@ jobs:
         #build jax 
         cd jax
         #python build/build.py   #CPU
+        basekit_path=/home/sdp
+        source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
+        source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
         python build/build.py --enable_sycl --bazel_options=--override_repository=xla=../xla
         build_result=${PIPESTATUS[0]}
         echo $build_result
@@ -60,6 +63,9 @@ jobs:
         set +e
         CONDA_ENV=jax_preCI_jax_preCI_${{ runner.name }}
         source /opt/miniconda/bin/activate ${CONDA_ENV}
+        basekit_path=/home/sdp
+        source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
+        source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
         conda install -c conda-forge gcc=12.1.0
         cd ~/actions-runner/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax
         commit_hash=$(git rev-parse --short HEAD)
