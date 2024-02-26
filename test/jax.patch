@@ -33,7 +33,7 @@ index dfdf33ec8..2aa21cd37 100755
 -                  build_gpu_plugin):
 +                  enable_sycl, build_gpu_plugin):
    tf_cuda_paths = []
-
+ 
    with open("../.jax_configure.bazelrc", "w") as f:
 @@ -341,6 +341,10 @@ def write_bazelrc(*, python_bin_path, remote_build,
        f.write("build --config=rocm\n")
@@ -60,8 +60,9 @@ index dfdf33ec8..2aa21cd37 100755
 @@ -630,6 +638,8 @@ def main():
        print(f"ROCm toolkit path: {rocm_toolkit_path}")
      print(f"ROCm amdgpu targets: {args.rocm_amdgpu_targets}")
--
+ 
 +  print("SYCL enabled: {}".format("yes" if args.enable_sycl else "no"))
++
    write_bazelrc(
        python_bin_path=python_bin_path,
        remote_build=args.remote_build,
