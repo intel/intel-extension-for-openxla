@@ -47,7 +47,9 @@ jobs:
         basekit_path=/home/sdp
         source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
         source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
-        python build/build.py --enable_sycl --bazel_options=--override_repository=xla=../xla
+        current_path=$(pwd)
+        parent_path=$(dirname "$current_path")
+        python build/build.py --enable_sycl --bazel_options=--override_repository=xla=$parent_path/xla
         build_result=${PIPESTATUS[0]}
         echo $build_result
         if [ "$build_result" = "0" ];then
