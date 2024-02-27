@@ -42,47 +42,6 @@ StatusOr<std::unique_ptr<ITEXPjRtBuffer>> AllocateITEXDestinationBuffer(
       device_id, memory.Release(), dimensions, element_type, client, device);
 }
 
-inline bool ITEXPjRtBuffer::recover_buffer() {
-  if (need_bfc_deallocate_) {
-    VLOG(1) << "Try to recover a buffer with unrelease memory!";
-    return false;
-  } else {
-     auto& size = MemoryAllocationByteSize_;
-     void* device_mem = allocator_->AllocateRaw(device_ordinal_, size, true, 0);
-     buffer_.Reset(device_mem, size);
-     if (!device_mem) {
-       LOG(WARNING) << "Buffer allocation get nullptr!";
-     }
-     need_bfc_deallocate_ = true;
-     set_hold_by_framework(true);
-     return true;
-  }
-}
-
-inline void ITEXPjRtBuffer::Delete() {
-  if (!need_bfc_deallocate_) {
-    VLOG(1) << "Try to deallocate a released buffer!";
-  } else {
-    Status status = allocator_->Deallocate(device_ordinal_, buffer_);
-    if (!status.ok()) {
-      LOG(ERROR) << "Buffer deallocation failed: " << status;
-    }
-    need_bfc_deallocate_ = false;
-  }
-}
-
-inline bool ITEXPjRtBuffer::is_hold_by_third_party_framework() {
-  return isHoldByThirdPartyFramwork_;
-}
-
-inline bool ITEXPjRtBuffer::is_hold_by_framework() {
-  return isHoldByFramwork_;
-}
-
-inline void ITEXPjRtBuffer::set_hold_by_framework(bool value) {
-  isHoldByFramwork_ = value;
-}
-
 ITEXPjRtBuffer::ITEXPjRtBuffer(int device_id,
                                se::DeviceMemoryBase device_memory,
                                absl::Span<const int64_t> dimensions,
@@ -103,18 +62,6 @@ ITEXPjRtBuffer::ITEXPjRtBuffer(int device_id,
 ITEXPjRtBuffer::~ITEXPjRtBuffer() { 
   VLOG(1) << "ITEXPjRtBuffer::~ITEXPjRtBuffer";
   Delete(); 
-}
-
-inline void ITEXPjRtBuffer::set_hold_by_third_party_framework(bool value) {
-  isHoldByThirdPartyFramwork_ = value;
-}
-
-inline void ITEXPjRtBuffer::record_memory_allocation_size(size_t size) {
-  MemoryAllocationByteSize_ = size;
-}
-
-inline size_t ITEXPjRtBuffer::get_recorded_memory_allocation_size() {
-  return MemoryAllocationByteSize_;
 }
 
 StatusOr<std::unique_ptr<PjRtBuffer>> ITEXPjRtBuffer::CopyToDevice(

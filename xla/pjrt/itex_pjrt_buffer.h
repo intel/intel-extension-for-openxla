@@ -59,7 +59,17 @@ class ITEXPjRtBuffer : public PjRtBuffer {
   StatusOr<std::unique_ptr<PjRtBuffer>> CopyToDevice(
       PjRtDevice* dst_device) override;
 
-  inline void Delete() override;
+  inline void ITEXPjRtBuffer::Delete() {
+    if (!need_bfc_deallocate_) {
+      VLOG(1) << "Try to deallocate a released buffer!";
+    } else {
+      Status status = allocator_->Deallocate(device_ordinal_, buffer_);
+      if (!status.ok()) {
+        LOG(ERROR) << "Buffer deallocation failed: " << status;
+      }
+      need_bfc_deallocate_ = false;
+    }
+  }
 
   inline bool IsDeleted() override { return false; }
 
@@ -94,13 +104,40 @@ class ITEXPjRtBuffer : public PjRtBuffer {
     return Unimplemented("Implement ReleaseDeviceMemoryOwnership");
   };
 
- inline void record_memory_allocation_size(size_t size);
- inline size_t get_recorded_memory_allocation_size();
- inline void set_hold_by_third_party_framework(bool value);
- inline void set_hold_by_framework(bool value);
- inline bool recover_buffer();
- inline bool is_hold_by_third_party_framework();
- inline bool is_hold_by_framework();
+ inline void record_memory_allocation_size(size_t size) {
+   MemoryAllocationByteSize_ = size;
+ }
+ inline size_t get_recorded_memory_allocation_size() {
+   return MemoryAllocationByteSize_;
+ }
+ inline void set_hold_by_third_party_framework(bool value) {
+   isHoldByThirdPartyFramwork_ = value;
+ }
+ inline void set_hold_by_framework(bool value) {
+   isHoldByFramwork_ = value;
+ }
+ inline bool ITEXPjRtBuffer::recover_buffer() {
+  if (need_bfc_deallocate_) {
+    VLOG(1) << "Try to recover a buffer with unrelease memory!";
+    return false;
+  } else {
+     auto& size = MemoryAllocationByteSize_;
+     void* device_mem = allocator_->AllocateRaw(device_ordinal_, size, true, 0);
+     buffer_.Reset(device_mem, size);
+     if (!device_mem) {
+       LOG(WARNING) << "Buffer allocation get nullptr!";
+     }
+     need_bfc_deallocate_ = true;
+     set_hold_by_framework(true);
+     return true;
+  }
+}
+ inline bool ITEXPjRtBuffer::is_hold_by_third_party_framework() {
+  return isHoldByThirdPartyFramwork_;
+}
+ inline bool ITEXPjRtBuffer::is_hold_by_framework() {
+  return isHoldByFramwork_;
+ }
 
  private:
   int device_ordinal_;
