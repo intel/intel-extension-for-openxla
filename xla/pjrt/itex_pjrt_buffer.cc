@@ -33,8 +33,8 @@ StatusOr<std::unique_ptr<ITEXPjRtBuffer>> AllocateITEXDestinationBuffer(
     int device_id, PjRtDevice* device, PjRtClient* client,
     absl::Span<const int64_t> dimensions, PrimitiveType element_type,
     size_t size) {
-  auto pjrt_client = dynamic_cast<PjRtStreamExecutorClient*>(client);
-  auto allocator = dynamic_cast<stream_executor::MultiDeviceAdapter*>(
+  auto pjrt_client = reinterpret_cast<PjRtStreamExecutorClient*>(client);
+  auto allocator = reinterpret_cast<stream_executor::MultiDeviceAdapter*>(
       pjrt_client->allocator());
   TF_ASSIGN_OR_RETURN(auto memory,
                       allocator->Allocate(device_id, size, true, 0));
@@ -42,7 +42,7 @@ StatusOr<std::unique_ptr<ITEXPjRtBuffer>> AllocateITEXDestinationBuffer(
       device_id, memory.Release(), dimensions, element_type, client, device);
 }
 
-bool ITEXPjRtBuffer::recover_buffer() {
+inline bool ITEXPjRtBuffer::recover_buffer() {
   if (need_bfc_deallocate_) {
     VLOG(1) << "Try to recover a buffer with unrelease memory!";
     return false;
@@ -59,7 +59,7 @@ bool ITEXPjRtBuffer::recover_buffer() {
   }
 }
 
-void ITEXPjRtBuffer::Delete() {
+inline void ITEXPjRtBuffer::Delete() {
   if (!need_bfc_deallocate_) {
     VLOG(1) << "Try to deallocate a released buffer!";
   } else {
@@ -71,15 +71,15 @@ void ITEXPjRtBuffer::Delete() {
   }
 }
 
-bool ITEXPjRtBuffer::is_hold_by_third_party_framework() {
+inline bool ITEXPjRtBuffer::is_hold_by_third_party_framework() {
   return isHoldByThirdPartyFramwork_;
 }
 
-bool ITEXPjRtBuffer::is_hold_by_framework() {
+inline bool ITEXPjRtBuffer::is_hold_by_framework() {
   return isHoldByFramwork_;
 }
 
-void ITEXPjRtBuffer::set_hold_by_framework(bool value) {
+inline void ITEXPjRtBuffer::set_hold_by_framework(bool value) {
   isHoldByFramwork_ = value;
 }
 
@@ -105,15 +105,15 @@ ITEXPjRtBuffer::~ITEXPjRtBuffer() {
   Delete(); 
 }
 
-void ITEXPjRtBuffer::set_hold_by_third_party_framework(bool value) {
+inline void ITEXPjRtBuffer::set_hold_by_third_party_framework(bool value) {
   isHoldByThirdPartyFramwork_ = value;
 }
 
-void ITEXPjRtBuffer::record_memory_allocation_size(size_t size) {
+inline void ITEXPjRtBuffer::record_memory_allocation_size(size_t size) {
   MemoryAllocationByteSize_ = size;
 }
 
-size_t ITEXPjRtBuffer::get_recorded_memory_allocation_size() {
+inline size_t ITEXPjRtBuffer::get_recorded_memory_allocation_size() {
   return MemoryAllocationByteSize_;
 }
 

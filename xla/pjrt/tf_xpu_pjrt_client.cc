@@ -1771,7 +1771,7 @@ PJRT_Error* ITEX_PJRT_Buffer_ToHostBuffer(PJRT_Buffer_ToHostBuffer_Args* args) {
   VLOG(1) << "PJRT_Buffer_ToHostBuffer";
 
   xla::ITEXPjRtBuffer* buffer =
-      dynamic_cast<xla::ITEXPjRtBuffer*>(args->src->buffer.get());
+      reinterpret_cast<xla::ITEXPjRtBuffer*>(args->src->buffer.get());
   size_t host_buffer_size = buffer->buffer_size();
 
   if (args->dst == nullptr) {

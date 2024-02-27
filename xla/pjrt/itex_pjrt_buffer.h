@@ -59,9 +59,9 @@ class ITEXPjRtBuffer : public PjRtBuffer {
   StatusOr<std::unique_ptr<PjRtBuffer>> CopyToDevice(
       PjRtDevice* dst_device) override;
 
-  void Delete() override;
+  inline void Delete() override;
 
-  bool IsDeleted() override { return false; }
+  inline bool IsDeleted() override { return false; }
 
   PjRtFuture<Status> ToLiteral(MutableLiteralBase* literal) override;
 
@@ -94,13 +94,13 @@ class ITEXPjRtBuffer : public PjRtBuffer {
     return Unimplemented("Implement ReleaseDeviceMemoryOwnership");
   };
 
- void record_memory_allocation_size(size_t size);
- size_t get_recorded_memory_allocation_size();
- void set_hold_by_third_party_framework(bool value);
- void set_hold_by_framework(bool value);
- bool recover_buffer();
- bool is_hold_by_third_party_framework();
- bool is_hold_by_framework();
+ inline void record_memory_allocation_size(size_t size);
+ inline size_t get_recorded_memory_allocation_size();
+ inline void set_hold_by_third_party_framework(bool value);
+ inline void set_hold_by_framework(bool value);
+ inline bool recover_buffer();
+ inline bool is_hold_by_third_party_framework();
+ inline bool is_hold_by_framework();
 
  private:
   int device_ordinal_;
