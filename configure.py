@@ -663,7 +663,25 @@ def set_sycl_toolkit_path(environ_cp):
     if not exists:
       print('Invalid DPC++ library path. %s cannot be found' %
             (sycl_rt_lib_path_full))
-    return exists
+      return False
+
+    """Check if a mkl toolkit path is valid."""
+    home_path = toolkit_path.split("compiler")[0]
+    version = toolkit_path.split("compiler")[1].split("/")[1]
+    mkl_path = os.path.join(home_path, 'mkl' + '/' + version + '/')
+    exists = (
+        os.path.exists(os.path.join(mkl_path, 'include')) and
+        os.path.exists(os.path.join(mkl_path, 'lib')))
+    if not exists:
+      print(
+          'Invalid oneMKL Toolkit path. %s or %s cannot be found'
+          % (os.path.join(mkl_path, 'include'),
+             os.path.join(mkl_path, 'lib')))
+      return False
+    else:
+      print('Auto configured oneMKL Toolkit path: %s\n' % (mkl_path))
+
+    return True
 
   sycl_toolkit_path = prompt_loop_or_load_from_env(
       environ_cp,
@@ -672,7 +690,7 @@ def set_sycl_toolkit_path(environ_cp):
       ask_for_var=(
           'Please specify the location where DPC++ is installed.'),
       check_success=toolkit_exists,
-      error_msg='Invalid DPC++ compiler path. libsycl.so cannot be found.',
+      error_msg='Invalid DPC++ compiler or oneMKL path.',
       suppress_default_error=True)
 
   write_action_env_to_bazelrc('SYCL_TOOLKIT_PATH',
