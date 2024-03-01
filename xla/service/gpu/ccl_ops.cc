@@ -330,6 +330,7 @@ void stream_wait_streamlist(se::gpu::GpuStreamHandle stream,
 template <class T>
 void streamlist_wait_stream(se::gpu::GpuStreamHandle stream,
                             const std::vector<T>& p) {
+  stream->wait();
   sycl::event event = stream->ext_oneapi_submit_barrier();
 
   const std::vector<sycl::event> event_list{event};

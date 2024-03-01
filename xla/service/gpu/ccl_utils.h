@@ -35,11 +35,11 @@ limitations under the License.
 #else
 namespace ccl {
 struct communicator {
-  communicator(int nranks, int rank, const std::string& id)
+  communicator(int nranks, int rank, const std::string id)
       : nranks(nranks), rank(rank), id(id) {}
   int nranks;
   int rank;
-  const std::string& id;
+  const std::string id;
 };
 }  // namespace ccl
 #endif  // ITEX_USE_CCL
@@ -59,10 +59,6 @@ bool IsNcclLaunchModeParallel();
 size_t GetNumLocalParticipants(
     const std::vector<GlobalDeviceId>& participants,
     const std::vector<GlobalDeviceId>* local_devices);  // may be null
-
-StatusOr<const NcclUniqueIdCallback*> GetNcclUniqueIdCallback(
-    const NcclUniqueIdCallback* unique_id_callback,  // may be null
-    bool is_local);
 
 class CustomNcclUniqueIdCallback {
  public:

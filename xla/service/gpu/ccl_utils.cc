@@ -73,13 +73,6 @@ StatusOr<std::string> ToNcclUniqueId(const std::string& id_str) {
   return id_str;
 }
 
-StatusOr<std::string> LocalNcclUniqueIdCallback(const NcclCliqueKey&) {
-  // ncclUniqueId id;
-  // XLA_CUDA_RETURN_IF_ERROR(ncclGetUniqueId(&id));
-  // return std::string(id.internal, NCCL_UNIQUE_ID_BYTES);
-  return std::string("");
-}
-
 struct NcclCliqueState {
   std::string unique_id;
   int64_t run_id = -1;
@@ -187,19 +180,6 @@ size_t GetNumLocalParticipants(
   });
 }
 
-StatusOr<const NcclUniqueIdCallback*> GetNcclUniqueIdCallback(
-    const NcclUniqueIdCallback* unique_id_callback, bool is_local) {
-  if (unique_id_callback != nullptr) return unique_id_callback;
-
-  TF_RET_CHECK(is_local || IsGlobalNcclConfig())
-      << "If non-local devices are taking part of a collective API on "
-         "GPU, the nccl_unique_id_callback must be provided by the client.";
-
-  static auto* local_callback =
-      new NcclUniqueIdCallback(LocalNcclUniqueIdCallback);
-  return local_callback;
-}
-
 StatusOr<NcclComm::Lock> AcquireNcclComm(
     RunId run_id, OpId op_id, std::vector<GlobalDeviceId> participants,
     size_t num_local_participants,
@@ -226,8 +206,7 @@ StatusOr<NcclComm::Lock> AcquireNcclComm(
     int nranks = clique_key.devices().size();
     const std::string& id = state.unique_id;
 
-    ccl::communicator* comm =
-        new ccl::communicator(nranks, rank, state.unique_id);
+    ccl::communicator* comm = new ccl::communicator(nranks, rank, id);
     // Status status = XLA_CUDA_STATUS(ncclCommInitRank(&comm, nranks, id,
     // rank));
     Status status = tsl::OkStatus();
