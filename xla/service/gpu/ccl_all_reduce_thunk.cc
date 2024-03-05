@@ -59,8 +59,16 @@ absl::Status RunAllReduce(NcclApi* nccl_api, ReductionKind reduction_kind,
   VLOG(3) << "Performing all-reduce from device ordinal: " << device_ordinal;
 
   auto ccl_api = dynamic_cast<CclApi*>(nccl_api);
+<<<<<<< HEAD
   for (size_t i = 0; i < buffers.size(); ++i) {
     DeviceBufferPair& buffer = buffers[i];
+=======
+  ccl_api->ChangeMaxCall(buffers.size());
+
+  for (size_t i = 0; i < buffers.size(); ++i) {
+    DeviceBufferPair& buffer = buffers[i];
+    ccl_api->ChangCurrentCall(i);
+>>>>>>> e36ddb55b (Update ccl_all_reduce_thunk.cc)
     TF_RETURN_IF_ERROR(ccl_api->AllReduce(
         buffer.source_buffer, buffer.destination_buffer, buffer.element_type,
         buffer.element_count, reduction_kind, comm, &stream));
