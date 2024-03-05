@@ -21,11 +21,16 @@ import sys
 
 import jax._src.xla_bridge as xb
 from jax._src.lib import xla_client
+from jax_plugins.intel_extension_for_openxla.version import VersionClass
 
 logger = logging.getLogger(__name__)
 
 def initialize():
   path = Path(__file__).resolve().parent / "pjrt_plugin_xpu.so"
+  xla_extension_version = VersionClass()
+  logger.warning("INFO: Intel Extension for OpenXLA version: %s, commit: %s",
+                 xla_extension_version.get_version(),
+                 xla_extension_version.get_hash())
   if not path.exists():
     logger.warning(
         f"WARNING: Native library {path} does not exist. "

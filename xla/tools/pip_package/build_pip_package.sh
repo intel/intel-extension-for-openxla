@@ -15,9 +15,7 @@
 # ==============================================================================
 
 onednn_gpu_path="bazel-bin/external/onednn_gpu/include/oneapi/dnnl/dnnl_version.h"
-onednn_cpu_path="bazel-bin/external/onednn_cpu/include/oneapi/dnnl/dnnl_version.h"
 onednn_gpu_v2_path="bazel-bin/external/onednn_gpu_v2/include/oneapi/dnnl/dnnl_version.h"
-onednn_cpu_v2_path="bazel-bin/external/onednn_cpu_v2/include/oneapi/dnnl/dnnl_version.h"
 xla_tmp_folder_name="xla.tmp"
 
 set -e
@@ -66,12 +64,8 @@ function emit_version_info() {
   echo "COMPILER_VERSION = '`get_compiler_version`'" >> $1
   if [ -f ${onednn_gpu_path} ]; then
     onednn_path=${onednn_gpu_path}
-  elif [ -f ${onednn_cpu_path} ]; then
-    onednn_path=${onednn_cpu_path}
   elif [ -f ${onednn_gpu_v2_path} ]; then
     onednn_path=${onednn_gpu_v2_path}
-  elif [ -f ${onednn_cpu_v2_path} ]; then
-    onednn_path=${onednn_cpu_v2_path}
   else
     echo "Error: no oneDNN version files"
     exit -1
@@ -118,6 +112,7 @@ function prepare_src() {
     ls -al ${XLA_TMPDIR}
     mv -f ${XLA_TMPDIR}/xla/* ${XLA_TMPDIR}/jax_plugins/intel_extension_for_openxla/
     cp -rf xla/python/*.py ${XLA_TMPDIR}/jax_plugins/intel_extension_for_openxla/
+    "${PYTHON_BIN_PATH:-python}" xla/python/gen_xla_version.py --in=xla/python/version.py.in --hash=`get_git_desc` --out=${XLA_TMPDIR}/jax_plugins/intel_extension_for_openxla/version.py
     # emit_version_info ${XLA_TMPDIR}/jax_plugins/python/version.py
     chmod +x ${XLA_TMPDIR}/jax_plugins/intel_extension_for_openxla/__init__.py
     rm -rf ${XLA_TMPDIR}/xla

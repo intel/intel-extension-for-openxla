@@ -99,17 +99,19 @@ GetStreamExecutorXpuDeviceAllocator(
       std::vector<se::MultiDeviceAdapter::AllocatorWithStream>
           allocators_and_streams;
       int64_t default_limit_MB = -1;
-      TF_CHECK_OK(tsl::ReadInt64FromEnvVar("XLA_LIMIT_MEMORY_SIZE_IN_MB",
-                                        default_limit_MB, &default_limit_MB));
+      TF_CHECK_OK(tsl::ReadInt64FromEnvVar(
+          "XLA_LIMIT_MEMORY_SIZE_IN_MB", default_limit_MB, &default_limit_MB));
       if (IsARC() && default_limit_MB > 4095) {
         default_limit_MB = 4095;
-        LOG(WARNING)<< "ARC or FLEX series allocation size should be less than 4096MB. "
-                    << "Set as default 4095MB.";
+        LOG(WARNING)
+            << "ARC or FLEX series allocation size should be less than 4096MB. "
+            << "Set as default 4095MB.";
       }
-      uint64_t limit_byte = default_limit_MB > 0 ? 
-                            std::min(static_cast<uint64_t>(default_limit_MB * 1024 * 1024),
-                                     GetMaxAllocateLimitByte()) :
-                            GetMaxAllocateLimitByte();
+      uint64_t limit_byte =
+          default_limit_MB > 0
+              ? std::min(static_cast<uint64_t>(default_limit_MB * 1024 * 1024),
+                         GetMaxAllocateLimitByte())
+              : GetMaxAllocateLimitByte();
       for (const auto& ordinal_and_device : addressable_devices) {
         TF_ASSIGN_OR_RETURN(
             auto bfc_allocator,
@@ -117,7 +119,7 @@ GetStreamExecutorXpuDeviceAllocator(
                                allocator_config.memory_fraction,
                                allocator_config.preallocate));
         bfc_allocator->SetAllocateLimit(limit_byte);
-	      allocators_and_streams.emplace_back(
+        allocators_and_streams.emplace_back(
             std::move(bfc_allocator),
             ordinal_and_device.second->compute_stream());
       }
@@ -215,6 +217,7 @@ StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorXpuClient(
   } else {
     devices = BuildLocalDevices(std::move(local_device_states), node_id);
   }
+
   return std::unique_ptr<PjRtClient>(std::make_unique<StreamExecutorXpuClient>(
       XpuName(), xla_client, std::move(devices),
       /*node_id=*/node_id, std::move(allocator),
