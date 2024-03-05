@@ -1,3 +1,225 @@
+diff --git a/jax/__init__.py b/jax/__init__.py
+index 76e16e5a9..dad06b1b4 100644
+--- a/jax/__init__.py
++++ b/jax/__init__.py
+@@ -12,10 +12,10 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ 
+-# Set default C++ logging level before any logging happens.
+-import os as _os
+-_os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '1')
+-del _os
++# # Set default C++ logging level before any logging happens.
++# import os as _os
++# _os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '1')
++# del _os
+ 
+ # Import version first, because other submodules may reference it.
+ from jax.version import __version__ as __version__
+diff --git a/jax/_src/ad_checkpoint.py b/jax/_src/ad_checkpoint.py
+index 44a31b19f..9fe0efacd 100644
+--- a/jax/_src/ad_checkpoint.py
++++ b/jax/_src/ad_checkpoint.py
+@@ -730,7 +730,7 @@ mlir.register_lowering(
+     remat_p,
+     mlir.lower_fun(partial(remat_lowering, is_gpu_platform=True),
+                    multiple_results=True),
+-    platform="gpu")
++    platform="xpu")
+ 
+ def _optimization_barrier_abstract_eval(*args):
+   return args
+diff --git a/jax/_src/checkify.py b/jax/_src/checkify.py
+index e151ea3f2..aee50b2a8 100644
+--- a/jax/_src/checkify.py
++++ b/jax/_src/checkify.py
+@@ -538,7 +538,7 @@ mlir.register_lowering(check_p, check_lowering_rule_unsupported,
+ mlir.register_lowering(check_p, check_lowering_rule,
+                        platform='cpu')
+ mlir.register_lowering(check_p, check_lowering_rule,
+-                       platform='gpu')
++                       platform='xpu')
+ 
+ def check_batching_rule(batched_args, batch_dims, *, err_tree, debug):
+   size = next(x.shape[dim] for x, dim in zip(batched_args, batch_dims)
+diff --git a/jax/_src/compiler.py b/jax/_src/compiler.py
+index 377277ff4..343165f71 100644
+--- a/jax/_src/compiler.py
++++ b/jax/_src/compiler.py
+@@ -284,7 +284,7 @@ def compile_or_get_cached(
+ 
+   # Persistent compilation cache only implemented on TPU and GPU.
+   # TODO(skye): add warning when initializing cache on unsupported default platform
+-  supported_platforms = ["tpu", "gpu"]
++  supported_platforms = ["tpu", "xpu"]
+   # (b/233850967) CPU caching can be enabled if XLA Runtime is enabled.
+   if "--xla_cpu_use_xla_runtime=true" in os.environ.get("XLA_FLAGS", ""):
+     supported_platforms.append("cpu")
+diff --git a/jax/_src/debugging.py b/jax/_src/debugging.py
+index 69219870d..a6deaea4c 100644
+--- a/jax/_src/debugging.py
++++ b/jax/_src/debugging.py
+@@ -163,7 +163,7 @@ def debug_callback_lowering(ctx, *args, effect, callback, **params):
+ mlir.register_lowering(debug_callback_p, debug_callback_lowering,
+                        platform="cpu")
+ mlir.register_lowering(
+-    debug_callback_p, debug_callback_lowering, platform="gpu")
++    debug_callback_p, debug_callback_lowering, platform="xpu")
+ mlir.register_lowering(
+     debug_callback_p, debug_callback_lowering, platform="tpu")
+ 
+diff --git a/jax/_src/internal_test_util/lax_test_util.py b/jax/_src/internal_test_util/lax_test_util.py
+index 92fc5eba6..9b7d64e24 100644
+--- a/jax/_src/internal_test_util/lax_test_util.py
++++ b/jax/_src/internal_test_util/lax_test_util.py
+@@ -39,6 +39,7 @@ zip, unsafe_zip = safe_zip, zip
+ # arguments of appropriate shapes and dtypes using the following table.
+ 
+ float_dtypes = test_util.dtypes.all_floating
++float_dtypes_xpu = test_util.dtypes.all_floating_xpu
+ complex_elem_dtypes = test_util.dtypes.floating
+ complex_dtypes = test_util.dtypes.complex
+ inexact_dtypes = test_util.dtypes.all_inexact
+diff --git a/jax/_src/interpreters/mlir.py b/jax/_src/interpreters/mlir.py
+index 5cfaff667..16f45829e 100644
+--- a/jax/_src/interpreters/mlir.py
++++ b/jax/_src/interpreters/mlir.py
+@@ -679,7 +679,7 @@ class LoweringResult(NamedTuple):
+   shape_poly_state: ShapePolyLoweringState
+ 
+ 
+-_platforms_with_donation = ["cpu", "cuda", "rocm", "tpu"]
++_platforms_with_donation = ["cpu", "cuda", "rocm", "tpu", "xpu"]
+ 
+ 
+ def _to_logical_op_sharding(
+@@ -2287,7 +2287,7 @@ def emit_python_callback(
+   if len(ctx.module_context.platforms) > 1:
+     raise NotImplementedError("multi-platform lowering for python_callback")
+   platform = ctx.module_context.platforms[0]
+-  if platform not in {"cpu", "cuda", "rocm", "tpu"}:
++  if platform not in {"cpu", "cuda", "rocm", "tpu", "xpu"}:
+     raise ValueError(
+         f"`EmitPythonCallback` not supported on {platform} backend.")
+   backend = ctx.module_context.backend
+@@ -2382,7 +2382,7 @@ def emit_python_callback(
+     operand_mlir_layouts = [_layout_to_mlir_layout([]), *operand_mlir_layouts]
+   result_type = ir.TupleType.get_tuple(result_types)
+   call_target_name = ("xla_python_gpu_callback"
+-                     if platform in {"cuda", "rocm"} else "xla_python_cpu_callback")
++                     if platform in {"cuda", "rocm", "xpu"} else "xla_python_cpu_callback")
+   result = hlo.CustomCallOp(
+       [result_type],
+       callback_operands,
+diff --git a/jax/_src/lax/control_flow/loops.py b/jax/_src/lax/control_flow/loops.py
+index 160bae300..c933a1d32 100644
+--- a/jax/_src/lax/control_flow/loops.py
++++ b/jax/_src/lax/control_flow/loops.py
+@@ -2239,7 +2239,7 @@ def _cumulative_reduction_primitive(name, reduce_fn, reduce_window_fn):
+   register_lowering(partial(associative_scan, reduce_fn))
+   # On GPU, we choose between window reduction and associative scan
+   # based on the input size.
+-  for platform in ['cuda', 'rocm']:
++  for platform in ['cuda', 'rocm', 'xpu']:
+     register_lowering(
+         partial(cumred_gpu_impl, reduce_window_fn, reduce_fn), platform)
+   # On TPU, an implementation using reduce_window is handled specially by the
+diff --git a/jax/_src/lax/convolution.py b/jax/_src/lax/convolution.py
+index 0aed39ce9..86915d984 100644
+--- a/jax/_src/lax/convolution.py
++++ b/jax/_src/lax/convolution.py
+@@ -757,7 +757,7 @@ mlir.register_lowering(
+ mlir.register_lowering(
+     conv_general_dilated_p,
+     partial(_conv_general_dilated_lower, expand_complex_convolutions=True),
+-    platform='gpu')
++    platform='xpu')
+ 
+ 
+ def _reshape_axis_into(src, dst, x):
+diff --git a/jax/_src/lax/parallel.py b/jax/_src/lax/parallel.py
+index d297438bd..1eed3a8ae 100644
+--- a/jax/_src/lax/parallel.py
++++ b/jax/_src/lax/parallel.py
+@@ -1186,7 +1186,7 @@ def _all_gather_lowering(ctx, x, *, all_gather_dimension, axis_name,
+       (sharding_impls.SPMDAxisContext, sharding_impls.ShardingContext),
+   )
+   if (platform == 'tpu' or
+-    (platform in ('cuda', 'rocm') and all_gather_dimension == 0)):
++    (platform in ('cuda', 'rocm', "xpu") and all_gather_dimension == 0)):
+     if not tiled:
+       new_shape = list(x_aval.shape)
+       new_shape.insert(all_gather_dimension, 1)
+diff --git a/jax/_src/lax/slicing.py b/jax/_src/lax/slicing.py
+index 2e3ac7005..289080eb9 100644
+--- a/jax/_src/lax/slicing.py
++++ b/jax/_src/lax/slicing.py
+@@ -2558,7 +2558,7 @@ def _scatter_add_lower_gpu(ctx, operand, indices, updates,
+   imag = _scatter(hlo.ImagOp(operand).result, hlo.ImagOp(updates).result)
+   return hlo.ComplexOp(real, imag).results
+ 
+-mlir.register_lowering(scatter_add_p, _scatter_add_lower_gpu, platform="gpu")
++mlir.register_lowering(scatter_add_p, _scatter_add_lower_gpu, platform="xpu")
+ 
+ 
+ def _dynamic_slice_indices(
+diff --git a/jax/_src/lax/windowed_reductions.py b/jax/_src/lax/windowed_reductions.py
+index e7fe2a604..2fa13d2d6 100644
+--- a/jax/_src/lax/windowed_reductions.py
++++ b/jax/_src/lax/windowed_reductions.py
+@@ -638,7 +638,7 @@ mlir.register_lowering(select_and_scatter_add_p, mlir.lower_fun(
+ # TODO(b/182390722): workaround for XLA/GPU crash.
+ mlir.register_lowering(select_and_scatter_add_p, mlir.lower_fun(
+     partial(_select_and_scatter_add_impl, expand_padding=True),
+-    multiple_results=False), platform='gpu')
++    multiple_results=False), platform='xpu')
+ 
+ 
+ def _select_and_gather_add_shape_rule(
+@@ -873,4 +873,4 @@ mlir.register_lowering(select_and_gather_add_p, mlir.lower_fun(
+ mlir.register_lowering(
+     select_and_gather_add_p,
+     _select_and_gather_add_lowering,
+-    platform="gpu")
++    platform="xpu")
+diff --git a/jax/_src/test_util.py b/jax/_src/test_util.py
+index 1eaa4466e..b9e35dcdd 100644
+--- a/jax/_src/test_util.py
++++ b/jax/_src/test_util.py
+@@ -1199,6 +1199,10 @@ class _LazyDtypes:
+   def all_floating(self):
+     return self.supported([_dtypes.bfloat16, np.float16, np.float32, np.float64])
+ 
++  @_cached_property
++  def all_floating_xpu(self):
++    return self.supported([_dtypes.bfloat16, np.float32, np.float64])
++
+   @_cached_property
+   def integer(self):
+     return self.supported([np.int32, np.int64])
+diff --git a/jax/experimental/host_callback.py b/jax/experimental/host_callback.py
+index 89f9bd6de..84227fb0a 100644
+--- a/jax/experimental/host_callback.py
++++ b/jax/experimental/host_callback.py
+@@ -559,7 +559,7 @@ logger = logging.getLogger(__name__)
+ 
+ 
+ def _use_outfeed(platform: str) -> bool:
+-  return (platform in ("tpu", "gpu", "cuda", "rocm") or
++  return (platform in ("tpu", "xpu", "cuda", "rocm") or
+           _HOST_CALLBACK_OUTFEED.value)
+ 
+ 
+@@ -1787,7 +1787,7 @@ def _initialize_outfeed_receiver(
+ 
+     # By default, all devices on all supported backends.
+     clients = [backend for name, backend in xb.backends().items()
+-               if name in ("cpu", "cuda", "rocm", "tpu")]
++               if name in ("cpu", "cuda", "rocm", "tpu", "xpu")]
+     devices = list(
+         itertools.chain(*[backend.local_devices() for backend in clients]))
+     _callback_handler_data.clients = clients  # type: ignore[assignment]
 diff --git a/tests/array_interoperability_test.py b/tests/array_interoperability_test.py
 index 149ee06b9..03fefbab4 100644
 --- a/tests/array_interoperability_test.py

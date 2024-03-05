@@ -91,7 +91,13 @@ class XetlaGemmKernel {
     return *this;
   }
   XetlaGemmKernel& build() {
+#define __CHECK(X) \
+  if (!(X)) return *this;
+
     fallback_ = true;
+    __CHECK(reinterpret_cast<uint64_t>(c_->data.opaque()) % 8 == 0);
+    __CHECK(reinterpret_cast<uint64_t>(a_->data.opaque()) % 8 == 0);
+    __CHECK(reinterpret_cast<uint64_t>(b_->data.opaque()) % 8 == 0);
     is_a_row_major_ = (a_->transpose == se::blas::Transpose::kNoTranspose);
     is_a_col_major_ = (a_->transpose == se::blas::Transpose::kTranspose);
     is_b_row_major_ = (b_->transpose == se::blas::Transpose::kNoTranspose);
@@ -99,7 +105,8 @@ class XetlaGemmKernel {
     m_ = is_a_row_major_ ? a_->num_rows : a_->num_cols;
     k_ = is_a_row_major_ ? a_->num_cols : a_->num_rows;
     n_ = is_b_row_major_ ? b_->num_cols : b_->num_rows;
-    if (is_a_col_major_) return *this;
+    __CHECK(k_ % 4 == 0 && n_ % 4 == 0);
+    __CHECK(is_a_row_major_);
     fallback_ = false;
     selected_policy_id_ = selectXetlaGemmConfig(m_, n_, k_);
     return *this;
