@@ -1,5 +1,7 @@
 name: openxla ci
 run-name: ${{ github.actor }} is testing out GitHub Action
+permissions: read-all
+
 on:
   pull_request:
     branches:
