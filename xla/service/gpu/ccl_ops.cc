@@ -78,42 +78,70 @@ struct AllReduceKernel;
 
 template <typename T, typename Func, typename AccT = T>
 void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
-                     std::vector<Participant>& participants,
-                     int reduction_size) {
-  auto group_size =
-      (*stream)
-          .get_device()
-          .template get_info<sycl::info::device::max_work_group_size>();
-  auto num_workgroup = (tensor_size + group_size - 1) / group_size;
+                     std::vector<Participant>& participants, int reduction_size,
+                     bool use_host = true) {
+  // FIXME(intel): Use host AllReduce as workaround to avoid random accuracy
+  // issue caused by Toolkit 2024.1.
+  if (use_host) {
+    std::unique_ptr<T[]> in_buffer = std::make_unique<T[]>(tensor_size);
+    std::unique_ptr<T[]> out_buffer = std::make_unique<T[]>(tensor_size);
 
-  if (reduction_size <= MAX_RANK_SIZE) {
-    stream->submit([&](sycl::handler& cgh) {
-      const T* in_ptr[MAX_RANK_SIZE];
-      T* out_ptr[MAX_RANK_SIZE];
+    // Initilaize out buffer.
+    participants[0]
+        .stream
+        ->memcpy(out_buffer.get(), participants[0].send,
+                 tensor_size * sizeof(T))
+        .wait();
 
-      for (int i = 0; i < reduction_size; ++i) {
-        in_ptr[i] = static_cast<const T*>(participants[i].send);
-        out_ptr[i] = static_cast<T*>(participants[i].recv);
+    for (int i = 1; i < participants.size(); ++i) {
+      auto& ip = participants[i];
+      ip.stream->memcpy(in_buffer.get(), ip.send, tensor_size * sizeof(T))
+          .wait();
+      for (int j = 0; j < tensor_size; ++j) {
+        out_buffer[j] = T(Func()(AccT(out_buffer[j]), AccT(in_buffer[j])));
       }
+    }
 
-      cgh.parallel_for<AllReduceKernel<T, Func>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
-
-            out_ptr[0][index] = in_ptr[0][index];
-            for (int i = 1; i < reduction_size; ++i)
-              out_ptr[0][index] =
-                  T(Func()(AccT(out_ptr[0][index]), AccT(in_ptr[i][index])));
-            for (int i = 1; i < reduction_size; ++i)
-              out_ptr[i][index] = out_ptr[0][index];
-          });
-    });
+    for (auto ip : participants) {
+      ip.stream->memcpy(ip.recv, out_buffer.get(), tensor_size * sizeof(T))
+          .wait();
+    }
   } else {
-    LOG(FATAL) << "Reduction size " << reduction_size
-               << " is not supported in AllReduce.";
+    auto group_size =
+        (*stream)
+            .get_device()
+            .template get_info<sycl::info::device::max_work_group_size>();
+    auto num_workgroup = (tensor_size + group_size - 1) / group_size;
+
+    if (reduction_size <= MAX_RANK_SIZE) {
+      stream->submit([&](sycl::handler& cgh) {
+        const T* in_ptr[MAX_RANK_SIZE];
+        T* out_ptr[MAX_RANK_SIZE];
+
+        for (int i = 0; i < reduction_size; ++i) {
+          in_ptr[i] = static_cast<const T*>(participants[i].send);
+          out_ptr[i] = static_cast<T*>(participants[i].recv);
+        }
+
+        cgh.parallel_for<AllReduceKernel<T, Func>>(
+            sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
+                              sycl::range<1>(group_size)),
+            [=](sycl::nd_item<1> item) {
+              const int index = item.get_global_linear_id();
+              if (index >= tensor_size) return;
+
+              out_ptr[0][index] = in_ptr[0][index];
+              for (int i = 1; i < reduction_size; ++i)
+                out_ptr[0][index] =
+                    T(Func()(AccT(out_ptr[0][index]), AccT(in_ptr[i][index])));
+              for (int i = 1; i < reduction_size; ++i)
+                out_ptr[i][index] = out_ptr[0][index];
+            });
+      });
+    } else {
+      LOG(FATAL) << "Reduction size " << reduction_size
+                 << " is not supported in AllReduce.";
+    }
   }
 }
 
@@ -364,6 +392,22 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
     if (p.size() != comm->nranks) {
       Manager::instance().cv.wait(l);
     } else {
+      // FIXME(intel): Temporarily WA to avoid random accuracy issue in Toolkit
+      // 2024.1. Remove host AllReduce once it's fixed.
+      static absl::once_flag init_flag;
+      static bool is_host_allreduce = true;
+
+      absl::call_once(init_flag, [&]() {
+        const char* env = std::getenv("_XLA_HOST_ALLREDUCE");
+
+        if (env != nullptr) {
+          std::string str_value = absl::AsciiStrToLower(env);
+          if (str_value == "0" || str_value == "false") {
+            is_host_allreduce = false;
+          }
+        }
+      });
+
       Manager::instance().collectives.erase(comm->id);
       std::sort(p.begin(), p.end(),
                 [](const Participant& a, const Participant& b) -> bool {
@@ -371,135 +415,136 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                 });
 
       se::gpu::GpuStreamHandle stream = p[0].stream;
-      if (current_call == 0) stream_wait_streamlist(stream, p);
+      if (!is_host_allreduce && current_call == 0)
+        stream_wait_streamlist(stream, p);
 
       if (reduction_kind == ReductionKind::SUM) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::plus<bool>>(stream, element_count, p,
-                                                  comm->nranks);
+          allreduce_dpcpp<bool, sycl::plus<bool>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::plus<float>>(stream, element_count, p,
-                                                    comm->nranks);
+          allreduce_dpcpp<float, sycl::plus<float>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::plus<double>>(stream, element_count, p,
-                                                      comm->nranks);
+          allreduce_dpcpp<double, sycl::plus<double>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == S32)
-          allreduce_dpcpp<int32_t, sycl::plus<int32_t>>(stream, element_count,
-                                                        p, comm->nranks);
+          allreduce_dpcpp<int32_t, sycl::plus<int32_t>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == S64)
-          allreduce_dpcpp<int64_t, sycl::plus<int64_t>>(stream, element_count,
-                                                        p, comm->nranks);
+          allreduce_dpcpp<int64_t, sycl::plus<int64_t>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == U32)
-          allreduce_dpcpp<uint32_t, sycl::plus<uint32_t>>(stream, element_count,
-                                                          p, comm->nranks);
+          allreduce_dpcpp<uint32_t, sycl::plus<uint32_t>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == U64)
-          allreduce_dpcpp<uint64_t, sycl::plus<uint64_t>>(stream, element_count,
-                                                          p, comm->nranks);
+          allreduce_dpcpp<uint64_t, sycl::plus<uint64_t>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == C64)
           allreduce_dpcpp<std::complex<float>, sycl::plus<std::complex<float>>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == C128)
           allreduce_dpcpp<std::complex<double>,
                           sycl::plus<std::complex<double>>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == BF16)
           allreduce_dpcpp<bfloat16, sycl::plus<float>, float>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::PRODUCT) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::multiplies<bool>>(stream, element_count,
-                                                        p, comm->nranks);
+          allreduce_dpcpp<bool, sycl::multiplies<bool>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::multiplies<float>>(stream, element_count,
-                                                          p, comm->nranks);
+          allreduce_dpcpp<float, sycl::multiplies<float>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == F64)
           allreduce_dpcpp<double, sycl::multiplies<double>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == S32)
           allreduce_dpcpp<int32_t, sycl::multiplies<int32_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == S64)
           allreduce_dpcpp<int64_t, sycl::multiplies<int64_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == U32)
           allreduce_dpcpp<uint32_t, sycl::multiplies<uint32_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == U64)
           allreduce_dpcpp<uint64_t, sycl::multiplies<uint64_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == C64)
           allreduce_dpcpp<std::complex<float>,
                           sycl::multiplies<std::complex<float>>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == C128)
           allreduce_dpcpp<std::complex<double>,
                           sycl::multiplies<std::complex<double>>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == BF16)
           allreduce_dpcpp<bfloat16, sycl::multiplies<float>, float>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::MIN) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::minimum<bool>>(stream, element_count, p,
-                                                     comm->nranks);
+          allreduce_dpcpp<bool, sycl::minimum<bool>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::minimum<float>>(stream, element_count, p,
-                                                       comm->nranks);
+          allreduce_dpcpp<float, sycl::minimum<float>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::minimum<double>>(stream, element_count,
-                                                         p, comm->nranks);
+          allreduce_dpcpp<double, sycl::minimum<double>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == S32)
           allreduce_dpcpp<int32_t, sycl::minimum<int32_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == S64)
           allreduce_dpcpp<int64_t, sycl::minimum<int64_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == U32)
           allreduce_dpcpp<uint32_t, sycl::minimum<uint32_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == U64)
           allreduce_dpcpp<uint64_t, sycl::minimum<uint64_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == BF16)
           allreduce_dpcpp<bfloat16, sycl::minimum<float>, float>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::MAX) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::maximum<bool>>(stream, element_count, p,
-                                                     comm->nranks);
+          allreduce_dpcpp<bool, sycl::maximum<bool>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::maximum<float>>(stream, element_count, p,
-                                                       comm->nranks);
+          allreduce_dpcpp<float, sycl::maximum<float>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::maximum<double>>(stream, element_count,
-                                                         p, comm->nranks);
+          allreduce_dpcpp<double, sycl::maximum<double>>(
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == S32)
           allreduce_dpcpp<int32_t, sycl::maximum<int32_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == S64)
           allreduce_dpcpp<int64_t, sycl::maximum<int64_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == U32)
           allreduce_dpcpp<uint32_t, sycl::maximum<uint32_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == U64)
           allreduce_dpcpp<uint64_t, sycl::maximum<uint64_t>>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else if (dtype == BF16)
           allreduce_dpcpp<bfloat16, sycl::maximum<float>, float>(
-              stream, element_count, p, comm->nranks);
+              stream, element_count, p, comm->nranks, is_host_allreduce);
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
@@ -509,7 +554,8 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                    << " is not supported in AllReduce.";
       }
 
-      if (current_call == (max_call - 1)) streamlist_wait_stream(stream, p);
+      if (!is_host_allreduce && current_call == (max_call - 1))
+        streamlist_wait_stream(stream, p);
       Manager::instance().cv.notify_all();
     }
   }
@@ -667,10 +713,18 @@ void sycl_alltoall_split(std::vector<const void*> send_buffers,
         alltoall_split_dpcpp<float>(stream, element_count, p, comm->nranks);
       else if (dtype == F64)
         alltoall_split_dpcpp<double>(stream, element_count, p, comm->nranks);
+      else if (dtype == S8)
+        alltoall_split_dpcpp<int8_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == S16)
+        alltoall_split_dpcpp<int16_t>(stream, element_count, p, comm->nranks);
       else if (dtype == S32)
         alltoall_split_dpcpp<int32_t>(stream, element_count, p, comm->nranks);
       else if (dtype == S64)
         alltoall_split_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == U8)
+        alltoall_split_dpcpp<uint8_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == U16)
+        alltoall_split_dpcpp<uint16_t>(stream, element_count, p, comm->nranks);
       else if (dtype == U32)
         alltoall_split_dpcpp<uint32_t>(stream, element_count, p, comm->nranks);
       else if (dtype == U64)
