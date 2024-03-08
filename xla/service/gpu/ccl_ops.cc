@@ -357,8 +357,7 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
   bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
-    std::string commid("");
-    if (Manager::instance().collectives.find(commid) ==
+    if (Manager::instance().collectives.find(comm->id) ==
         Manager::instance().collectives.end()) {
       collective = std::make_shared<Collective<Participant>>();
       collective->participants.push_back(
@@ -540,8 +539,7 @@ void sycl_allgather(const void* send_buffer, void* recv_buffer,
   bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
-    std::string commid("");
-    if (Manager::instance().collectives.find(commid) ==
+    if (Manager::instance().collectives.find(comm->id) ==
         Manager::instance().collectives.end()) {
       collective = std::make_shared<Collective<Participant>>();
       collective->participants.push_back(
@@ -609,8 +607,7 @@ void sycl_alltoall(std::vector<const void*> send_buffers,
   bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
-    std::string commid("");
-    if (Manager::instance().alltoall_collectives.find(commid) ==
+    if (Manager::instance().alltoall_collectives.find(comm->id) ==
         Manager::instance().alltoall_collectives.end()) {
       collective = std::make_shared<Collective<AlltoAllParticipant>>();
       collective->participants.push_back(
@@ -688,8 +685,7 @@ void sycl_alltoall_split(std::vector<const void*> send_buffers,
   bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
-    std::string commid("");
-    if (Manager::instance().alltoall_collectives.find(commid) ==
+    if (Manager::instance().alltoall_collectives.find(comm->id) ==
         Manager::instance().alltoall_collectives.end()) {
       collective = std::make_shared<Collective<AlltoAllParticipant>>();
       collective->participants.push_back(
@@ -772,8 +768,7 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
   bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
-    std::string commid("");
-    if (Manager::instance().collectives.find(commid) ==
+    if (Manager::instance().collectives.find(comm->id) ==
         Manager::instance().collectives.end()) {
       collective = std::make_shared<Collective<Participant>>();
       collective->participants.push_back(
@@ -959,8 +954,7 @@ void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
   bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
-    std::string commid("");
-    if (Manager::instance().permute_collectives.find(commid) ==
+    if (Manager::instance().permute_collectives.find(comm->id) ==
         Manager::instance().permute_collectives.end()) {
       collective = std::make_shared<Collective<PermuteParticipant>>();
       collective->participants.push_back({gpu_stream, send_buffer, recv_buffer,
