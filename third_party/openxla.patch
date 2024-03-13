@@ -2556,54 +2556,11 @@ index 711ae9907..2898a3581 100644
 -
  }  // namespace gpu
  }  // namespace xla
-diff --git a/xla/service/gpu/runtime3/fft_thunk.h b/xla/service/gpu/runtime3/fft_thunk.h
-index 4e0de39e1..14ae7fdf5 100644
---- a/xla/service/gpu/runtime3/fft_thunk.h
-+++ b/xla/service/gpu/runtime3/fft_thunk.h
-@@ -28,6 +28,12 @@ limitations under the License.
- #include "xla/xla_data.pb.h"
- #include "tsl/platform/status.h"
- 
-+#if GOOGLE_SYCL
-+#include "xla/service/gpu/cusolver_context.h"
-+#include "xla/stream_executor/gpu/gpu_stream.h"
-+#include "xla/stream_executor/gpu/gpu_helpers.h"
-+#endif
-+
- namespace xla {
- namespace gpu {
- 
-@@ -76,6 +82,13 @@ class FftThunk : public Thunk {
-   Status ExecuteOnStream(const ExecuteParams& params) override;
- 
-  private:
-+#if GOOGLE_SYCL
-+  template <oneapi::mkl::dft::precision P, oneapi::mkl::dft::domain D,
-+            typename T>
-+  Status DoFFTInternal(se::Stream* stream, T* in_buffer, T* out_buffer,
-+                       se::ScratchAllocator& allocator);
-+#endif  // GOOGLE_SYCL
-+
-   const se::fft::Type fft_type_;
-   const std::vector<int64_t> fft_length_;
- 
 diff --git a/xla/service/gpu/runtime3/triangular_solve_thunk.h b/xla/service/gpu/runtime3/triangular_solve_thunk.h
-index 8f582db16..4fc7bad4b 100644
+index 8f582db16..c01cf32c7 100644
 --- a/xla/service/gpu/runtime3/triangular_solve_thunk.h
 +++ b/xla/service/gpu/runtime3/triangular_solve_thunk.h
-@@ -29,6 +29,11 @@ limitations under the License.
- #include "xla/xla_data.pb.h"
- #include "tsl/platform/status.h"
- 
-+#if GOOGLE_SYCL
-+#include "xla/service/gpu/cusolver_context.h"
-+#include "xla/stream_executor/gpu/gpu_stream.h"
-+#endif
-+
- namespace xla {
- namespace gpu {
- 
-@@ -71,7 +76,6 @@ class TriangularSolveThunk : public Thunk {
+@@ -71,7 +71,6 @@ class TriangularSolveThunk : public Thunk {
    const int64_t a_batch_stride_;
    const int64_t b_batch_stride_;
  };
@@ -2611,7 +2568,7 @@ index 8f582db16..4fc7bad4b 100644
  Status RunTriangularSolve(se::DeviceMemoryBase a_data,
                            se::DeviceMemoryBase b_data,
                            se::DeviceMemoryBase temp_data,
-@@ -81,7 +85,6 @@ Status RunTriangularSolve(se::DeviceMemoryBase a_data,
+@@ -81,7 +80,6 @@ Status RunTriangularSolve(se::DeviceMemoryBase a_data,
                            int64_t batch_size, int64_t m, int64_t n,
                            int64_t a_batch_stride, int64_t b_batch_stride,
                            se::Stream* stream);
