@@ -58,14 +58,14 @@ typedef struct OneDnnConvPrimitive {
   bool has_reorder = false;
 } OneDnnConvPrimitive;
 
-StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
+absl::StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
     se::Stream*, const GpuConvDescriptor& descriptor,
     const std::vector<se::DeviceMemoryBase>& operand_se_buffers,
     const se::DeviceMemoryBase& result_buffer,
     const Thunk::ExecuteParams& params,
     se::ScratchAllocator* scratch_allocator);
 
-Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
+absl::Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
                   const GpuConvDescriptor& conv_descriptor,
                   absl::Span<const se::DeviceMemoryBase> operand_buffers,
                   se::DeviceMemoryBase result_buffer,

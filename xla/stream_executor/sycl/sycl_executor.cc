@@ -37,7 +37,8 @@ limitations under the License.
 #include "tsl/platform/numbers.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/util/env_var.h"
-#include "xla/stream_executor/kernel_cache_config.h"
+#include "tsl/platform/fingerprint.h"
+// #include "xla/stream_executor/kernel_cache_config.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/platform/initialize.h"
 // #include "xla/stream_executor/platform/logging.h"
@@ -50,6 +51,7 @@ limitations under the License.
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
 #include "xla/stream_executor/plugin_registry.h"
+#include "xla/stream_executor/gpu/gpu_command_buffer.h"
 
 namespace stream_executor {
 namespace gpu {
@@ -88,7 +90,7 @@ GpuExecutor::~GpuExecutor() {
   }
 }
 
-tsl::Status GpuExecutor::Init(int device_ordinal,
+absl::Status GpuExecutor::Init(int device_ordinal,
                               DeviceOptions device_options) {
   device_ordinal_ = device_ordinal;
   auto status = GpuDriver::GetDevice(device_ordinal_, &device_);
@@ -100,22 +102,22 @@ tsl::Status GpuExecutor::Init(int device_ordinal,
                                   &context_);
 }
 
-tsl::Status GpuExecutor::LoadModuleFromCuBin(const char* cubin,
+absl::Status GpuExecutor::LoadModuleFromCuBin(const char* cubin,
                                              ze_module_handle_t* module) {
   LOG(FATAL) << "Feature not supported on SYCL platform (LoadModuleFromCuBin)";
 }
 
-tsl::Status GpuExecutor::LoadModuleFromPtx(const char* ptx,
+absl::Status GpuExecutor::LoadModuleFromPtx(const char* ptx,
                                            ze_module_handle_t* module) {
   LOG(FATAL) << "Feature not supported on SYCL platform (LoadModuleFromPtx)";
 }
 
-tsl::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,
+absl::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,
                                              ze_module_handle_t* module) {
   LOG(FATAL) << "Feature not supported on SYCL platform (LoadModuleFromHsaco)";
 }
 
-tsl::Status GpuExecutor::LoadModuleFromSpir(const char* spirv,
+absl::Status GpuExecutor::LoadModuleFromSpir(const char* spirv,
                                             const size_t size,
                                             ze_module_handle_t* module) {
   uint64_t module_refcount;
@@ -133,11 +135,11 @@ tsl::Status GpuExecutor::LoadModuleFromSpir(const char* spirv,
             << " is already loaded as module " << *module;
   }
   gpu_binary_to_module_[spirv] = {*module, module_refcount};
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
-                                   KernelBase* kernel) {
+absl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
+                                    Kernel* kernel) {
   GpuKernel* l0_kernel = AsGpuKernel(kernel);
   ze_module_handle_t module = nullptr;
   string kernel_name;
@@ -150,7 +152,7 @@ tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
     TF_RETURN_IF_ERROR(LoadModuleFromSpir(spirv, size, &module));
     kernel_to_gpu_binary_[kernel] = spirv;
   } else {
-    return tsl::Status(
+    return absl::Status(
         absl::StatusCode::kInternal,
         absl::StrFormat("No method of loading SPIR kernel provided"));
   }
@@ -168,7 +170,7 @@ tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
   TF_RETURN_IF_ERROR(GetKernelMetadata(l0_kernel, &kernel_metadata));
   kernel->set_metadata(kernel_metadata);
   kernel->set_name(kernel_name);
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
 bool GpuExecutor::UnloadGpuBinary(const void* gpu_binary) {
@@ -188,7 +190,7 @@ bool GpuExecutor::UnloadGpuBinary(const void* gpu_binary) {
   return true;
 }
 
-void GpuExecutor::UnloadKernel(const KernelBase* kernel) {
+void GpuExecutor::UnloadKernel(const Kernel* kernel) {
   VLOG(3) << "Unloading kernel " << kernel << " : " << kernel->name();
 
   absl::MutexLock lock{&in_memory_modules_mu_};
@@ -204,7 +206,7 @@ void GpuExecutor::UnloadKernel(const KernelBase* kernel) {
   kernel_to_gpu_binary_.erase(gpu_binary_it);
 }
 
-tsl::Status GpuExecutor::LoadModule(const MultiModuleLoaderSpec& spec,
+absl::Status GpuExecutor::LoadModule(const MultiModuleLoaderSpec& spec,
                                     ModuleHandle* module_handle) {
   ze_module_handle_t ze_module = nullptr;
   if (spec.has_cuda_cubin_in_memory()) {
@@ -215,9 +217,9 @@ tsl::Status GpuExecutor::LoadModule(const MultiModuleLoaderSpec& spec,
         spec.cuda_cubin_in_memory().size(), &ze_module));
     *module_handle = ModuleHandle(const_cast<void*>(
         static_cast<const void*>(spec.cuda_cubin_in_memory().data())));
-    return ::tsl::OkStatus();
+    return absl::OkStatus();
   } else {
-    return tsl::Status(absl::StatusCode::kInternal,
+    return absl::Status(absl::StatusCode::kInternal,
                        absl::StrFormat("No SPIR binary found"));
   }
 }
@@ -235,9 +237,9 @@ absl::uint128 Fingerprint128(const absl::string_view s) {
 }
 }  // namespace
 
-tsl::StatusOr<std::shared_ptr<DeviceMemoryBase>>
+absl::StatusOr<std::shared_ptr<DeviceMemoryBase>>
 GpuExecutor::CreateOrShareConstant(Stream* stream,
-                                   const std::vector<uint8_t>& content) {
+                                   absl::Span<const uint8_t> content) {
   absl::MutexLock lock{&shared_constants_mu_};
   // We assume all constants are uniquely identified by this hash. In the
   // (highly unlikely) event of a hash collision, the program will likely crash
@@ -262,18 +264,18 @@ GpuExecutor::CreateOrShareConstant(Stream* stream,
     DeviceMemoryBase* new_constant =
         new DeviceMemoryBase(Allocate(content.size(), /*memory_space=*/0));
     if (new_constant->opaque() == nullptr) {
-      return tsl::Status(
+      return absl::Status(
           absl::StatusCode::kInternal,
           absl::StrFormat("Failed to allocate %d bytes for new constant",
                           content.size()));
     }
 
-    tsl::Status status =
+    absl::Status status =
         stream->ThenMemcpy(new_constant, content.data(), content.size())
             .BlockHostUntilDone();
     if (!status.ok()) {
       Deallocate(new_constant);
-      return tsl::Status(absl::StatusCode::kInternal,
+      return absl::Status(absl::StatusCode::kInternal,
                          absl::StrFormat("Memcpy to device address %p failed",
                                          new_constant->opaque()));
     }
@@ -291,23 +293,32 @@ GpuExecutor::CreateOrShareConstant(Stream* stream,
   return shared_constant;
 }
 
-tsl::Status GpuExecutor::GetKernelMetadata(GpuKernel* l0_kernel,
+absl::Status GpuExecutor::GetKernelMetadata(GpuKernel* l0_kernel,
                                            KernelMetadata* kernel_metadata) {
   int value = 0;
   // TODO: implement this feature in SPIR
   kernel_metadata->set_registers_per_thread(value);
   kernel_metadata->set_shared_memory_bytes(value);
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-tsl::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
-                                const BlockDim& block_dims,
-                                const KernelBase& kernel,
-                                const KernelArgsArrayBase& args) {
-  CHECK_EQ(kernel.Arity(), args.number_of_arguments());
-  sycl::queue* gpu_stream = AsGpuStreamValue(stream);
-  const GpuKernel* l0_kernel = AsGpuKernel(&kernel);
-  sycl::kernel* sycl_kernel = l0_kernel->AsGpuFunctionHandle();
+absl::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
+                                 const BlockDim& block_dims,
+                                 const ClusterDim& cluster_dims,
+                                 const Kernel& kernel, const KernelArgs& args) {
+  if (cluster_dims.x != 1 || cluster_dims.y != 1 || cluster_dims.z != 1)
+    return absl::UnimplementedError("Launch is not implemented for SYCL");
+  return Launch(stream, thread_dims, block_dims, kernel, args);
+}
+
+absl::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
+                                 const BlockDim& block_dims,
+                                 const Kernel& kernel, const KernelArgs& args) {
+  CHECK_EQ(kernel.Arity() + (args.number_of_shared_bytes() > 0),
+           args.number_of_arguments());
+  GpuStreamHandle gpu_stream = AsGpuStreamValue(stream);
+  const GpuKernel* spir_kernel = AsGpuKernel(&kernel);
+  GpuFunctionHandle sycl_kernel = spir_kernel->AsGpuFunctionHandle();
 
   // Only perform/print the occupancy check once.  Even just checking to see
   // whether we've done an occupancy check on this kernel before isn't free
@@ -319,17 +330,14 @@ tsl::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
     }
   }
 
-  std::vector<void*> kernargs;
-  KernelArgIterator iter = args.arg_iterator();
-  while (iter.has_next()) {
-    KernelArg arg = iter.next();
-    VLOG(2) << "*(arg.address): "
-            << reinterpret_cast<void*>(
-                   *static_cast<const uint64_t*>(arg.address));
-    kernargs.push_back(
-        reinterpret_cast<void*>(*static_cast<const uint64_t*>(arg.address)));
-  }
+  auto* packed_args = DynCast<KernelArgsPackedArrayBase>(&args);
+  if (!packed_args)
+    return absl::InternalError("Unsupported kernel arguments type");
 
+  std::vector<void*> kernargs;
+  for (const void *const arg: packed_args->argument_addresses()) {
+    kernargs.push_back(reinterpret_cast<void*>(*static_cast<const uint64_t*>(arg)));
+  }
   size_t size = kernargs.size();
   void* config[] = {kernargs.data(), &size};
 
@@ -339,7 +347,7 @@ tsl::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
       args.number_of_shared_bytes(), gpu_stream, nullptr, (void**)&config);
 }
 
-tsl::Status GpuExecutor::Submit(Stream* stream,
+absl::Status GpuExecutor::Submit(Stream* stream,
                                 const CommandBuffer& command_buffer) {
   LOG(FATAL) << "Submit is not implemented in sycl_executor";
 }
@@ -347,12 +355,6 @@ tsl::Status GpuExecutor::Submit(Stream* stream,
 DeviceMemoryBase GpuExecutor::Allocate(uint64_t size, int64_t memory_space) {
   CHECK_EQ(memory_space, 0);
   return DeviceMemoryBase(GpuDriver::DeviceAllocate(context_, size), size);
-}
-
-void* GpuExecutor::GetSubBuffer(DeviceMemoryBase* mem, uint64_t offset_bytes,
-                                uint64_t size_bytes) {
-  // offset and size are in bytes, so char* works as the pointer type.
-  return reinterpret_cast<char*>(mem->opaque()) + offset_bytes;
 }
 
 void GpuExecutor::Deallocate(DeviceMemoryBase* mem) {
@@ -369,7 +371,7 @@ bool GpuExecutor::SynchronizeAllActivity() {
   return GpuDriver::SynchronizeContext(context_);
 }
 
-tsl::Status GpuExecutor::SynchronousMemZero(DeviceMemoryBase* location,
+absl::Status GpuExecutor::SynchronousMemZero(DeviceMemoryBase* location,
                                             uint64_t size) {
   if (reinterpret_cast<uintptr_t>(location->opaque()) % 4 == 0 &&
       size % 4 == 0) {
@@ -380,7 +382,7 @@ tsl::Status GpuExecutor::SynchronousMemZero(DeviceMemoryBase* location,
                                            0x0, size);
 }
 
-tsl::Status GpuExecutor::SynchronousMemSet(DeviceMemoryBase* location,
+absl::Status GpuExecutor::SynchronousMemSet(DeviceMemoryBase* location,
                                            int value, uint64_t size) {
   if (reinterpret_cast<uintptr_t>(location->opaque()) % 4 == 0 &&
       size % 4 == 0) {
@@ -394,27 +396,27 @@ tsl::Status GpuExecutor::SynchronousMemSet(DeviceMemoryBase* location,
                                            value, size);
 }
 
-tsl::Status GpuExecutor::SynchronousMemcpy(DeviceMemoryBase* gpu_dst,
+absl::Status GpuExecutor::SynchronousMemcpy(DeviceMemoryBase* gpu_dst,
                                            const void* host_src,
                                            uint64_t size) {
   return GpuDriver::SynchronousMemcpyH2D(context_, AsSyclDevicePtr(gpu_dst),
                                          host_src, size);
 }
 
-tsl::Status GpuExecutor::SynchronousMemcpy(void* host_dst,
+absl::Status GpuExecutor::SynchronousMemcpy(void* host_dst,
                                            const DeviceMemoryBase& gpu_src,
                                            uint64_t size) {
   return GpuDriver::SynchronousMemcpyD2H(context_, host_dst,
                                          AsSyclDevicePtr(gpu_src), size);
 }
 
-tsl::Status GpuExecutor::SynchronousMemcpyDeviceToDevice(
+absl::Status GpuExecutor::SynchronousMemcpyDeviceToDevice(
     DeviceMemoryBase* gpu_dst, const DeviceMemoryBase& gpu_src, uint64_t size) {
   return GpuDriver::SynchronousMemcpyD2D(context_, AsSyclDevicePtr(gpu_dst),
                                          AsSyclDevicePtr(gpu_src), size);
 }
 
-tsl::Status GpuExecutor::MemZero(Stream* stream, DeviceMemoryBase* location,
+absl::Status GpuExecutor::MemZero(Stream* stream, DeviceMemoryBase* location,
                                  uint64_t size) {
   if (reinterpret_cast<uintptr_t>(location->opaque()) % 4 == 0 &&
       size % 4 == 0) {
@@ -424,7 +426,7 @@ tsl::Status GpuExecutor::MemZero(Stream* stream, DeviceMemoryBase* location,
   }
 }
 
-tsl::Status GpuExecutor::Memset(Stream* stream, DeviceMemoryBase* location,
+absl::Status GpuExecutor::Memset(Stream* stream, DeviceMemoryBase* location,
                                 uint8_t pattern, uint64_t size) {
   VLOG(2) << "enqueueing memset8 operation onto stream " << stream
           << " at location " << location << " with size " << size
@@ -434,7 +436,7 @@ tsl::Status GpuExecutor::Memset(Stream* stream, DeviceMemoryBase* location,
                                             AsGpuStreamValue(stream));
 }
 
-tsl::Status GpuExecutor::Memset32(Stream* stream, DeviceMemoryBase* location,
+absl::Status GpuExecutor::Memset32(Stream* stream, DeviceMemoryBase* location,
                                   uint32_t pattern, uint64_t size) {
   VLOG(2) << "enqueueing memset32 operation onto stream " << stream
           << " at location " << location << " with size " << size
@@ -470,10 +472,10 @@ bool GpuExecutor::MemcpyDeviceToDevice(Stream* stream,
 }
 
 bool GpuExecutor::HostCallback(Stream* stream,
-                               absl::AnyInvocable<tsl::Status() &&> callback) {
+                               absl::AnyInvocable<absl::Status() &&> callback) {
   auto callback_ptr_new =
       new absl::AnyInvocable<void() &&>([cb = std::move(callback)]() mutable {
-        tsl::Status s = std::move(cb)();
+        absl::Status s = std::move(cb)();
         if (!s.ok()) {
           LOG(WARNING) << "Host callback failed: " << s;
         }
@@ -492,38 +494,38 @@ bool GpuExecutor::HostCallback(Stream* stream,
   return true;
 }
 
-tsl::Status GpuExecutor::AllocateEvent(Event* event) {
+absl::Status GpuExecutor::AllocateEvent(Event* event) {
   return AsGpuEvent(event)->Init();
 }
 
-tsl::Status GpuExecutor::DeallocateEvent(Event* event) {
+absl::Status GpuExecutor::DeallocateEvent(Event* event) {
   return AsGpuEvent(event)->Destroy();
 }
 
-tsl::Status GpuExecutor::RecordEvent(Stream* stream, Event* event) {
+absl::Status GpuExecutor::RecordEvent(Stream* stream, Event* event) {
   return AsGpuEvent(event)->Record(AsGpuStream(stream));
 }
 
-tsl::Status GpuExecutor::WaitForEvent(Stream* stream, Event* event) {
+absl::Status GpuExecutor::WaitForEvent(Stream* stream, Event* event) {
   if (GpuDriver::WaitStreamOnEvent(context_, AsGpuStream(stream)->gpu_stream(),
                                    AsGpuEvent(event)->gpu_event())) {
-    return ::tsl::OkStatus();
+    return absl::OkStatus();
   } else {
-    return tsl::Status(
+    return absl::Status(
         absl::StatusCode::kInternal,
         absl::StrFormat("error recording waiting for SYCL event on stream %p",
                         stream));
   }
 }
 
-tsl::Status GpuExecutor::WaitForEventOnExternalStream(std::intptr_t stream,
+absl::Status GpuExecutor::WaitForEventOnExternalStream(std::intptr_t stream,
                                                       Event* event) {
   if (GpuDriver::WaitStreamOnEvent(context_,
                                    absl::bit_cast<GpuStreamHandle>(stream),
                                    AsGpuEvent(event)->gpu_event())) {
-    return ::tsl::OkStatus();
+    return absl::OkStatus();
   } else {
-    return tsl::Status(absl::StatusCode::kInternal,
+    return absl::Status(absl::StatusCode::kInternal,
                        "error waiting for SYCL event on external stream");
   }
 }
@@ -559,15 +561,15 @@ bool GpuExecutor::CreateStreamDependency(Stream* dependent, Stream* other) {
                                       &event_wrapper);
 }
 
-tsl::Status GpuExecutor::BlockHostUntilDone(Stream* stream) {
+absl::Status GpuExecutor::BlockHostUntilDone(Stream* stream) {
   sycl::queue* stream_handle = AsGpuStreamValue(stream);
   stream_handle->wait();
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
 blas::BlasSupport* GpuExecutor::CreateBlas() { 
   PluginRegistry* registry = PluginRegistry::Instance();
-  tsl::StatusOr<PluginRegistry::BlasFactory> status =
+  absl::StatusOr<PluginRegistry::BlasFactory> status =
       registry->GetFactory<PluginRegistry::BlasFactory>(stream_executor::sycl::kSyclPlatformId);
   if (!status.ok()) {
     LOG(ERROR) << "Unable to retrieve BLAS factory: "
@@ -577,11 +579,22 @@ blas::BlasSupport* GpuExecutor::CreateBlas() {
   return status.value()(this);
 }
 
-dnn::DnnSupport* GpuExecutor::CreateDnn() { return nullptr; }
+dnn::DnnSupport* GpuExecutor::CreateDnn() {
+  PluginRegistry* registry = PluginRegistry::Instance();
+  absl::StatusOr<PluginRegistry::DnnFactory> status =
+      registry->GetFactory<PluginRegistry::DnnFactory>(stream_executor::sycl::kSyclPlatformId);
+  if (!status.ok()) {
+    LOG(ERROR) << "Unable to retrieve DNN factory: "
+               << status.status().message();
+    return nullptr;
+  }
+
+  return status.value()(this);
+}
 
 fft::FftSupport* GpuExecutor::CreateFft() {   
   PluginRegistry* registry = PluginRegistry::Instance();
-  tsl::StatusOr<PluginRegistry::FftFactory> status =
+  absl::StatusOr<PluginRegistry::FftFactory> status =
       registry->GetFactory<PluginRegistry::FftFactory>(stream_executor::sycl::kSyclPlatformId);
   if (!status.ok()) {
     LOG(ERROR) << "Unable to retrieve FFT factory: "
@@ -596,7 +609,7 @@ bool GpuExecutor::CanEnablePeerAccessTo(StreamExecutorInterface* other) {
   return false;
 }
 
-tsl::Status GpuExecutor::EnablePeerAccessTo(StreamExecutorInterface* other) {
+absl::Status GpuExecutor::EnablePeerAccessTo(StreamExecutorInterface* other) {
   LOG(FATAL) << "Peer access is not supported on SYCL platform";
 }
 
@@ -626,7 +639,7 @@ bool GpuExecutor::GetSymbol(const std::string& symbol_name,
   return false;
 }
 
-tsl::Status FillBlockDimLimit(GpuDeviceHandle device,
+absl::Status FillBlockDimLimit(GpuDeviceHandle device,
                               BlockDim* block_dim_limit) {
   // The BlockDim name is a mismatch against these GRID_DIM_* queries because
   // we use BlockDims to express the dimensions of blocks within a grid
@@ -637,7 +650,7 @@ tsl::Status FillBlockDimLimit(GpuDeviceHandle device,
   block_dim_limit->x = x;
   block_dim_limit->y = y;
   block_dim_limit->z = z;
-  return tsl::OkStatus();
+  return absl::OkStatus();
 }
 
 std::unique_ptr<internal::EventInterface>
@@ -655,17 +668,24 @@ GpuExecutor::GetStreamImplementation() {
   return std::unique_ptr<internal::StreamInterface>(new GpuStream(this));
 }
 
-tsl::StatusOr<std::unique_ptr<internal::CommandBufferInterface>>
-GpuExecutor::GetCommandBufferImplementation(CommandBuffer::Mode mode) {
-  LOG(FATAL)
-      << "GetCommandBufferImplementation is not implemented in sycl_executor";
+absl::StatusOr<std::unique_ptr<CommandBuffer>> GpuExecutor::CreateCommandBuffer(
+    CommandBuffer::Mode mode) {
+  return absl::UnimplementedError("CreateCommandBuffer is not implemented for SYCL");
+}
+
+std::unique_ptr<GpuCommandBuffer> GpuExecutor::CreateCommandBuffer(
+    CommandBuffer::Mode mode, GpuGraphHandle graph, bool is_owned_graph) {
+  VLOG(2) << "Create HIP command buffer (HIP graph) from existing graph "
+          << graph << "; is_owned_graph=" << is_owned_graph;
+  return std::make_unique<GpuCommandBuffer>(mode, /*parent=*/this, graph,
+                                            is_owned_graph);
 }
 
 void* GpuExecutor::platform_specific_context() { return context_; }
 
 GpuContext* GpuExecutor::gpu_context() { return context_; }
 
-tsl::StatusOr<std::unique_ptr<DeviceDescription>>
+absl::StatusOr<std::unique_ptr<DeviceDescription>>
 GpuExecutor::CreateDeviceDescription(int device_ordinal) {
   GpuDeviceHandle device;
   TF_RETURN_IF_ERROR(GpuDriver::GetDevice(device_ordinal, &device));
@@ -727,7 +747,4 @@ GpuExecutor::CreateDeviceDescription(int device_ordinal) {
 }
 
 }  // namespace gpu
-
 }  // namespace stream_executor
-
-REGISTER_MODULE_INITIALIZER(sycl_executor, {});

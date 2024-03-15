@@ -55,6 +55,24 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
+// Returns the xetla native type (eg, float) corresponding to the given template
+// parameter XLA primitive type (eg, F32).
+template <PrimitiveType>
+struct PrimitiveTypeToXetlaNative;
+
+template <>
+struct PrimitiveTypeToXetlaNative<F32> {
+  using type = float;
+};
+template <>
+struct PrimitiveTypeToXetlaNative<F16> {
+  using type = sycl::half;
+};
+template <>
+struct PrimitiveTypeToXetlaNative<BF16> {
+  using type = ::gpu::xetla::bf16;
+};
+
 /// Return oneDNN data type (memory::data_type) for input type T
 ///
 /// @input None
@@ -115,8 +133,8 @@ MatrixDescriptor GetMatrixDesc(const MatrixLayout& layout,
                 : se::blas::Transpose::kNoTranspose,
       transpose ? layout.num_cols : layout.num_rows,
       transpose ? layout.num_rows : layout.num_cols,
-      *layout.batch_stride,
-      *layout.leading_dim_stride,
+      layout.batch_stride,
+      layout.leading_dim_stride,
   };
 }
 
@@ -238,17 +256,17 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
     case se::gpu::BlasLt::Epilogue::kBiasThenReLU:
       return true;
     default:
-      return InternalError("Unsupported Activation mode");
+      return Internal("Unsupported Activation mode");
   }
 }
 
 template <typename InputT>
-std::enable_if_t<std::is_same_v<InputT, float>, StatusOr<bool>> RunXetlaGemm(
-    se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
-    const MatrixDescriptor& rhs, const MatrixDescriptor& c,
-    const MatrixDescriptor& out, se::DeviceMemoryBase bias,
-    se::gpu::BlasLt::Epilogue epilogue, float beta) {
-  return InternalError("Unsupported Datatype in XeTLA");
+std::enable_if_t<std::is_same_v<InputT, float>, absl::StatusOr<bool>>
+RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
+             const MatrixDescriptor& rhs, const MatrixDescriptor& c,
+             const MatrixDescriptor& out, se::DeviceMemoryBase bias,
+             se::gpu::BlasLt::Epilogue epilogue, float beta) {
+  return Internal("Unsupported Datatype in XeTLA");
 }
 
 std::unique_ptr<OneDnnMatMulParams> CreateMatMulParams(
@@ -290,14 +308,14 @@ std::unique_ptr<OneDnnMatMulParams> CreateMatMulParams(
       out_strides, bias_strides);
 }
 
-template <typename InputT>
-Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
-              const MatrixDescriptor& lhs, const MatrixDescriptor& rhs,
-              const MatrixDescriptor& c, const MatrixDescriptor& output,
-              se::DeviceMemoryBase bias, float alpha, float beta,
-              se::gpu::BlasLt::Epilogue epilogue, se::Stream* stream,
-              se::ScratchAllocator* scratch_allocator,
-              se::blas::ComputePrecision compute_precision) {
+template <typename InputT, typename OutputT>
+absl::Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
+                    const MatrixDescriptor& lhs, const MatrixDescriptor& rhs,
+                    const MatrixDescriptor& c, const MatrixDescriptor& output,
+                    se::DeviceMemoryBase bias, float alpha, float beta,
+                    se::gpu::BlasLt::Epilogue epilogue, se::Stream* stream,
+                    se::ScratchAllocator* scratch_allocator,
+                    se::blas::ComputePrecision compute_precision) {
   CHECK(output.transpose == se::blas::Transpose::kNoTranspose);
   se::gpu::GpuStreamHandle stream_handle =
       stream_executor::gpu::AsGpuStreamValue(stream);
@@ -323,14 +341,15 @@ Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
   VLOG(2) << "rhs trans: " << TransposeString(rhs.transpose);
 
   bool flag = false;
-  tsl::ReadBoolFromEnvVar("XETLA_GEMM", false, &flag);
+  TF_CHECK_OK(tsl::ReadBoolFromEnvVar("XETLA_GEMM", false, &flag));
   bool xetla_support = flag && IsXetlaHardwareSupport() && (batch_size == 1) &&
                        (fabs(alpha - 1.0f) < 1e-6);
-  if (xetla_support && (!std::is_same_v<InputT, float>)) {
+  if (xetla_support &&
+      (!std::is_same_v<InputT, float> && std::is_same_v<InputT, OutputT>)) {
     TF_ASSIGN_OR_RETURN(bool fallback,
                         RunXetlaGemm<InputT>(stream_handle, lhs, rhs, c, output,
                                              bias, epilogue, beta));
-    if (!fallback) return OkStatus();
+    if (!fallback) return absl::OkStatus();
   }
   auto params = CreateMatMulParams(batch_size, lhs, rhs, output);
 
@@ -338,7 +357,7 @@ Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
                                    params->a_strides);
   auto weights_md = dnnl::memory::desc(params->b_dims, OneDnnType<InputT>(),
                                        params->b_strides);
-  auto dst_md = dnnl::memory::desc(params->c_dims, OneDnnType<InputT>(),
+  auto dst_md = dnnl::memory::desc(params->c_dims, OneDnnType<OutputT>(),
                                    params->c_strides);
   auto bias_md =
       bias_data ? dnnl::memory::desc(params->bias_dims, OneDnnType<InputT>(),
@@ -374,7 +393,7 @@ Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
     case se::gpu::BlasLt::Epilogue::kBias:
       break;
     default:
-      return InternalError("Unsupported Activation mode");
+      return Internal("Unsupported Activation mode");
   }
   post_ops_attr.set_post_ops(post_ops);
 
@@ -411,7 +430,7 @@ Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
     fwd_primitive_args.emplace(DNNL_ARG_BIAS, bias_mem);
   }
   matmul_primitive.execute(dnnl_stream, fwd_primitive_args);
-  return OkStatus();
+  return absl::OkStatus();
 }
 
 void TransposeMatrixDesc(MatrixDescriptor& matrix_desc) {
@@ -447,12 +466,15 @@ void MakeBlasGemmCompatible(MatrixDescriptor& lhs, MatrixDescriptor& rhs,
 }
 }  // namespace
 
-Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
-               se::DeviceMemoryBase rhs_buffer, se::DeviceMemoryBase c_buffer,
-               se::DeviceMemoryBase output_buffer,
-               se::DeviceMemoryBase bias_buffer, se::Stream* stream,
-               se::gpu::BlasLt::Epilogue epilogue,
-               se::ScratchAllocator* scratch_allocator) {
+absl::Status RunGemm(const GemmConfig& config,
+                     se::DeviceMemoryBase lhs_buffer,
+                     se::DeviceMemoryBase rhs_buffer,
+                     se::DeviceMemoryBase c_buffer,
+                     se::DeviceMemoryBase output_buffer,
+                     se::DeviceMemoryBase bias_buffer,
+                     se::Stream* stream,
+                     se::gpu::BlasLt::Epilogue epilogue,
+                     se::ScratchAllocator* scratch_allocator) {
   VLOG(2) << "Executing a GemmThunk";
 
   auto lhs_layout = MatrixLayout{config.lhs_layout},
@@ -470,69 +492,31 @@ Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
   int64_t batch_size = output_layout.batch_size;
   MakeBlasGemmCompatible(lhs, rhs, c, output);
 
-  if ((output_layout.dtype == F16 || output_layout.dtype == BF16 ||
-       output_layout.dtype == F32 || output_layout.dtype == F64 ||
-       output_layout.dtype == C64 || output_layout.dtype == C128) &&
-      (lhs_layout.dtype != output_layout.dtype ||
-       rhs_layout.dtype != output_layout.dtype)) {
-    return InternalError(
-        "GEMM lhs type(%s) and rhs type(%s) must match output type(%s)",
-        primitive_util::LowercasePrimitiveTypeName(lhs_layout.dtype),
-        primitive_util::LowercasePrimitiveTypeName(rhs_layout.dtype),
-        primitive_util::LowercasePrimitiveTypeName(output_layout.dtype));
+  std::tuple operand_types{lhs_layout.dtype, rhs_layout.dtype,
+                           output_layout.dtype};
+#define TYPED_GEMM(ATYPE, BTYPE, CTYPE)                                        \
+  if (operand_types == std::make_tuple(ATYPE, BTYPE, CTYPE)) {                 \
+    using NativeAType = PrimitiveTypeToXetlaNative<ATYPE>::type;               \
+    using NativeCType = PrimitiveTypeToXetlaNative<CTYPE>::type;               \
+    return DoGemm<NativeAType, NativeCType>(                                   \
+        batch_size, m, n, k, lhs, rhs, c, output, bias_buffer,                 \
+        config.alpha.real(), config.beta, epilogue, stream, scratch_allocator, \
+        config.compute_precision);                                             \
   }
 
-  switch (output_layout.dtype) {
-    case F16:
-      return DoGemm<sycl::half>(batch_size, m, n, k, lhs, rhs, c, output,
-                                bias_buffer, config.alpha.real(), config.beta,
-                                epilogue, stream, scratch_allocator,
-                                config.compute_precision);
-    case BF16:
-      return DoGemm<::gpu::xetla::bf16>(
-          batch_size, m, n, k, lhs, rhs, c, output, bias_buffer,
-          config.alpha.real(), config.beta, epilogue, stream, scratch_allocator,
-          config.compute_precision);
-    case F32:
-      return DoGemm<float>(batch_size, m, n, k, lhs, rhs, c, output,
-                           bias_buffer, config.alpha.real(), config.beta,
-                           epilogue, stream, scratch_allocator,
-                           config.compute_precision);
-    case S32:
-    case F64:
-    case C64:
-    case C128:
-    default:
-      return InternalError(
-          "Unexpected GEMM dtype: %s",
-          primitive_util::LowercasePrimitiveTypeName(output_layout.dtype));
-  }
+  TYPED_GEMM(BF16, BF16, BF16)
+  TYPED_GEMM(F16, F16, F16)
+  TYPED_GEMM(BF16, BF16, F32)
+  TYPED_GEMM(F16, F16, F32)
+  TYPED_GEMM(F32, F32, F32)
+
+#undef TYPED_GEMM
+  return Internal(
+      "Unexpected GEMM lhs type %s, rhs type %s and output type %s",
+      primitive_util::LowercasePrimitiveTypeName(lhs_layout.dtype),
+      primitive_util::LowercasePrimitiveTypeName(rhs_layout.dtype),
+      primitive_util::LowercasePrimitiveTypeName(output_layout.dtype));
 }
-
-// namespace cublas_lt {
-// StatusOr<se::gpu::BlasLt::Epilogue> AsBlasLtEpilogue(
-//     mlir::lmhlo_gpu::CublasLtMatmulEpilogue epilogue) {
-//   switch (epilogue) {
-//     case mlir::lmhlo_gpu::CublasLtMatmulEpilogue::Default:
-//       return se::gpu::BlasLt::Epilogue::kDefault;
-//     case mlir::lmhlo_gpu::CublasLtMatmulEpilogue::Relu:
-//       return se::gpu::BlasLt::Epilogue::kReLU;
-//     case mlir::lmhlo_gpu::CublasLtMatmulEpilogue::Gelu:
-//       return se::gpu::BlasLt::Epilogue::kGELU;
-//     case mlir::lmhlo_gpu::CublasLtMatmulEpilogue::GeluAux:
-//       return se::gpu::BlasLt::Epilogue::kGELUWithAux;
-//     case mlir::lmhlo_gpu::CublasLtMatmulEpilogue::Bias:
-//       return se::gpu::BlasLt::Epilogue::kBias;
-//     case mlir::lmhlo_gpu::CublasLtMatmulEpilogue::BiasRelu:
-//       return se::gpu::BlasLt::Epilogue::kBiasThenReLU;
-//     case mlir::lmhlo_gpu::CublasLtMatmulEpilogue::BiasGelu:
-//       return se::gpu::BlasLt::Epilogue::kBiasThenGELU;
-//     case mlir::lmhlo_gpu::CublasLtMatmulEpilogue::BiasGeluAux:
-//       return se::gpu::BlasLt::Epilogue::kBiasThenGELUWithAux;
-//   }
-//   return InternalError("unexpected epilogue value");
-// }
-// }  // namespace cublas_lt
 
 }  // namespace gpu
 }  // namespace xla

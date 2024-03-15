@@ -49,7 +49,8 @@ limitations under the License.
   do {                                                                 \
     SYCLError_t _res = (expr);                                         \
     if (ABSL_PREDICT_FALSE(_res != SYCL_SUCCESS)) {                    \
-      return tsl::errors::Internal(__VA_ARGS__, ": ", ToString(_res)); \
+      return absl::InternalError(absl::StrCat(                         \
+          __VA_ARGS__, ": ", ToString(_res))); \
     }                                                                  \
   } while (0)
 
@@ -76,42 +77,42 @@ class GpuContext {
 
 namespace {
 
-static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
+static absl::Status InternalInit() { return absl::OkStatus(); }
 
 }  // namespace
-/* static */ tsl::Status GpuDriver::Init() {
+/* static */ absl::Status GpuDriver::Init() {
   // Cached return value from calling InternalInit()
-  static tsl::Status* init_retval = [] {
-    return new tsl::Status(InternalInit());
+  static absl::Status* init_retval = [] {
+    return new absl::Status(InternalInit());
   }();
   return *init_retval;
 }
 
-/* static */ tsl::Status GpuDriver::GetDevice(int device_ordinal,
+/* static */ absl::Status GpuDriver::GetDevice(int device_ordinal,
                                               sycl::device** device) {
   auto res = SYCLGetDevice(device, device_ordinal);
   if (res == SYCL_SUCCESS) {
-    return tsl::OkStatus();
+    return absl::OkStatus();
   }
 
-  return tsl::Status{
+  return absl::Status{
       absl::StatusCode::kInternal,
       absl::StrCat("failed call to syclDeviceGet: ", ToString(res))};
 }
 
-/* static */ tsl::Status GpuDriver::GetDeviceName(sycl::device* device,
+/* static */ absl::Status GpuDriver::GetDeviceName(sycl::device* device,
                                                   std::string* device_name) {
   *device_name = device->get_info<sycl::info::device::name>();
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-/* static */ tsl::Status GpuDriver::CreateContext(
+/* static */ absl::Status GpuDriver::CreateContext(
     int device_ordinal, sycl::device* device,
     const DeviceOptions& device_options, GpuContext** context) {
   sycl::context* sycl_context;
   SYCLGetContext(&sycl_context);
   *context = new GpuContext(device, sycl_context);
-  return tsl::OkStatus();
+  return absl::OkStatus();
 }
 
 /* static */ void GpuDriver::DestroyContext(GpuContext* context) {
@@ -121,7 +122,198 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
   delete context;
 }
 
-/* static */ tsl::Status GpuDriver::LaunchKernel(
+/* static */ absl::Status GpuDriver::CreateGraph(GpuGraphHandle* graph) {
+  return absl::UnimplementedError(
+      "CreateGraph is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::DestroyGraph(GpuGraphHandle graph) {
+  return absl::UnimplementedError(
+      "DestroyGraph is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::StreamBeginCapture(
+    GpuStreamHandle stream, StreamCaptureMode mode) {
+  return absl::UnimplementedError(
+      "StreamBeginCapture is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::StreamBeginCaptureToGraph(
+    GpuStreamHandle stream, GpuGraphHandle graph, StreamCaptureMode mode) {
+  return absl::UnimplementedError(
+      "StreamBeginCaptureToGraph is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::StreamEndCapture(GpuStreamHandle stream,
+                                                      GpuGraphHandle* graph) {
+  return absl::UnimplementedError(
+      "StreamEndCapture is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphInstantiate(
+    GpuGraphExecHandle* exec, GpuGraphHandle graph, const GraphInstantiateFlags& flags) {
+  return absl::UnimplementedError(
+      "GraphInstantiate is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphLaunch(GpuGraphExecHandle exec,
+                                                 GpuStreamHandle stream) {
+  return absl::UnimplementedError(
+      "GraphLaunch is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphNodeSetEnabled(GpuGraphExecHandle exec,
+                                                         GpuGraphNodeHandle node,
+                                                         bool enabled) {
+  return absl::UnimplementedError(
+      "GraphNodeSetEnabled is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphExecUpdate(
+    GpuGraphExecHandle exec, GpuGraphHandle graph, GraphExecUpdateResultInfo* result) {
+  return absl::UnimplementedError(
+      "GraphExecUpdate is not implemented");
+}
+
+/* static */ absl::StatusOr<GpuDriver::GraphNodeType>
+GpuDriver::GraphNodeGetType(GpuGraphNodeHandle node) {
+  return absl::UnimplementedError(
+      "GraphNodeGetType is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::DestroyGraphExec(GpuGraphExecHandle exec) {
+  return absl::UnimplementedError(
+      "DestroyGraphExec is not implemented");
+}
+
+/* static */ absl::StatusOr<std::string> GpuDriver::GraphDebugDotPrint(
+    GpuGraphHandle graph, const char* path, bool return_printed_graph) {
+  return absl::UnimplementedError(
+      "GraphDebugDotPrint is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::DeviceGraphMemTrim(GpuDeviceHandle device) {
+  return absl::UnimplementedError(
+      "DeviceGraphMemTrim is not implemented");
+}
+
+/* static */ absl::StatusOr<bool> GpuDriver::StreamIsCapturing(
+    GpuStreamHandle stream) {
+  return absl::UnimplementedError(
+      "StreamIsCapturing is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphConditionalHandleCreate(
+    GpuGraphConditionalHandle* handle, GpuGraphHandle graph, GpuContext* context,
+    unsigned int default_launch_value, unsigned int flags) {
+  return absl::UnimplementedError(
+      "GraphConditionalHandleCreate is not implemented");
+}
+
+/* static */ absl::StatusOr<GpuDriver::GpuGraphNodeResult>
+GpuDriver::GraphAddNode(GpuGraphNodeHandle* node, GpuGraphHandle graph,
+                        absl::Span<GpuGraphNodeHandle> deps,
+                        const GpuGraphNodeParams& params) {
+  return absl::UnimplementedError(
+      "GraphAddNode is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphAddEmptyNode(
+    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<GpuGraphNodeHandle> deps) {
+  return absl::UnimplementedError(
+      "GraphAddEmptyNode is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphAddKernelNode(
+    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<GpuGraphNodeHandle> deps,
+    absl::string_view kernel_name, GpuFunctionHandle function, unsigned int grid_dim_x,
+    unsigned int grid_dim_y, unsigned int grid_dim_z, unsigned int block_dim_x,
+    unsigned int block_dim_y, unsigned int block_dim_z,
+    unsigned int shared_mem_bytes, void** kernel_params, void** extra) {
+  return absl::UnimplementedError(
+      "GraphAddKernelNode is not implemented");
+}
+
+/*static*/ absl::Status GpuDriver::GraphExecKernelNodeSetParams(
+    GpuGraphExecHandle exec, GpuGraphNodeHandle node, absl::string_view kernel_name,
+    GpuFunctionHandle function, unsigned int grid_dim_x, unsigned int grid_dim_y,
+    unsigned int grid_dim_z, unsigned int block_dim_x, unsigned int block_dim_y,
+    unsigned int block_dim_z, unsigned int shared_mem_bytes,
+    void** kernel_params, void** extra) {
+  return absl::UnimplementedError(
+      "GraphExecKernelNodeSetParams is not implemented");
+}
+
+/*static*/ absl::Status GpuDriver::GraphAddMemAllocNode(
+    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<GpuGraphNodeHandle> deps,
+    GpuDriver::MemAccessFlags access_flags,
+    GpuDriver::MemLocationType location_type, int device_id,
+    GpuDriver::MemAllocationType allocation_type, uint64_t size,
+    GpuDevicePtr* d_ptr, uint64_t max_pool_size) {
+  return absl::UnimplementedError(
+      "GraphAddMemAllocNode is not implemented");
+}
+
+/*static*/ absl::StatusOr<std::pair<GpuDevicePtr, uint64_t>>
+GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
+  return absl::UnimplementedError(
+      "GraphGetMemAllocNodeParams is not implemented");
+}
+
+/*static*/ absl::Status GpuDriver::GraphAddMemFreeNode(
+    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<GpuGraphNodeHandle> deps,
+    GpuDevicePtr gpu_dst) {
+  return absl::UnimplementedError(
+      "GraphAddMemFreeNode is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphAddMemcpyD2DNode(
+    GpuContext* context, GpuGraphNodeHandle* node, GpuGraphHandle graph,
+    absl::Span<GpuGraphNodeHandle> deps, GpuDevicePtr gpu_dst, GpuDevicePtr gpu_src,
+    uint64_t size) {
+  return absl::UnimplementedError(
+      "GraphAddMemcpyD2DNode is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphExecMemcpyD2DNodeSetParams(
+    GpuContext* context, GpuGraphExecHandle exec, GpuGraphNodeHandle node,
+    GpuDevicePtr gpu_dst, GpuDevicePtr gpu_src, uint64_t size) {
+  return absl::UnimplementedError(
+      "GraphExecMemcpyD2DNodeSetParams is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphAddMemsetNode(
+    GpuContext* context, GpuGraphNodeHandle* node, GpuGraphHandle graph,
+    absl::Span<GpuGraphNodeHandle> deps, GpuDevicePtr dst,
+    std::variant<uint8_t, uint16_t, uint32_t> bit_pattern,
+    uint64_t num_elements) {
+  return absl::UnimplementedError(
+      "GraphAddMemsetNode is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphExecMemsetNodeSetParams(
+    GpuContext* context, GpuGraphExecHandle exec, GpuGraphNodeHandle node, GpuDevicePtr dst,
+    std::variant<uint8_t, uint16_t, uint32_t> bit_pattern,
+    uint64_t num_elements) {
+  return absl::UnimplementedError(
+      "GraphExecMemsetNodeSetParams is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::GraphAddChildNode(
+    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<GpuGraphNodeHandle> deps,
+    GpuGraphHandle child) {
+  return absl::UnimplementedError(
+      "GraphAddChildNode is not implemented");
+}
+
+/*static*/ absl::Status GpuDriver::GraphExecChildNodeSetParams(GpuGraphExecHandle exec,
+                                                               GpuGraphNodeHandle node,
+                                                               GpuGraphHandle child) {
+  return absl::UnimplementedError(
+      "GraphExecChildNodeSetParams is not implemented");
+}
+
+/* static */ absl::Status GpuDriver::LaunchKernel(
     GpuContext* context, absl::string_view kernel_name, sycl::kernel* function,
     unsigned int grid_dim_x, unsigned int grid_dim_y, unsigned int grid_dim_z,
     unsigned int block_dim_x, unsigned int block_dim_y,
@@ -145,27 +337,27 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
     cgh.parallel_for(sycl_nd_range, *function);
   });
 
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-/* static */ tsl::Status GpuDriver::LoadPtx(GpuContext* context,
+/* static */ absl::Status GpuDriver::LoadPtx(GpuContext* context,
                                             const char* ptx_contents,
                                             ze_module_handle_t* module) {
-  return tsl::Status{absl::StatusCode::kInternal,
+  return absl::Status{absl::StatusCode::kInternal,
                      "Feature not supported on Levelzero platform (LoadPtx)"};
 }
 
-/* static */ tsl::Status GpuDriver::LoadCubin(GpuContext* context,
+/* static */ absl::Status GpuDriver::LoadCubin(GpuContext* context,
                                               const char* cubin_bytes,
                                               ze_module_handle_t* module) {
-  return tsl::Status{absl::StatusCode::kInternal,
+  return absl::Status{absl::StatusCode::kInternal,
                      "Feature not supported on Levelzero platform (LoadCubin)"};
 }
 
-/* static */ tsl::Status GpuDriver::LoadHsaco(GpuContext* context,
+/* static */ absl::Status GpuDriver::LoadHsaco(GpuContext* context,
                                               const char* hsaco_contents,
                                               ze_module_handle_t* module) {
-  return tsl::Status{absl::StatusCode::kInternal,
+  return absl::Status{absl::StatusCode::kInternal,
                      "Feature not supported on Levelzero platform (LoadHsaco)"};
 }
 
@@ -177,7 +369,7 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
       exit(1);                             \
     }                                      \
   }
-/* static */ tsl::Status GpuDriver::LoadLevelzero(
+/* static */ absl::Status GpuDriver::LoadLevelzero(
     GpuContext* context, const char* spir_contents, const size_t size,
     ze_module_handle_t* ze_module) {
   const sycl::context* sycl_context = context->context();
@@ -208,10 +400,10 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
     LOG(FATAL) << "L0 error " << status << ": " << PLog;
   }
 
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-/* static */ tsl::Status GpuDriver::GetModuleFunction(
+/* static */ absl::Status GpuDriver::GetModuleFunction(
     GpuContext* context, ze_module_handle_t module, const char* kernel_name,
     sycl::kernel** sycl_kernel) {
   const sycl::context* sycl_context = context->context();
@@ -245,7 +437,7 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
   auto kernel = sycl::make_kernel<sycl::backend::ext_oneapi_level_zero>(
       {kernel_bundle, ze_kernel}, *sycl_context);
   *sycl_kernel = new sycl::kernel(kernel);
-  return tsl::OkStatus();
+  return absl::OkStatus();
 }
 
 /* static */ bool GpuDriver::GetModuleSymbol(GpuContext* context,
@@ -273,40 +465,40 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
 
 #undef L0_SAFE_CALL
 
-/* static */ tsl::Status GpuDriver::SynchronousMemsetUint8(GpuContext* context,
+/* static */ absl::Status GpuDriver::SynchronousMemsetUint8(GpuContext* context,
                                                            void* location,
                                                            uint8_t value,
                                                            size_t size) {
   RETURN_IF_SYCL_RES_ERROR(
       SYCLMemsetD8(location, value, size, context->device()),
       "Failed to memset memory");
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-/* static */ tsl::Status GpuDriver::SynchronousMemsetUint32(
+/* static */ absl::Status GpuDriver::SynchronousMemsetUint32(
     GpuContext* context, void* location, uint32_t value, size_t uint32_count) {
   RETURN_IF_SYCL_RES_ERROR(
       SYCLMemsetD32(location, value, uint32_count, context->device()),
       "Failed to memset memory");
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-/* static */ tsl::Status GpuDriver::AsynchronousMemsetUint8(
+/* static */ absl::Status GpuDriver::AsynchronousMemsetUint8(
     GpuContext* context, void* location, uint8_t value, size_t uint32_count,
     sycl::queue* stream) {
   RETURN_IF_SYCL_RES_ERROR(
       SYCLMemsetD8Async(location, value, uint32_count, stream),
       "Failed to enqueue async memset operation");
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-/* static */ tsl::Status GpuDriver::AsynchronousMemsetUint32(
+/* static */ absl::Status GpuDriver::AsynchronousMemsetUint32(
     GpuContext* context, void* location, uint32_t value, size_t uint32_count,
     sycl::queue* stream) {
   RETURN_IF_SYCL_RES_ERROR(
       SYCLMemsetD32Async(location, value, uint32_count, stream),
       "Failed to enqueue async memset operation");
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
 /* static */ bool GpuDriver::CreateStream(GpuContext* context,
@@ -412,7 +604,7 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
   LOG(FATAL) << "GetGpuStreamPriority not implemented on SYCL platform";
 }
 
-/* static */ tsl::Status GpuDriver::InitEvent(GpuContext* context,
+/* static */ absl::Status GpuDriver::InitEvent(GpuContext* context,
                                               GpuEventHandle* event_handle,
                                               EventFlags flags) {
   if (*event_handle != nullptr) {
@@ -423,13 +615,13 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
   (*event_handle)->event = new sycl::event;
   (*event_handle)->queue = nullptr;
 
-  return tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-/* static */ tsl::Status GpuDriver::DestroyEvent(GpuContext* context,
+/* static */ absl::Status GpuDriver::DestroyEvent(GpuContext* context,
                                                  GpuEventHandle* event_handle) {
   if (*event_handle == nullptr) {
-    return tsl::Status{absl::StatusCode::kInvalidArgument,
+    return absl::Status{absl::StatusCode::kInvalidArgument,
                        "input event cannot be null"};
   }
 
@@ -437,16 +629,16 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
   delete (*event_handle);
   *event_handle = nullptr;
 
-  return tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-/* static */ tsl::Status GpuDriver::RecordEvent(GpuContext* context,
+/* static */ absl::Status GpuDriver::RecordEvent(GpuContext* context,
                                                 GpuEventHandle event_handle,
                                                 GpuStreamHandle stream) {
   event_handle->queue = stream;
   *(event_handle->event) = stream->ext_oneapi_submit_barrier();
 
-  return tsl::OkStatus();
+  return absl::OkStatus();
 }
 
 /* static */ bool GpuDriver::WaitStreamOnEvent(GpuContext* context,
@@ -487,11 +679,11 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
   return true;
 }
 
-/* static */ tsl::Status GpuDriver::SynchronizeStream(GpuContext* context,
+/* static */ absl::Status GpuDriver::SynchronizeStream(GpuContext* context,
                                                       sycl::queue* stream) {
   CHECK(stream != nullptr);
   stream->wait();
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
 /* static */ bool GpuDriver::IsStreamIdle(GpuContext* context,
@@ -499,7 +691,7 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
   return true;
 }
 
-/* static */ tsl::Status GpuDriver::SynchronousMemcpyD2H(GpuContext* context,
+/* static */ absl::Status GpuDriver::SynchronousMemcpyD2H(GpuContext* context,
                                                          void* host_dst,
                                                          void* gpu_src,
                                                          uint64_t size) {
@@ -510,10 +702,10 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
                       host_dst, absl::bit_cast<void*>(gpu_src), size, size));
   VLOG(2) << "successfully sync memcpy'd d2h of " << size << " bytes to "
           << host_dst;
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-/* static */ tsl::Status GpuDriver::SynchronousMemcpyH2D(GpuContext* context,
+/* static */ absl::Status GpuDriver::SynchronousMemcpyH2D(GpuContext* context,
                                                          void* gpu_dst,
                                                          const void* host_src,
                                                          uint64_t size) {
@@ -524,10 +716,10 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
           " host src: %p; size: %u=0x%x",
           absl::bit_cast<void*>(gpu_dst), host_src, size, size));
   VLOG(2) << "successfully enqueued sync memcpy h2d of " << size << " bytes";
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-/* static */ tsl::Status GpuDriver::SynchronousMemcpyD2D(GpuContext* context,
+/* static */ absl::Status GpuDriver::SynchronousMemcpyD2D(GpuContext* context,
                                                          void* gpu_dst,
                                                          void* gpu_src,
                                                          uint64_t size) {
@@ -539,7 +731,7 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
           absl::bit_cast<void*>(gpu_dst), absl::bit_cast<void*>(gpu_src), size,
           size));
   VLOG(2) << "successfully sync memcpy'd d2d of " << size << " bytes";
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
 /* static */ bool GpuDriver::AsynchronousMemcpyD2H(GpuContext* context,
@@ -609,15 +801,15 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
   return device_count;
 }
 
-/* static */ tsl::Status GpuDriver::GetComputeCapability(int* cc_major,
+/* static */ absl::Status GpuDriver::GetComputeCapability(int* cc_major,
                                                          int* cc_minor,
                                                          sycl::device* device) {
   *cc_major = 100;
   *cc_minor = 100;
-  return ::tsl::OkStatus();
+  return absl::OkStatus();
 }
 
-/* static */ tsl::StatusOr<int> GpuDriver::GetMultiprocessorCount(
+/* static */ absl::StatusOr<int> GpuDriver::GetMultiprocessorCount(
     sycl::device* device) {
   return device->template get_info<
              sycl::ext::intel::info::device::gpu_subslices_per_slice>() *
@@ -625,17 +817,17 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
              ->template get_info<sycl::ext::intel::info::device::gpu_slices>();
 }
 
-/* static */ tsl::StatusOr<int64_t> GpuDriver::GetMaxSharedMemoryPerCore(
+/* static */ absl::StatusOr<int64_t> GpuDriver::GetMaxSharedMemoryPerCore(
     sycl::device* device) {
   return device->template get_info<sycl::info::device::local_mem_size>();
 }
 
-/* static */ tsl::StatusOr<int64_t> GpuDriver::GetMaxSharedMemoryPerBlock(
+/* static */ absl::StatusOr<int64_t> GpuDriver::GetMaxSharedMemoryPerBlock(
     sycl::device* device) {
   return device->template get_info<sycl::info::device::local_mem_size>();
 }
 
-/* static */ tsl::Status GpuDriver::GetGridLimits(int* x, int* y, int* z,
+/* static */ absl::Status GpuDriver::GetGridLimits(int* x, int* y, int* z,
                                                   sycl::device* device) {
   BlockDim block_dim_limit;
   *x = device->template get_info<
@@ -644,7 +836,13 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
       sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
   *z = device->template get_info<
       sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
-  return tsl::OkStatus();
+  return absl::OkStatus();
+}
+
+/* static */ absl::StatusOr<int32_t> GpuDriver::GetDriverVersion() {
+  int32_t version = -1;
+  // TODO: Implement it for SYCL platform.
+  return version;
 }
 
 /* static */ bool GpuDriver::GetDeviceMemoryInfo(GpuContext* context,
@@ -660,6 +858,23 @@ static tsl::Status InternalInit() { return ::tsl::OkStatus(); }
                                                   uint64_t* result) {
   *result = device->get_info<sycl::info::device::global_mem_size>();
   return true;
+}
+
+/* static */ absl::StatusOr<int> GpuDriver::GetMaxOccupiedBlocksPerCore(
+    GpuContext* context, GpuFunctionHandle kernel, int threads_per_block,
+    size_t dynamic_shared_memory_bytes) {
+  int max_blocks = 0;
+
+  SYCLError_t result = SYCL_SUCCESS;
+  // TODO(SYCL) implement this feature in HIP
+  if (result != SYCL_SUCCESS) {
+    return absl::Status{
+        absl::StatusCode::kInternal,
+        absl::StrFormat("failed to calculate occupancy of kernel %p: %s",
+                        kernel, ToString(result))};
+  }
+
+  return max_blocks;
 }
 
 }  // namespace gpu

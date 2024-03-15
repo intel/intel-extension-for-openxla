@@ -1,4 +1,4 @@
-/* Copyright (c) 2023 Intel Corporation
+/* Copyright (c) 2024 Intel Corporation
 
 Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
@@ -20,10 +20,9 @@ limitations under the License.
 
 #include <vector>
 
-#include "xla/mlir_hlo/lhlo/IR/lhlo_ops.h"
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/gpu/ccl_collective_thunk.h"
-#include "xla/xla_data.pb.h"
+#include "xla/service/gpu/nccl_api.h"
 
 namespace xla {
 namespace gpu {
@@ -33,46 +32,47 @@ struct NcclAllToAllConfig {
   bool has_split_dimension;
 };
 
-// Thunk that performs a NCCL-based All-to-All among CUDA GPU-based replicas.
 class NcclAllToAllStartThunk : public NcclCollectiveThunk {
  public:
-  NcclAllToAllStartThunk(ThunkInfo thunk_info,
+  NcclAllToAllStartThunk(ThunkInfo thunk_info, NcclApi* nccl_api,
                          mlir::lmhlo_gpu::AllToAllStartOp op,
+                         std::vector<Buffer> buffers);
+  NcclAllToAllStartThunk(ThunkInfo thunk_info, NcclApi* nccl_api,
+                         const HloAllToAllInstruction* instr,
                          std::vector<Buffer> buffers);
 
   // Returns whether the given instruction can be lowered to a nccl all-to-all
   // call.
-  static Status CheckImplementable(mlir::lmhlo_gpu::AllToAllStartOp op,
-                                   int64_t replica_count,
-                                   int64_t partition_count);
+  static absl::Status CheckImplementable(mlir::lmhlo_gpu::AllToAllStartOp op,
+                                         int64_t replica_count,
+                                         int64_t partition_count);
+  static absl::Status CheckImplementable(const HloAllToAllInstruction* instr,
+                                         int64_t replica_count,
+                                         int64_t partition_count);
 
   static const char* GetHloOpName() { return "all-to-all-start"; }
-  static bool IsDegenerate(mlir::lmhlo_gpu::AllToAllStartOp op,
-                           int64_t replica_count, int64_t partition_count);
+
   static CollectiveOpGroupMode GetGroupMode(
       mlir::lmhlo_gpu::AllToAllStartOp op);
+  static CollectiveOpGroupMode GetGroupMode(
+      const HloAllToAllInstruction* instr);
 
  protected:
   const NcclCollectiveConfig& config() const override { return config_.config; }
-  Status RunNcclCollective(const ExecuteParams& params, se::Stream& stream,
-                           ncclComm_t comm) override;
+  absl::Status RunNcclCollective(const ExecuteParams& params,
+                                 se::Stream& stream,
+                                 NcclApi::NcclCommHandle comm) override;
 
  private:
   const NcclAllToAllConfig config_;
   const std::vector<Buffer> buffers_;
 };
 
-class NcclAllToAllDoneThunk : public NcclCollectiveDoneThunk {
- public:
-  NcclAllToAllDoneThunk(ThunkInfo thunk_info,
-                        NcclCollectiveThunk::AsyncExecutor& async);
-};
-
-Status RunAllToAll(bool has_split_dimension,
-                   std::vector<DeviceBufferPair>& buffers, se::Stream& stream,
-                   ncclComm_t comm);
+absl::Status RunAllToAll(NcclApi* nccl_api, bool has_split_dimension,
+                         std::vector<DeviceBufferPair>& buffers,
+                         se::Stream& stream, NcclApi::NcclCommHandle comm);
 
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_CCL_ALL_TO_ALL_THUNK_H_
+#endif  // XLA_SERVICE_GPU_NCCL_ALL_TO_ALL_THUNK_H_

@@ -1,4 +1,4 @@
-/* Copyright (c) 2023 Intel Corporation
+/* Copyright (c) 2024 Intel Corporation
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ namespace xla {
 namespace gpu {
 
 using bfloat16 = sycl::ext::oneapi::bfloat16;
+using float16 = sycl::half;
 
 namespace {
 struct Participant {
@@ -56,6 +57,15 @@ struct PermuteParticipant {
   int rank;
 };
 
+template <typename T>
+struct Collective {
+  Collective() : done(false) {}
+  tsl::mutex mu;
+  tsl::condition_variable cv;
+  bool done;
+  std::vector<T> participants TF_GUARDED_BY(mu);
+};
+
 struct Manager {
   static Manager& instance() {
     static Manager m;
@@ -63,13 +73,13 @@ struct Manager {
   }
 
   tsl::mutex mu;
-  tsl::condition_variable cv;
-  // The order should be: (r0p0, r1p0), (r0p1, r1p1)
-  std::unordered_map<std::string, std::vector<Participant>> collectives
-      TF_GUARDED_BY(mu);
-  std::unordered_map<std::string, std::vector<AlltoAllParticipant>>
+  std::unordered_map<std::string, std::shared_ptr<Collective<Participant>>>
+      collectives TF_GUARDED_BY(mu);
+  std::unordered_map<std::string,
+                     std::shared_ptr<Collective<AlltoAllParticipant>>>
       alltoall_collectives TF_GUARDED_BY(mu);
-  std::unordered_map<std::string, std::vector<PermuteParticipant>>
+  std::unordered_map<std::string,
+                     std::shared_ptr<Collective<PermuteParticipant>>>
       permute_collectives TF_GUARDED_BY(mu);
 };
 
@@ -78,70 +88,42 @@ struct AllReduceKernel;
 
 template <typename T, typename Func, typename AccT = T>
 void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
-                     std::vector<Participant>& participants, int reduction_size,
-                     bool use_host = true) {
-  // FIXME(intel): Use host AllReduce as workaround to avoid random accuracy
-  // issue caused by Toolkit 2024.1.
-  if (use_host) {
-    std::unique_ptr<T[]> in_buffer = std::make_unique<T[]>(tensor_size);
-    std::unique_ptr<T[]> out_buffer = std::make_unique<T[]>(tensor_size);
+                     std::vector<Participant>& participants,
+                     int reduction_size) {
+  auto group_size =
+      (*stream)
+          .get_device()
+          .template get_info<sycl::info::device::max_work_group_size>();
+  auto num_workgroup = (tensor_size + group_size - 1) / group_size;
 
-    // Initilaize out buffer.
-    participants[0]
-        .stream
-        ->memcpy(out_buffer.get(), participants[0].send,
-                 tensor_size * sizeof(T))
-        .wait();
+  if (reduction_size <= MAX_RANK_SIZE) {
+    stream->submit([&](sycl::handler& cgh) {
+      const T* in_ptr[MAX_RANK_SIZE];
+      T* out_ptr[MAX_RANK_SIZE];
 
-    for (int i = 1; i < participants.size(); ++i) {
-      auto& ip = participants[i];
-      ip.stream->memcpy(in_buffer.get(), ip.send, tensor_size * sizeof(T))
-          .wait();
-      for (int j = 0; j < tensor_size; ++j) {
-        out_buffer[j] = T(Func()(AccT(out_buffer[j]), AccT(in_buffer[j])));
+      for (int i = 0; i < reduction_size; ++i) {
+        in_ptr[i] = static_cast<const T*>(participants[i].send);
+        out_ptr[i] = static_cast<T*>(participants[i].recv);
       }
-    }
 
-    for (auto ip : participants) {
-      ip.stream->memcpy(ip.recv, out_buffer.get(), tensor_size * sizeof(T))
-          .wait();
-    }
+      cgh.parallel_for<AllReduceKernel<T, Func>>(
+          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
+                            sycl::range<1>(group_size)),
+          [=](sycl::nd_item<1> item) {
+            const int index = item.get_global_linear_id();
+            if (index >= tensor_size) return;
+
+            out_ptr[0][index] = in_ptr[0][index];
+            for (int i = 1; i < reduction_size; ++i)
+              out_ptr[0][index] =
+                  T(Func()(AccT(out_ptr[0][index]), AccT(in_ptr[i][index])));
+            for (int i = 1; i < reduction_size; ++i)
+              out_ptr[i][index] = out_ptr[0][index];
+          });
+    });
   } else {
-    auto group_size =
-        (*stream)
-            .get_device()
-            .template get_info<sycl::info::device::max_work_group_size>();
-    auto num_workgroup = (tensor_size + group_size - 1) / group_size;
-
-    if (reduction_size <= MAX_RANK_SIZE) {
-      stream->submit([&](sycl::handler& cgh) {
-        const T* in_ptr[MAX_RANK_SIZE];
-        T* out_ptr[MAX_RANK_SIZE];
-
-        for (int i = 0; i < reduction_size; ++i) {
-          in_ptr[i] = static_cast<const T*>(participants[i].send);
-          out_ptr[i] = static_cast<T*>(participants[i].recv);
-        }
-
-        cgh.parallel_for<AllReduceKernel<T, Func>>(
-            sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                              sycl::range<1>(group_size)),
-            [=](sycl::nd_item<1> item) {
-              const int index = item.get_global_linear_id();
-              if (index >= tensor_size) return;
-
-              out_ptr[0][index] = in_ptr[0][index];
-              for (int i = 1; i < reduction_size; ++i)
-                out_ptr[0][index] =
-                    T(Func()(AccT(out_ptr[0][index]), AccT(in_ptr[i][index])));
-              for (int i = 1; i < reduction_size; ++i)
-                out_ptr[i][index] = out_ptr[0][index];
-            });
-      });
-    } else {
-      LOG(FATAL) << "Reduction size " << reduction_size
-                 << " is not supported in AllReduce.";
-    }
+    LOG(FATAL) << "Reduction size " << reduction_size
+               << " is not supported in AllReduce.";
   }
 }
 
@@ -358,7 +340,6 @@ void stream_wait_streamlist(se::gpu::GpuStreamHandle stream,
 template <class T>
 void streamlist_wait_stream(se::gpu::GpuStreamHandle stream,
                             const std::vector<T>& p) {
-  stream->wait();
   sycl::event event = stream->ext_oneapi_submit_barrier();
 
   const std::vector<sycl::event> event_list{event};
@@ -371,180 +352,170 @@ void streamlist_wait_stream(se::gpu::GpuStreamHandle stream,
 void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                     int element_count, PrimitiveType dtype,
                     ReductionKind reduction_kind,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm,
-                    int current_call, int max_call) {
-  std::vector<Participant> p;
+                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+  std::shared_ptr<Collective<Participant>> collective;
+  bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
     if (Manager::instance().collectives.find(comm->id) ==
         Manager::instance().collectives.end()) {
-      std::vector<Participant> participants;
-      participants.push_back(
+      collective = std::make_shared<Collective<Participant>>();
+      collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
-      Manager::instance().collectives[comm->id] = participants;
-      p = participants;
+      Manager::instance().collectives[comm->id] = collective;
     } else {
-      Manager::instance().collectives[comm->id].push_back(
+      collective = Manager::instance().collectives[comm->id];
+      tsl::mutex_lock lock(collective->mu);
+      collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
-      p = Manager::instance().collectives[comm->id];
+      if (collective->participants.size() == comm->nranks) {
+        Manager::instance().collectives.erase(comm->id);
+        rank_to_launch_kernel = true;
+      }
     }
+  }
 
-    if (p.size() != comm->nranks) {
-      Manager::instance().cv.wait(l);
+  {
+    tsl::mutex_lock lock(collective->mu);
+    if (!rank_to_launch_kernel) {
+      if (!collective->done) collective->cv.wait(lock);
     } else {
-      // FIXME(intel): Temporarily WA to avoid random accuracy issue in Toolkit
-      // 2024.1. Remove host AllReduce once it's fixed.
-      static absl::once_flag init_flag;
-      static bool is_host_allreduce = true;
-
-      absl::call_once(init_flag, [&]() {
-        const char* env = std::getenv("_XLA_HOST_ALLREDUCE");
-
-        if (env != nullptr) {
-          std::string str_value = absl::AsciiStrToLower(env);
-          if (str_value == "0" || str_value == "false") {
-            is_host_allreduce = false;
-          }
-        }
-      });
-
-      Manager::instance().collectives.erase(comm->id);
+      auto p = collective->participants;
       std::sort(p.begin(), p.end(),
                 [](const Participant& a, const Participant& b) -> bool {
                   return a.rank < b.rank;
                 });
 
       se::gpu::GpuStreamHandle stream = p[0].stream;
-      if (!is_host_allreduce && current_call == 0)
-        stream_wait_streamlist(stream, p);
+      stream_wait_streamlist(stream, p);
 
       if (reduction_kind == ReductionKind::SUM) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::plus<bool>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<bool, sycl::plus<bool>>(stream, element_count, p,
+                                                  comm->nranks);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::plus<float>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<float, sycl::plus<float>>(stream, element_count, p,
+                                                    comm->nranks);
         else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::plus<double>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<double, sycl::plus<double>>(stream, element_count, p,
+                                                      comm->nranks);
         else if (dtype == S32)
-          allreduce_dpcpp<int32_t, sycl::plus<int32_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<int32_t, sycl::plus<int32_t>>(stream, element_count,
+                                                        p, comm->nranks);
         else if (dtype == S64)
-          allreduce_dpcpp<int64_t, sycl::plus<int64_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<int64_t, sycl::plus<int64_t>>(stream, element_count,
+                                                        p, comm->nranks);
         else if (dtype == U32)
-          allreduce_dpcpp<uint32_t, sycl::plus<uint32_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<uint32_t, sycl::plus<uint32_t>>(stream, element_count,
+                                                          p, comm->nranks);
         else if (dtype == U64)
-          allreduce_dpcpp<uint64_t, sycl::plus<uint64_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<uint64_t, sycl::plus<uint64_t>>(stream, element_count,
+                                                          p, comm->nranks);
         else if (dtype == C64)
           allreduce_dpcpp<std::complex<float>, sycl::plus<std::complex<float>>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == C128)
           allreduce_dpcpp<std::complex<double>,
                           sycl::plus<std::complex<double>>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
           allreduce_dpcpp<bfloat16, sycl::plus<float>, float>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::PRODUCT) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::multiplies<bool>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<bool, sycl::multiplies<bool>>(stream, element_count,
+                                                        p, comm->nranks);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::multiplies<float>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<float, sycl::multiplies<float>>(stream, element_count,
+                                                          p, comm->nranks);
         else if (dtype == F64)
           allreduce_dpcpp<double, sycl::multiplies<double>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == S32)
           allreduce_dpcpp<int32_t, sycl::multiplies<int32_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == S64)
           allreduce_dpcpp<int64_t, sycl::multiplies<int64_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == U32)
           allreduce_dpcpp<uint32_t, sycl::multiplies<uint32_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == U64)
           allreduce_dpcpp<uint64_t, sycl::multiplies<uint64_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == C64)
           allreduce_dpcpp<std::complex<float>,
                           sycl::multiplies<std::complex<float>>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == C128)
           allreduce_dpcpp<std::complex<double>,
                           sycl::multiplies<std::complex<double>>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
           allreduce_dpcpp<bfloat16, sycl::multiplies<float>, float>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::MIN) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::minimum<bool>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<bool, sycl::minimum<bool>>(stream, element_count, p,
+                                                     comm->nranks);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::minimum<float>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<float, sycl::minimum<float>>(stream, element_count, p,
+                                                       comm->nranks);
         else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::minimum<double>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<double, sycl::minimum<double>>(stream, element_count,
+                                                         p, comm->nranks);
         else if (dtype == S32)
           allreduce_dpcpp<int32_t, sycl::minimum<int32_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == S64)
           allreduce_dpcpp<int64_t, sycl::minimum<int64_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == U32)
           allreduce_dpcpp<uint32_t, sycl::minimum<uint32_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == U64)
           allreduce_dpcpp<uint64_t, sycl::minimum<uint64_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
           allreduce_dpcpp<bfloat16, sycl::minimum<float>, float>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::MAX) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::maximum<bool>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<bool, sycl::maximum<bool>>(stream, element_count, p,
+                                                     comm->nranks);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::maximum<float>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<float, sycl::maximum<float>>(stream, element_count, p,
+                                                       comm->nranks);
         else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::maximum<double>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+          allreduce_dpcpp<double, sycl::maximum<double>>(stream, element_count,
+                                                         p, comm->nranks);
         else if (dtype == S32)
           allreduce_dpcpp<int32_t, sycl::maximum<int32_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == S64)
           allreduce_dpcpp<int64_t, sycl::maximum<int64_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == U32)
           allreduce_dpcpp<uint32_t, sycl::maximum<uint32_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == U64)
           allreduce_dpcpp<uint64_t, sycl::maximum<uint64_t>>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
           allreduce_dpcpp<bfloat16, sycl::maximum<float>, float>(
-              stream, element_count, p, comm->nranks, is_host_allreduce);
+              stream, element_count, p, comm->nranks);
         else
           LOG(FATAL) << "PrimitiveType "
                      << primitive_util::LowercasePrimitiveTypeName(dtype)
@@ -554,44 +525,52 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                    << " is not supported in AllReduce.";
       }
 
-      if (!is_host_allreduce && current_call == (max_call - 1))
-        streamlist_wait_stream(stream, p);
-      Manager::instance().cv.notify_all();
+      streamlist_wait_stream(stream, p);
+      collective->done = true;
+      collective->cv.notify_all();
     }
   }
 }
 
 void sycl_allgather(const void* send_buffer, void* recv_buffer,
                     int element_count, PrimitiveType dtype,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm,
-                    int current_call, int max_call) {
-  std::vector<Participant> p;
+                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+  std::shared_ptr<Collective<Participant>> collective;
+  bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
     if (Manager::instance().collectives.find(comm->id) ==
         Manager::instance().collectives.end()) {
-      std::vector<Participant> participants;
-      participants.push_back(
+      collective = std::make_shared<Collective<Participant>>();
+      collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
-      Manager::instance().collectives[comm->id] = participants;
-      p = participants;
+      Manager::instance().collectives[comm->id] = collective;
     } else {
-      Manager::instance().collectives[comm->id].push_back(
+      collective = Manager::instance().collectives[comm->id];
+      tsl::mutex_lock lock(collective->mu);
+      collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
-      p = Manager::instance().collectives[comm->id];
+      if (collective->participants.size() == comm->nranks) {
+        Manager::instance().collectives.erase(comm->id);
+        rank_to_launch_kernel = true;
+      }
     }
+  }
 
-    if (p.size() != comm->nranks) {
-      Manager::instance().cv.wait(l);
+  {
+    tsl::mutex_lock lock(collective->mu);
+    if (!rank_to_launch_kernel) {
+      if (!collective->done) collective->cv.wait(lock);
     } else {
-      Manager::instance().collectives.erase(comm->id);
+      auto p = collective->participants;
       std::sort(p.begin(), p.end(),
                 [](const Participant& a, const Participant& b) -> bool {
                   return a.rank < b.rank;
                 });
 
       se::gpu::GpuStreamHandle stream = p[0].stream;
-      if (current_call == 0) stream_wait_streamlist(stream, p);
+      stream_wait_streamlist(stream, p);
+
       if (dtype == PRED)
         allgather_dpcpp<bool>(stream, element_count, p, comm->nranks);
       else if (dtype == F32)
@@ -612,8 +591,10 @@ void sycl_allgather(const void* send_buffer, void* recv_buffer,
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)
                    << " is not supported in AllGather.";
-      if (current_call == (max_call - 1)) streamlist_wait_stream(stream, p);
-      Manager::instance().cv.notify_all();
+
+      streamlist_wait_stream(stream, p);
+      collective->done = true;
+      collective->cv.notify_all();
     }
   }
 }
@@ -622,26 +603,34 @@ void sycl_alltoall(std::vector<const void*> send_buffers,
                    std::vector<void*> recv_buffers, int element_count,
                    PrimitiveType dtype, se::gpu::GpuStreamHandle gpu_stream,
                    ncclComm_t comm) {
-  std::vector<AlltoAllParticipant> p;
+  std::shared_ptr<Collective<AlltoAllParticipant>> collective;
+  bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
     if (Manager::instance().alltoall_collectives.find(comm->id) ==
         Manager::instance().alltoall_collectives.end()) {
-      std::vector<AlltoAllParticipant> participants;
-      participants.push_back(
+      collective = std::make_shared<Collective<AlltoAllParticipant>>();
+      collective->participants.push_back(
           {gpu_stream, send_buffers, recv_buffers, comm->rank});
-      Manager::instance().alltoall_collectives[comm->id] = participants;
-      p = participants;
+      Manager::instance().alltoall_collectives[comm->id] = collective;
     } else {
-      Manager::instance().alltoall_collectives[comm->id].push_back(
+      collective = Manager::instance().alltoall_collectives[comm->id];
+      tsl::mutex_lock lock(collective->mu);
+      collective->participants.push_back(
           {gpu_stream, send_buffers, recv_buffers, comm->rank});
-      p = Manager::instance().alltoall_collectives[comm->id];
+      if (collective->participants.size() == comm->nranks) {
+        Manager::instance().alltoall_collectives.erase(comm->id);
+        rank_to_launch_kernel = true;
+      }
     }
+  }
 
-    if (p.size() != comm->nranks) {
-      Manager::instance().cv.wait(l);
+  {
+    tsl::mutex_lock lock(collective->mu);
+    if (!rank_to_launch_kernel) {
+      if (!collective->done) collective->cv.wait(lock);
     } else {
-      Manager::instance().alltoall_collectives.erase(comm->id);
+      auto p = collective->participants;
       std::sort(
           p.begin(), p.end(),
           [](const AlltoAllParticipant& a,
@@ -649,18 +638,29 @@ void sycl_alltoall(std::vector<const void*> send_buffers,
 
       se::gpu::GpuStreamHandle stream = p[0].stream;
       stream_wait_streamlist(stream, p);
+
       if (dtype == PRED)
         alltoall_dpcpp<bool>(stream, element_count, p, comm->nranks);
+      else if (dtype == BF16)
+        alltoall_dpcpp<bfloat16>(stream, element_count, p, comm->nranks);
+      else if (dtype == F16)
+        alltoall_dpcpp<float16>(stream, element_count, p, comm->nranks);
       else if (dtype == F32)
         alltoall_dpcpp<float>(stream, element_count, p, comm->nranks);
       else if (dtype == F64)
         alltoall_dpcpp<double>(stream, element_count, p, comm->nranks);
+      else if (dtype == S8)
+        alltoall_dpcpp<int8_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == S16)
+        alltoall_dpcpp<int16_t>(stream, element_count, p, comm->nranks);
       else if (dtype == S32)
         alltoall_dpcpp<int32_t>(stream, element_count, p, comm->nranks);
       else if (dtype == S64)
         alltoall_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == BF16)
-        alltoall_dpcpp<bfloat16>(stream, element_count, p, comm->nranks);
+      else if (dtype == U8)
+        alltoall_dpcpp<uint8_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == U16)
+        alltoall_dpcpp<uint16_t>(stream, element_count, p, comm->nranks);
       else if (dtype == U32)
         alltoall_dpcpp<uint32_t>(stream, element_count, p, comm->nranks);
       else if (dtype == U64)
@@ -669,9 +669,10 @@ void sycl_alltoall(std::vector<const void*> send_buffers,
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)
                    << " is not supported in AllToAll.";
-      streamlist_wait_stream(stream, p);
 
-      Manager::instance().cv.notify_all();
+      streamlist_wait_stream(stream, p);
+      collective->done = true;
+      collective->cv.notify_all();
     }
   }
 }
@@ -680,26 +681,34 @@ void sycl_alltoall_split(std::vector<const void*> send_buffers,
                          std::vector<void*> recv_buffers, int element_count,
                          PrimitiveType dtype,
                          se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
-  std::vector<AlltoAllParticipant> p;
+  std::shared_ptr<Collective<AlltoAllParticipant>> collective;
+  bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
     if (Manager::instance().alltoall_collectives.find(comm->id) ==
         Manager::instance().alltoall_collectives.end()) {
-      std::vector<AlltoAllParticipant> participants;
-      participants.push_back(
+      collective = std::make_shared<Collective<AlltoAllParticipant>>();
+      collective->participants.push_back(
           {gpu_stream, send_buffers, recv_buffers, comm->rank});
-      Manager::instance().alltoall_collectives[comm->id] = participants;
-      p = participants;
+      Manager::instance().alltoall_collectives[comm->id] = collective;
     } else {
-      Manager::instance().alltoall_collectives[comm->id].push_back(
+      collective = Manager::instance().alltoall_collectives[comm->id];
+      tsl::mutex_lock lock(collective->mu);
+      collective->participants.push_back(
           {gpu_stream, send_buffers, recv_buffers, comm->rank});
-      p = Manager::instance().alltoall_collectives[comm->id];
+      if (collective->participants.size() == comm->nranks) {
+        Manager::instance().alltoall_collectives.erase(comm->id);
+        rank_to_launch_kernel = true;
+      }
     }
+  }
 
-    if (p.size() != comm->nranks) {
-      Manager::instance().cv.wait(l);
+  {
+    tsl::mutex_lock lock(collective->mu);
+    if (!rank_to_launch_kernel) {
+      if (!collective->done) collective->cv.wait(lock);
     } else {
-      Manager::instance().alltoall_collectives.erase(comm->id);
+      auto p = collective->participants;
       std::sort(
           p.begin(), p.end(),
           [](const AlltoAllParticipant& a,
@@ -707,8 +716,13 @@ void sycl_alltoall_split(std::vector<const void*> send_buffers,
 
       se::gpu::GpuStreamHandle stream = p[0].stream;
       stream_wait_streamlist(stream, p);
+
       if (dtype == PRED)
         alltoall_split_dpcpp<bool>(stream, element_count, p, comm->nranks);
+      else if (dtype == BF16)
+        alltoall_split_dpcpp<bfloat16>(stream, element_count, p, comm->nranks);
+      else if (dtype == F16)
+        alltoall_split_dpcpp<float16>(stream, element_count, p, comm->nranks);
       else if (dtype == F32)
         alltoall_split_dpcpp<float>(stream, element_count, p, comm->nranks);
       else if (dtype == F64)
@@ -729,13 +743,19 @@ void sycl_alltoall_split(std::vector<const void*> send_buffers,
         alltoall_split_dpcpp<uint32_t>(stream, element_count, p, comm->nranks);
       else if (dtype == U64)
         alltoall_split_dpcpp<uint64_t>(stream, element_count, p, comm->nranks);
+      else if (dtype == C64)
+        alltoall_split_dpcpp<complex64>(stream, element_count, p, comm->nranks);
+      else if (dtype == C128)
+        alltoall_split_dpcpp<complex128>(stream, element_count, p,
+                                         comm->nranks);
       else
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)
                    << " is not supported in AllToAll.";
-      streamlist_wait_stream(stream, p);
 
-      Manager::instance().cv.notify_all();
+      streamlist_wait_stream(stream, p);
+      collective->done = true;
+      collective->cv.notify_all();
     }
   }
 }
@@ -743,35 +763,42 @@ void sycl_alltoall_split(std::vector<const void*> send_buffers,
 void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                          int element_count, PrimitiveType dtype,
                          ReductionKind reduction_kind,
-                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm,
-                         int current_call, int max_call) {
-  std::vector<Participant> p;
+                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+  std::shared_ptr<Collective<Participant>> collective;
+  bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
     if (Manager::instance().collectives.find(comm->id) ==
         Manager::instance().collectives.end()) {
-      std::vector<Participant> participants;
-      participants.push_back(
+      collective = std::make_shared<Collective<Participant>>();
+      collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
-      Manager::instance().collectives[comm->id] = participants;
-      p = participants;
+      Manager::instance().collectives[comm->id] = collective;
     } else {
-      Manager::instance().collectives[comm->id].push_back(
+      collective = Manager::instance().collectives[comm->id];
+      tsl::mutex_lock lock(collective->mu);
+      collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
-      p = Manager::instance().collectives[comm->id];
+      if (collective->participants.size() == comm->nranks) {
+        Manager::instance().collectives.erase(comm->id);
+        rank_to_launch_kernel = true;
+      }
     }
+  }
 
-    if (p.size() != comm->nranks) {
-      Manager::instance().cv.wait(l);
+  {
+    tsl::mutex_lock lock(collective->mu);
+    if (!rank_to_launch_kernel) {
+      if (!collective->done) collective->cv.wait(lock);
     } else {
-      Manager::instance().collectives.erase(comm->id);
+      auto p = collective->participants;
       std::sort(p.begin(), p.end(),
                 [](const Participant& a, const Participant& b) -> bool {
                   return a.rank < b.rank;
                 });
 
       se::gpu::GpuStreamHandle stream = p[0].stream;
-      if (current_call == 0) stream_wait_streamlist(stream, p);
+      stream_wait_streamlist(stream, p);
 
       if (reduction_kind == ReductionKind::SUM) {
         if (dtype == PRED)
@@ -910,8 +937,9 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                    << " is not supported in ReduceScatter.";
       }
 
-      if (current_call == (max_call - 1)) streamlist_wait_stream(stream, p);
-      Manager::instance().cv.notify_all();
+      streamlist_wait_stream(stream, p);
+      collective->done = true;
+      collective->cv.notify_all();
     }
   }
 }
@@ -922,27 +950,34 @@ void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
                              const std::optional<int64_t>& target_id,
                              se::gpu::GpuStreamHandle gpu_stream,
                              ncclComm_t comm) {
-  std::vector<PermuteParticipant> p;
+  std::shared_ptr<Collective<PermuteParticipant>> collective;
+  bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
     if (Manager::instance().permute_collectives.find(comm->id) ==
         Manager::instance().permute_collectives.end()) {
-      std::vector<PermuteParticipant> participants;
-      participants.push_back({gpu_stream, send_buffer, recv_buffer, source_id,
-                              target_id, comm->rank});
-      Manager::instance().permute_collectives[comm->id] = participants;
-      p = participants;
+      collective = std::make_shared<Collective<PermuteParticipant>>();
+      collective->participants.push_back({gpu_stream, send_buffer, recv_buffer,
+                                          source_id, target_id, comm->rank});
+      Manager::instance().permute_collectives[comm->id] = collective;
     } else {
-      Manager::instance().permute_collectives[comm->id].push_back(
-          {gpu_stream, send_buffer, recv_buffer, source_id, target_id,
-           comm->rank});
-      p = Manager::instance().permute_collectives[comm->id];
+      collective = Manager::instance().permute_collectives[comm->id];
+      tsl::mutex_lock lock(collective->mu);
+      collective->participants.push_back({gpu_stream, send_buffer, recv_buffer,
+                                          source_id, target_id, comm->rank});
+      if (collective->participants.size() == comm->nranks) {
+        Manager::instance().permute_collectives.erase(comm->id);
+        rank_to_launch_kernel = true;
+      }
     }
+  }
 
-    if (p.size() != comm->nranks) {
-      Manager::instance().cv.wait(l);
+  {
+    tsl::mutex_lock lock(collective->mu);
+    if (!rank_to_launch_kernel) {
+      if (!collective->done) collective->cv.wait(lock);
     } else {
-      Manager::instance().permute_collectives.erase(comm->id);
+      auto p = collective->participants;
       std::sort(
           p.begin(), p.end(),
           [](const PermuteParticipant& a, const PermuteParticipant& b) -> bool {
@@ -951,6 +986,7 @@ void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
 
       se::gpu::GpuStreamHandle stream = p[0].stream;
       stream_wait_streamlist(stream, p);
+
       if (dtype == PRED)
         permute_dpcpp<bool>(stream, element_count, p, comm->nranks);
       else if (dtype == F32)
@@ -971,9 +1007,10 @@ void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)
                    << " is not supported in Permute.";
-      streamlist_wait_stream(stream, p);
 
-      Manager::instance().cv.notify_all();
+      streamlist_wait_stream(stream, p);
+      collective->done = true;
+      collective->cv.notify_all();
     }
   }
 }

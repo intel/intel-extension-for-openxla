@@ -42,7 +42,7 @@ using se::DeviceMemory;
 using se::DeviceMemoryBase;
 
 template <typename ElementType, typename BiasType, typename OutputType>
-Status RunFusedMHA(GpufMHAParams params, se::Stream* stream,
+absl::Status RunFusedMHA(GpufMHAParams params, se::Stream* stream,
                                    DeviceMemory<ElementType> lhs_bmm1_buffer,
                                    DeviceMemory<ElementType> rhs_bmm1_buffer,
                                    DeviceMemory<ElementType> rhs_bmm2_buffer,
@@ -141,13 +141,13 @@ Status RunFusedMHA(GpufMHAParams params, se::Stream* stream,
                                       rhs_bmm2_ptr, bias_ptr, nullptr, 1.0f,
                                       output_ptr, B, N, H, F, T, scale);
   } else {
-    return InternalError("Invalid MHA datatype");
+    return Internal("Invalid MHA datatype");
   }
-  return OkStatus();
+  return absl::OkStatus();
 }
 
 template <typename ElementType, typename BiasType, typename OutputType>
-Status RunGpuFMHAImpl(const GpufMHAParams& params, se::Stream* stream,
+absl::Status RunGpuFMHAImpl(const GpufMHAParams& params, se::Stream* stream,
                       se::DeviceMemoryBase scratch_memory) {
   auto lhs_bmm1_buffer = se::DeviceMemory<ElementType>(params.lhs_bmm1_buffer);
   auto rhs_bmm1_buffer = se::DeviceMemory<ElementType>(params.rhs_bmm1_buffer);
@@ -165,7 +165,7 @@ Status RunGpuFMHAImpl(const GpufMHAParams& params, se::Stream* stream,
                          : se::DeviceMemoryBase();
 
   se::dnn::AlgorithmDesc algorithm = params.config->algorithm;
-  Status run_status = OkStatus();
+  absl::Status run_status = absl::OkStatus();
   switch (params.config->kind) {
     case CudnnfMHAKind::kSoftmax:
     case CudnnfMHAKind::kScaleBiasSoftmax:
@@ -176,16 +176,16 @@ Status RunGpuFMHAImpl(const GpufMHAParams& params, se::Stream* stream,
               activation_buffer);
       break;
     default:
-      return InternalError("Invalid cuDNN fMHA kind: %s",
+      return Internal("Invalid cuDNN fMHA kind: %s",
                            CudnnfMHAKindToString(params.config->kind));
   }
 
-  if (run_status != OkStatus()) {
+  if (run_status != absl::OkStatus()) {
     return run_status;
   }
 
   if (!stream->ok()) {
-    return InternalError("Unable to launch FMHA with type %s",
+    return Internal("Unable to launch FMHA with type %s",
                          CudnnfMHAKindToString(params.config->kind));
   }
 
@@ -193,7 +193,7 @@ Status RunGpuFMHAImpl(const GpufMHAParams& params, se::Stream* stream,
 }
 }  // namespace
 
-Status RunXetlaGpuFMHA(
+absl::Status RunXetlaGpuFMHA(
     const GpufMHAConfig& fmha_config, se::DeviceMemoryBase lhs_bmm1_buffer,
     se::DeviceMemoryBase rhs_bmm1_buffer, se::DeviceMemoryBase rhs_bmm2_buffer,
     se::DeviceMemoryBase output_buffer, se::DeviceMemoryBase scratch_buffer,
@@ -216,7 +216,7 @@ Status RunXetlaGpuFMHA(
       return absl::UnimplementedError(absl::StrFormat(
           "Unimplemented fused MHA with %s", ToString(fmha_config)));
   }
-  return OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace gpu

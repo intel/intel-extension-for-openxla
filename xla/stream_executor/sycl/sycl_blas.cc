@@ -1,4 +1,4 @@
-/* Copyright (c) 2023 Intel Corporation
+/* Copyright (c) 2024 Intel Corporation
 
 Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
@@ -228,41 +228,9 @@ bool SYCLBlas::DoBlasAxpy(Stream *stream, uint64_t elem_count, float alpha,
                           DeviceMemory<float> *y, int incy) {
   return true;
 }
-bool SYCLBlas::DoBlasAxpy(Stream *stream, uint64_t elem_count, double alpha,
-                          const DeviceMemory<double> &x, int incx,
-                          DeviceMemory<double> *y, int incy) {
-  return true;
-}
-bool SYCLBlas::DoBlasAxpy(Stream *stream, uint64_t elem_count,
-                          std::complex<float> alpha,
-                          const DeviceMemory<std::complex<float>> &x, int incx,
-                          DeviceMemory<std::complex<float>> *y, int incy) {
-  return true;
-}
-bool SYCLBlas::DoBlasAxpy(Stream *stream, uint64_t elem_count,
-                          std::complex<double> alpha,
-                          const DeviceMemory<std::complex<double>> &x, int incx,
-                          DeviceMemory<std::complex<double>> *y, int incy) {
-  return true;
-}
 bool SYCLBlas::DoBlasCopy(Stream *stream, uint64_t elem_count,
                           const DeviceMemory<float> &x, int incx,
                           DeviceMemory<float> *y, int incy) {
-  return true;
-}
-bool SYCLBlas::DoBlasCopy(Stream *stream, uint64_t elem_count,
-                          const DeviceMemory<double> &x, int incx,
-                          DeviceMemory<double> *y, int incy) {
-  return true;
-}
-bool SYCLBlas::DoBlasCopy(Stream *stream, uint64_t elem_count,
-                          const DeviceMemory<std::complex<float>> &x, int incx,
-                          DeviceMemory<std::complex<float>> *y, int incy) {
-  return true;
-}
-bool SYCLBlas::DoBlasCopy(Stream *stream, uint64_t elem_count,
-                          const DeviceMemory<std::complex<double>> &x, int incx,
-                          DeviceMemory<std::complex<double>> *y, int incy) {
   return true;
 }
 bool SYCLBlas::DoBlasScal(Stream *stream, uint64_t elem_count, float alpha,
@@ -325,13 +293,7 @@ bool SYCLBlas::DoBlasSbmv(Stream *stream, blas::UpperLower uplo, uint64_t n,
                           float beta, DeviceMemory<float> *y, int incy) {
   return true;
 }
-bool SYCLBlas::DoBlasSbmv(Stream *stream, blas::UpperLower uplo, uint64_t n,
-                          uint64 k, double alpha, const DeviceMemory<double> &a,
-                          int lda, const DeviceMemory<double> &x, int incx,
-                          double beta, DeviceMemory<double> *y, int incy) {
-  return true;
-}
-tsl::Status SYCLBlas::DoBlasGemm(Stream *stream, blas::Transpose transa,
+absl::Status SYCLBlas::DoBlasGemm(Stream *stream, blas::Transpose transa,
                                  blas::Transpose transb, uint64_t m, uint64 n,
                                  uint64 k, blas::DataType dtype,
                                  const void *alpha, const DeviceMemoryBase &a,
@@ -339,13 +301,15 @@ tsl::Status SYCLBlas::DoBlasGemm(Stream *stream, blas::Transpose transa,
                                  const void *beta, DeviceMemoryBase *c, int ldc,
                                  const NumericOptions &numeric_options,
                                  blas::CallContext context) {
-  return tsl::errors::Unimplemented("Not implemented for SYCL");
+  return absl::UnimplementedError("Not implemented for SYCL");
 }
 bool SYCLBlas::GetBlasGemmAlgorithms(
-    Stream *stream, std::vector<blas::AlgorithmType> *out_algorithms) {
+    Stream *stream, const gpu::MatrixDescriptor &,
+    const gpu::MatrixDescriptor &, gpu::OutputMatrixDescriptor *, const void *,
+    const void *, std::vector<blas::AlgorithmType> *out_algorithms) {
   return true;
 }
-tsl::Status SYCLBlas::DoBlasGemmWithAlgorithm(
+absl::Status SYCLBlas::DoBlasGemmWithAlgorithm(
     Stream *stream, blas::Transpose transa, blas::Transpose transb, uint64_t m,
     uint64 n, uint64 k, const void *alpha, const DeviceMemoryBase &a,
     blas::DataType type_a, int lda, const DeviceMemoryBase &b,
@@ -353,7 +317,7 @@ tsl::Status SYCLBlas::DoBlasGemmWithAlgorithm(
     blas::DataType type_c, int ldc, blas::ComputationType computation_type,
     blas::AlgorithmType algorithm, const NumericOptions &numeric_options,
     blas::ProfileResult *output_profile_result, blas::CallContext context) {
-  return tsl::errors::Unimplemented("Not implemented for SYCL");
+  return absl::UnimplementedError("Not implemented for SYCL");
 }
 bool SYCLBlas::DoBlasGemmBatched(
     Stream *stream, blas::Transpose transa, blas::Transpose transb, uint64_t m,
@@ -410,16 +374,16 @@ bool SYCLBlas::DoBlasGemmBatched(
     ScratchAllocator *scratch_allocator, blas::CallContext context) {
   return true;
 }
-tsl::Status SYCLBlas::DoBlasGemmStridedBatched(
+absl::Status SYCLBlas::DoBlasGemmStridedBatched(
     Stream *stream, blas::Transpose transa, blas::Transpose transb, uint64_t m,
     uint64 n, uint64 k, blas::DataType dtype, const void *alpha,
     const DeviceMemoryBase &a, int lda, int64_t stride_a,
     const DeviceMemoryBase &b, int ldb, int64_t stride_b, const void *beta,
     DeviceMemoryBase *c, int ldc, int64_t stride_c, int batch_count,
     const NumericOptions &numeric_options, blas::CallContext context) {
-  return tsl::errors::Unimplemented("Not implemented for SYCL");
+  return absl::UnimplementedError("Not implemented for SYCL");
 }
-tsl::Status SYCLBlas::DoBlasGemmStridedBatchedWithAlgorithm(
+absl::Status SYCLBlas::DoBlasGemmStridedBatchedWithAlgorithm(
     Stream *stream, blas::Transpose transa, blas::Transpose transb, uint64_t m,
     uint64 n, uint64 k, const void *alpha, const DeviceMemoryBase &a,
     blas::DataType type_a, int lda, int64_t stride_a, const DeviceMemoryBase &b,
@@ -428,15 +392,15 @@ tsl::Status SYCLBlas::DoBlasGemmStridedBatchedWithAlgorithm(
     int batch_count, blas::ComputationType computation_type,
     blas::AlgorithmType algorithm, const NumericOptions &numeric_options,
     blas::ProfileResult *output_profile_result, blas::CallContext context) {
-  return tsl::errors::Unimplemented("Not implemented for SYCL");
+  return absl::UnimplementedError("Not implemented for SYCL");
 }
-tsl::Status SYCLBlas::GetVersion(std::string *version) {
-  return tsl::errors::Unimplemented("Not implemented for SYCL");
+absl::Status SYCLBlas::GetVersion(std::string *version) {
+  return absl::UnimplementedError("Not implemented for SYCL");
 }
 // Undefinition
 
 void initialize_syclblas() {
-  tsl::Status status =
+  absl::Status status =
       PluginRegistry::Instance()->RegisterFactory<PluginRegistry::BlasFactory>(
           kSyclPlatformId, "syBLAS",
           [](::stream_executor::internal::StreamExecutorInterface *parent)

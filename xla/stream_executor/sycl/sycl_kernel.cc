@@ -18,5 +18,19 @@ limitations under the License.
 #include "xla/stream_executor/sycl/sycl_kernel.h"
 
 namespace stream_executor {
-namespace gpu {}  // namespace gpu
+namespace gpu {
+
+absl::StatusOr<int32_t> GpuKernel::GetMaxOccupiedBlocksPerCore(
+    ThreadDim threads, size_t dynamic_shared_memory_bytes) const {
+  int32_t threads_per_block = threads.x * threads.y * threads.z;
+  VLOG(3) << "Get kernel block occupancy: " << name_
+          << "; threads_per_block: " << threads_per_block
+          << "; dynamic_shared_memory_bytes: " << dynamic_shared_memory_bytes;
+
+  return GpuDriver::GetMaxOccupiedBlocksPerCore(gpu_context_, gpu_function_,
+                                                threads_per_block,
+                                                dynamic_shared_memory_bytes);
+}
+
+}  // namespace gpu
 }  // namespace stream_executor

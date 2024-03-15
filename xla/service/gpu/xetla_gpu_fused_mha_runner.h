@@ -35,7 +35,7 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-Status RunXetlaGpuFMHA(
+absl::Status RunXetlaGpuFMHA(
     const GpufMHAConfig& fmha_config, se::DeviceMemoryBase lhs_bmm1_buffer,
     se::DeviceMemoryBase rhs_bmm1_buffer, se::DeviceMemoryBase rhs_bmm2_buffer,
     se::DeviceMemoryBase output_buffer, se::DeviceMemoryBase scratch_buffer,

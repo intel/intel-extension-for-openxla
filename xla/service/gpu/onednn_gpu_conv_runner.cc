@@ -64,7 +64,7 @@ int64_t GetVectCSize(FilterLayout layout) {
   }
 }
 
-Status CreateOneDnnPrimitive(
+absl::Status CreateOneDnnPrimitive(
     OneDnnConvPrimitive* onednn_primitive,  // NOLINT
     const GpuConvDescriptor& conv_descriptor,
     absl::Span<const se::DeviceMemoryBase> operand_buffers,
@@ -123,7 +123,7 @@ Status CreateOneDnnPrimitive(
 
       break;
     default:
-      return InternalError("Unkown convolution kind");
+      return Internal("Unkown convolution kind");
   }
 
   float side_input_scale;
@@ -181,7 +181,7 @@ Status CreateOneDnnPrimitive(
     ih = 1;
     iw = 1;
   } else {
-    return InternalError("Invalid convolution dimension num");
+    return Internal("Invalid convolution dimension num");
   }
 
   int kd, kh, kw;
@@ -199,7 +199,7 @@ Status CreateOneDnnPrimitive(
     kh = 1;
     kw = 1;
   } else {
-    return InternalError("Invalid convolution dimension num");
+    return Internal("Invalid convolution dimension num");
   }
 
   // It is group-conv if filter_in != src_in
@@ -311,7 +311,7 @@ Status CreateOneDnnPrimitive(
           src_fmt = dnnl::memory::format_tag::nhwc;
           break;
         default:
-          return InternalError("Unsupported convolution input format");
+          return Internal("Unsupported convolution input format");
       }
 
       switch (filter_dl) {
@@ -328,7 +328,7 @@ Status CreateOneDnnPrimitive(
                                      : dnnl::memory::format_tag::hwio;
           break;
         default:
-          return InternalError("Unsupported convolution weight format");
+          return Internal("Unsupported convolution weight format");
       }
 
       switch (output_dl) {
@@ -339,7 +339,7 @@ Status CreateOneDnnPrimitive(
           dst_fmt = dnnl::memory::format_tag::nhwc;
           break;
         default:
-          return InternalError("Unsupported convolution output format");
+          return Internal("Unsupported convolution output format");
       }
     } else {
       src_dims = {n, ic, id, ih, iw};
@@ -362,7 +362,7 @@ Status CreateOneDnnPrimitive(
           src_fmt = dnnl::memory::format_tag::ndhwc;
           break;
         default:
-          return InternalError("Unsupported convolution input format");
+          return Internal("Unsupported convolution input format");
       }
 
       switch (filter_dl) {
@@ -375,7 +375,7 @@ Status CreateOneDnnPrimitive(
                                      : dnnl::memory::format_tag::odhwi;
           break;
         default:
-          return InternalError("Unsupported convolution weight format");
+          return Internal("Unsupported convolution weight format");
       }
 
       switch (output_dl) {
@@ -386,7 +386,7 @@ Status CreateOneDnnPrimitive(
           dst_fmt = dnnl::memory::format_tag::ndhwc;
           break;
         default:
-          return InternalError("Unsupported convolution output format");
+          return Internal("Unsupported convolution output format");
       }
     }
 
@@ -415,7 +415,7 @@ Status CreateOneDnnPrimitive(
         data_type = dnnl::memory::data_type::s32;
         break;
       default:
-        return InternalError("Unsupported convolution input data type");
+        return Internal("Unsupported convolution input data type");
     }
 
     dnnl::memory::desc src_md =
@@ -491,7 +491,7 @@ Status CreateOneDnnPrimitive(
         case stream_executor::dnn::kNone:
           break;
         default:
-          return InternalError("Unsupported Activation mode");
+          return Internal("Unsupported Activation mode");
       }
     }
     post_ops_attr.set_post_ops(po);
@@ -623,8 +623,6 @@ Status CreateOneDnnPrimitive(
 
     } else if (conv_descriptor.kind == CudnnConvKind::kBackwardFilter) {
       // TODO: handle post_ops_attr.
-      if (input_type == F16)
-        return InternalError("FP16 Conv BackwardFilter is not supported");
       ConvFwdPd fwd_pd = ConvFwdPd(
           onednn_primitive->engine, dnnl::prop_kind::forward,
           dnnl::algorithm::convolution_direct, src_md, filter_md_prefer, dst_md,
@@ -683,16 +681,16 @@ Status CreateOneDnnPrimitive(
           ConvBwdFilterPrimitive(bwd_filter_pd);
 
     } else {
-      return InternalError("Unkown convolutuion kind");
+      return Internal("Unkown convolutuion kind");
     }
   } catch (dnnl::error& e) {
-    return InternalError("OneDNN Conv error: %s", e.message);
+    return Internal("OneDNN Conv error: %s", e.message);
   }
-  return tsl::OkStatus();
+  return absl::OkStatus();
 }  // NOLINT
 }  // namespace
 
-StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
+absl::StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
     se::Stream* stream, const GpuConvDescriptor& descriptor,
     const std::vector<se::DeviceMemoryBase>& operand_se_buffers,
     const se::DeviceMemoryBase& result_buffer,
@@ -708,7 +706,7 @@ StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
   return primitive;
 }
 
-Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
+absl::Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
                   const GpuConvDescriptor& conv_descriptor,
                   absl::Span<const se::DeviceMemoryBase> operand_buffers,
                   se::DeviceMemoryBase result_buffer,
@@ -738,7 +736,7 @@ Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
       output_data = const_cast<void*>(operand_buffers[1].opaque());
       break;
     default:
-      return InternalError("Unkown convolution kind");
+      return Internal("Unkown convolution kind");
   }
 
   if (conv_descriptor.kind == CudnnConvKind::kForwardActivation) {
@@ -777,7 +775,7 @@ Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
             onednn_primitive.stream, onednn_primitive.reorder_args);
       }
     } else {
-      return InternalError("Unkown convolutuion kind");
+      return Internal("Unkown convolutuion kind");
     }
   } catch (dnnl::error& e) {
     std::string error_msg = "Status: " + std::to_string(e.status) +
@@ -787,7 +785,7 @@ Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
     std::cout << error_msg << std::endl;
   }
 
-  return tsl::OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace gpu

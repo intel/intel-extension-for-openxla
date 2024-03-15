@@ -37,7 +37,7 @@ For benchmarking, you could skip this step because our model script will downloa
 git clone https://github.com/google-research/t5x.git
 bash install_xpu.sh
 pip install --upgrade intel-extension-for-openxla
-pip install jax==0.4.20 jaxlib==0.4.20
+pip install jax==0.4.24 jaxlib==0.4.24
 ```
 ## Inference
 

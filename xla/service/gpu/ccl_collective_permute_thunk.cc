@@ -1,4 +1,4 @@
-/* Copyright (c) 2023 Intel Corporation
+/* Copyright (c) 2024 Intel Corporation
 
 Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
@@ -17,7 +17,7 @@ limitations under the License.
 
 #include "xla/service/gpu/ccl_collective_permute_thunk.h"
 
-#include <map>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
@@ -25,28 +25,51 @@ limitations under the License.
 
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
+#include "absl/strings/string_view.h"
+#include "tsl/platform/errors.h"
+#include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/hlo/ir/hlo_instructions.h"
+#include "xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.h"
 #include "xla/service/collective_ops_utils.h"
-#include "xla/service/gpu/ccl_ops.h"
+#include "xla/service/global_device_id.h"
+#include "xla/service/gpu/backend_configs.pb.h"
+#include "xla/service/gpu/ccl_api.h"
+#include "xla/service/gpu/ccl_collective_thunk.h"
+#include "xla/service/gpu/ccl_p2p_thunk_common.h"
 #include "xla/service/gpu/ir_emission_utils.h"
-#include "xla/stream_executor/sycl/sycl_stream.h"
+#include "xla/service/gpu/nccl_api.h"
+#include "xla/service/gpu/thunk.h"
+#include "xla/stream_executor/stream.h"
 #include "xla/translate/mhlo_to_hlo/attribute_exporter.h"
 #include "xla/xla_data.pb.h"
 
 namespace xla {
 namespace gpu {
+
 using mlir::lmhlo_gpu::CollectivePermuteStartOp;
 
-namespace impl {
+NcclCollectivePermuteStartThunk::NcclCollectivePermuteStartThunk(
+    ThunkInfo thunk_info, NcclApi* nccl_api, CollectivePermuteStartOp op,
+    int64_t replica_count, int64_t partition_count, const Buffer& buffer)
+    : NcclCollectiveThunk(Thunk::kNcclCollectivePermuteStart, thunk_info,
+                          nccl_api, op.getIsSync()),
+      config_(GetNcclP2PConfig(op, replica_count, partition_count)),
+      buffer_(buffer) {}
 
-CollectiveOpGroupMode GetGroupMode(CollectivePermuteStartOp op) {
-  return GetCollectiveOpGroupMode(op.getChannelId().has_value(), std::nullopt)
-      .value();
-}
+NcclCollectivePermuteStartThunk::NcclCollectivePermuteStartThunk(
+    ThunkInfo thunk_info, NcclApi* nccl_api,
+    const HloCollectivePermuteInstruction* instr, int64_t replica_count,
+    int64_t partition_count, const Buffer& buffer)
+    : NcclCollectiveThunk(Thunk::kNcclCollectivePermuteStart, thunk_info,
+                          nccl_api, IsSyncCollective(instr)),
+      config_(GetNcclP2PConfig(instr, replica_count, partition_count)),
+      buffer_(buffer) {}
 
-NcclCollectivePermuteConfig GetNcclCollectivePermuteConfig(
+/*static*/ NcclP2PConfig NcclCollectivePermuteStartThunk::GetNcclP2PConfig(
     CollectivePermuteStartOp op, int64_t replica_count,
     int64_t partition_count) {
-  NcclCollectivePermuteConfig collective_permute_config;
+  NcclP2PConfig collective_permute_config;
   auto& config = collective_permute_config.config;
 
   config.operand_count = 1;
@@ -83,10 +106,61 @@ NcclCollectivePermuteConfig GetNcclCollectivePermuteConfig(
   return collective_permute_config;
 }
 
-// The collective permute is degenerate if all source-target pairs are identity,
-// and all the IDs appear in the list.
-bool IsDegenerate(CollectivePermuteStartOp op, int64_t replica_count,
-                  int64_t partition_count) {
+/*static*/ NcclP2PConfig NcclCollectivePermuteStartThunk::GetNcclP2PConfig(
+    const HloCollectivePermuteInstruction* instr, int64_t replica_count,
+    int64_t partition_count) {
+  NcclP2PConfig collective_permute_config;
+  auto& config = collective_permute_config.config;
+
+  config.operand_count = 1;
+  const Shape shape = instr->operand(0)->shape();
+  config.operand_element_type.push_back(shape.element_type());
+  config.SetCollectiveOpKindAndID(instr);
+  config.group_mode = GetGroupMode(instr);
+
+  // With a collective permute, all execution instances together form one
+  // replica group.
+  const int64_t num_participants =
+      config.group_mode == CollectiveOpGroupMode::kCrossReplica
+          ? replica_count
+          : partition_count;
+  config.replica_groups.emplace_back();
+  ReplicaGroup& replica_group = config.replica_groups.front();
+  for (int i = 0; i < num_participants; ++i) {
+    replica_group.add_replica_ids(i);
+  }
+
+  const std::vector<std::pair<int64_t, int64_t>> source_target_pairs =
+      instr->source_target_pairs();
+
+  for (const std::pair<int64_t, int64_t>& source_target : source_target_pairs) {
+    int64_t source = source_target.first;
+    int64_t target = source_target.second;
+
+    collective_permute_config.id_to_source_target.insert({target, {}})
+        .first->second.source = source;
+    collective_permute_config.id_to_source_target.insert({source, {}})
+        .first->second.target = target;
+  }
+
+  return collective_permute_config;
+}
+
+/*static*/ absl::Status NcclCollectivePermuteStartThunk::CheckImplementable(
+    CollectivePermuteStartOp op, int64_t replica_count,
+    int64_t partition_count) {
+  auto status = [&]() -> absl::Status {
+    return IsValidOperand(op.getOperand(), Thunk::kNcclCollectivePermute);
+  };
+  return AddOpDescription<NcclCollectivePermuteStartThunk>(
+      status(), op, replica_count, partition_count);
+}
+
+/*static*/ bool NcclCollectivePermuteStartThunk::IsDegenerate(
+    CollectivePermuteStartOp op, int64_t replica_count,
+    int64_t partition_count) {
+  // The collective permute is degenerate if all source-target pairs are
+  // identity, and all the IDs appear in the list.
   const std::vector<std::pair<int64_t, int64_t>> source_target_pairs =
       ConvertNx2Attribute(op.getSourceTargetPairs()).value();
   // Each ID can appear only once as a source and as a target. So if all pairs
@@ -101,78 +175,68 @@ bool IsDegenerate(CollectivePermuteStartOp op, int64_t replica_count,
                         });
 }
 
-Status CheckImplementable(CollectivePermuteStartOp op) {
-  TF_RETURN_IF_ERROR(NcclCollectiveThunk::CheckImplementable());
-  return IsValidOperand(op.getOperand(), Thunk::kNcclCollectivePermute);
-}
-
-}  // namespace impl
-
-NcclCollectivePermuteStartThunk::NcclCollectivePermuteStartThunk(
-    ThunkInfo thunk_info, CollectivePermuteStartOp op, int64_t replica_count,
-    int64_t partition_count, const Buffer& buffer)
-    : NcclCollectiveThunk(Thunk::kNcclCollectivePermuteStart, thunk_info,
-                          op.getIsSync()),
-      config_(
-          GetNcclCollectivePermuteConfig(op, replica_count, partition_count)),
-      buffer_(buffer) {}
-
-/*static*/ NcclCollectivePermuteConfig
-NcclCollectivePermuteStartThunk::GetNcclCollectivePermuteConfig(
-    CollectivePermuteStartOp op, int64_t replica_count,
-    int64_t partition_count) {
-  return impl::GetNcclCollectivePermuteConfig(op, replica_count,
-                                              partition_count);
-}
-
-/*static*/ Status NcclCollectivePermuteStartThunk::CheckImplementable(
-    CollectivePermuteStartOp op, int64_t replica_count,
-    int64_t partition_count) {
-  return AddOpDescription<NcclCollectivePermuteStartThunk>(
-      impl::CheckImplementable(op), op, replica_count, partition_count);
-}
-
 /*static*/ bool NcclCollectivePermuteStartThunk::IsDegenerate(
-    CollectivePermuteStartOp op, int64_t replica_count,
+    const HloCollectivePermuteInstruction* instr, int64_t replica_count,
     int64_t partition_count) {
-  return impl::IsDegenerate(op, replica_count, partition_count);
+  // The collective permute is degenerate if all source-target pairs are
+  // identity, and all the IDs appear in the list.
+  const std::vector<std::pair<int64_t, int64_t>> source_target_pairs =
+      instr->source_target_pairs();
+  // Each ID can appear only once as a source and as a target. So if all pairs
+  // are identity, all IDs must appear in the list is the size == number of
+  // replicas/partitions.
+  const int64_t expected_size =
+      instr->channel_id().has_value() ? partition_count : replica_count;
+  return source_target_pairs.size() == expected_size &&
+         absl::c_all_of(source_target_pairs,
+                        [](const std::pair<int64_t, int64_t>& source_target) {
+                          return source_target.first == source_target.second;
+                        });
 }
 
 /*static*/ CollectiveOpGroupMode NcclCollectivePermuteStartThunk::GetGroupMode(
     CollectivePermuteStartOp op) {
-  return impl::GetGroupMode(op);
+  return GetCollectiveOpGroupMode(op.getChannelId().has_value(), std::nullopt)
+      .value();
 }
-Status NcclCollectivePermuteStartThunk::RunNcclCollective(
-    const ExecuteParams& params, se::Stream& stream, ncclComm_t comm) {
+
+/*static*/ CollectiveOpGroupMode NcclCollectivePermuteStartThunk::GetGroupMode(
+    const HloCollectivePermuteInstruction* instr) {
+  return GetCollectiveOpGroupMode(instr->channel_id().has_value(), std::nullopt)
+      .value();
+}
+
+absl::Status NcclCollectivePermuteStartThunk::RunNcclCollective(
+    const ExecuteParams& params, se::Stream& stream,
+    NcclApi::NcclCommHandle comm) {
   TF_ASSIGN_OR_RETURN(
       std::vector<DeviceBufferPair> device_buffers,
       ConvertToDeviceBuffers(params, {buffer_},
                              config_.config.operand_element_type));
   TF_RET_CHECK(device_buffers.size() == 1) << "Expected one buffer pair.";
 
-  TF_ASSIGN_OR_RETURN(const GlobalDeviceId global_device_id,
-                      params.nccl_params.GetGlobalDeviceId());
-  TF_ASSIGN_OR_RETURN(
-      const DeviceAssignment::LogicalID current_logical_id,
-      params.nccl_params.device_assn->LogicalIdForDevice(global_device_id));
+  GlobalDeviceId global_device_id = params.collective_params->global_device_id;
+
+  TF_ASSIGN_OR_RETURN(const DeviceAssignment::LogicalID current_logical_id,
+                      params.collective_params->device_assn->LogicalIdForDevice(
+                          global_device_id));
   const int64_t current_id =
       config_.config.group_mode == CollectiveOpGroupMode::kCrossReplica
           ? current_logical_id.replica_id
           : current_logical_id.computation_id;
-  std::string device_string = GetDeviceString(params.nccl_params);
+  std::string device_string = GetDeviceString(*params.collective_params);
 
-  const NcclCollectivePermuteConfig::SourceTargetMapEntry source_target =
-      NcclCollectivePermuteConfig::GetSourceTarget(config_.id_to_source_target,
-                                                   current_id);
+  const NcclP2PConfig::SourceTargetMapEntry source_target =
+      NcclP2PConfig::GetSourceTarget(config_.id_to_source_target, current_id);
 
-  return ::xla::gpu::RunCollectivePermute(source_target, device_buffers[0],
-                                          stream, comm, device_string,
-                                          current_id);
+  return ::xla::gpu::RunCollectivePermute(nccl_api(), source_target,
+                                          device_buffers[0], stream, comm,
+                                          device_string, current_id);
 }
 
-Status RunCollectivePermute(
-    NcclCollectivePermuteConfig::SourceTargetMapEntry source_target,
-    DeviceBufferPair& buffer, se::Stream& stream, ncclComm_t comm,
+absl::Status RunCollectivePermute(
+    NcclApi* nccl_api, NcclP2PConfig::SourceTargetMapEntry source_target,
+    DeviceBufferPair& buffer, se::Stream& stream, NcclApi::NcclCommHandle comm,
     absl::string_view device_string, int64_t current_id) {
   // Determine the source and target IDs for this instance. The source ID is the
   // ID which will copy its data to this instance. The destination ID is the ID
@@ -200,7 +264,7 @@ Status RunCollectivePermute(
 
   int device_ordinal = stream.parent()->device_ordinal();
   VLOG(3) << "Performing collective permute from device ordinal: "
-          << device_ordinal;
+          << device_ordinal << "current_id " << current_id;
 
   const std::optional<int64_t> source_id = source_target.source;
   const std::optional<int64_t> target_id = source_target.target;
@@ -216,10 +280,10 @@ Status RunCollectivePermute(
   int element_count = buffer.element_count *
                       (primitive_util::IsComplexType(element_type) ? 2 : 1);
 
-  se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(&stream);
-
-  sycl_collective_permute(src_addr.opaque(), dest_addr.opaque(), element_count,
-                          element_type, source_id, target_id, gpu_stream, comm);
+  auto ccl_api = dynamic_cast<CclApi*>(nccl_api);
+  TF_RETURN_IF_ERROR(ccl_api->CollectivePermute(
+      src_addr, dest_addr, element_count, element_type, source_id, target_id,
+      comm, &stream));
 
   if (!source_id) {
     // If there is no source peer, i.e. no one send us any data, zero out dest
@@ -228,7 +292,7 @@ Status RunCollectivePermute(
                                   device_string);
     stream.ThenMemZero(&dest_addr, dest_addr.size());
   }
-  return OkStatus();
+  return absl::OkStatus();
 }
 
 }  // namespace gpu

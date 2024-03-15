@@ -26,13 +26,13 @@ limitations under the License.
 namespace stream_executor {
 namespace gpu {
 
-tsl::Status SYCLFftPlan::Initialize(
+absl::Status SYCLFftPlan::Initialize(
     GpuExecutor *parent, Stream *stream, int rank, uint64_t *elem_count,
     uint64_t *input_embed, uint64 input_stride, uint64 input_distance,
     uint64_t *output_embed, uint64 output_stride, uint64 output_distance,
     fft::Type type, int batch_count, ScratchAllocator *scratch_allocator) {
   if (IsInitialized()) {
-    return tsl::errors::Internal("syFFT is already initialized.");
+    return absl::InternalError("syclFFT is already initialized.");
   }
 
   is_initialized_ = true;
@@ -120,7 +120,21 @@ tsl::Status SYCLFftPlan::Initialize(
         scale_factor, dims_vec, batch_count, mkl_istrides, mkl_ostrides, 0, 0,
         input_distance, output_distance, is_forward, is_real);
   }
-  return tsl::OkStatus();
+  return absl::OkStatus();
+}
+
+absl::Status SYCLFftPlan::UpdateScratchAllocator(
+    Stream *stream, ScratchAllocator *scratch_allocator) {
+  scratch_allocator_ = scratch_allocator;
+
+  if (scratch_size_bytes_ != 0) {
+    auto allocated = scratch_allocator->AllocateBytes(scratch_size_bytes_);
+    if (!allocated.ok() || (scratch_ = allocated.value()) == nullptr) {
+      LOG(ERROR) << "Failed to allocate work area.";
+      return allocated.status();
+    }
+  }
+  return absl::OkStatus();
 }
 
 SYCLFftPlan::~SYCLFftPlan() {}
@@ -131,11 +145,37 @@ std::unique_ptr<fft::Plan> SYCLFft::CreateBatchedPlanWithScratchAllocator(
     uint64_t output_stride, uint64 output_distance, fft::Type type,
     bool in_place_fft, int batch_count, ScratchAllocator *scratch_allocator) {
   auto fft_plan_ptr = std::make_unique<SYCLFftPlan>();
-  tsl::Status status = fft_plan_ptr->Initialize(
+  absl::Status status = fft_plan_ptr->Initialize(
       parent_, stream, rank, elem_count, input_embed, input_stride,
       input_distance, output_embed, output_stride, output_distance, type,
       batch_count, scratch_allocator);
+  if (!status.ok()) {
+    LOG(ERROR) << "Initialize Params: rank: " << rank
+               << " elem_count: " << *elem_count
+               << " input_embed: " << *input_embed
+               << " input_stride: " << input_stride
+               << " input_distance: " << input_distance
+               << " output_embed: " << *output_embed
+               << " output_stride: " << output_stride
+               << " output_distance: " << output_distance
+               << " batch_count: " << batch_count;
+    LOG(ERROR)
+        << "Failed to initialize batched cufft plan with customized allocator: "
+        << status.message();
+    return nullptr;
+  }
   return std::move(fft_plan_ptr);
+}
+
+void SYCLFft::UpdatePlanWithScratchAllocator(
+    Stream *stream, fft::Plan *plan, ScratchAllocator *scratch_allocator) {
+  SYCLFftPlan *sycl_fft_plan = dynamic_cast<SYCLFftPlan *>(plan);
+  absl::Status status =
+      sycl_fft_plan->UpdateScratchAllocator(stream, scratch_allocator);
+  if (!status.ok()) {
+    LOG(FATAL) << "Failed to update custom allocator for syclfft plan: "
+               << status.message();
+  }
 }
 
 bool SYCLFft::DoFft(Stream *stream, fft::Plan *plan,
@@ -485,78 +525,17 @@ bool SYCLFft::DoFft(Stream *stream, fft::Plan *plan,
   fft_event.wait();
   return true;
 }
-
-//*********************************** Not used***********************************//
-void SYCLFft::UpdatePlanWithScratchAllocator(
-    Stream *stream, fft::Plan *plan, ScratchAllocator *scratch_allocator) {}
-//  Creates a 1d FFT plan.
-std::unique_ptr<fft::Plan> SYCLFft::Create1dPlan(Stream *stream, uint64_t num_x,
-                                                 fft::Type type,
-                                                 bool in_place_fft) {
-  auto fft_plan_ptr = std::make_unique<SYCLFftPlan>();
-  return std::move(fft_plan_ptr);
-}
-
-// Creates a 2d FFT plan.
-std::unique_ptr<fft::Plan> SYCLFft::Create2dPlan(Stream *stream, uint64_t num_x,
-                                                 uint64_t num_y, fft::Type type,
-                                                 bool in_place_fft) {
-  auto fft_plan_ptr = std::make_unique<SYCLFftPlan>();
-  return std::move(fft_plan_ptr);
-}
-
-// Creates a 3d FFT plan.
-std::unique_ptr<fft::Plan> SYCLFft::Create3dPlan(Stream *stream, uint64_t num_x,
-                                                 uint64_t num_y, uint64 num_z,
-                                                 fft::Type type,
-                                                 bool in_place_fft) {
-  auto fft_plan_ptr = std::make_unique<SYCLFftPlan>();
-  return std::move(fft_plan_ptr);
-}
-
-std::unique_ptr<fft::Plan> SYCLFft::Create1dPlanWithScratchAllocator(
-    Stream *stream, uint64_t num_x, fft::Type type, bool in_place_fft,
-    ScratchAllocator *scratch_allocator) {
-  auto fft_plan_ptr = std::make_unique<SYCLFftPlan>();
-  return std::move(fft_plan_ptr);
-}
-
-// Creates a 2d FFT plan with scratch allocator.
-std::unique_ptr<fft::Plan> SYCLFft::Create2dPlanWithScratchAllocator(
-    Stream *stream, uint64_t num_x, uint64 num_y, fft::Type type,
-    bool in_place_fft, ScratchAllocator *scratch_allocator) {
-  auto fft_plan_ptr = std::make_unique<SYCLFftPlan>();
-  return std::move(fft_plan_ptr);
-}
-
-// Creates a 3d FFT plan with scratch allocator.
-std::unique_ptr<fft::Plan> SYCLFft::Create3dPlanWithScratchAllocator(
-    Stream *stream, uint64_t num_x, uint64 num_y, uint64 num_z, fft::Type type,
-    bool in_place_fft, ScratchAllocator *scratch_allocator) {
-  auto fft_plan_ptr = std::make_unique<SYCLFftPlan>();
-  return std::move(fft_plan_ptr);
-}
-
-std::unique_ptr<fft::Plan> SYCLFft::CreateBatchedPlan(
-    Stream *stream, int rank, uint64_t *elem_count, uint64 *input_embed,
-    uint64_t input_stride, uint64 input_distance, uint64 *output_embed,
-    uint64_t output_stride, uint64 output_distance, fft::Type type,
-    bool in_place_fft, int batch_count) {
-  auto fft_plan_ptr = std::make_unique<SYCLFftPlan>();
-  return std::move(fft_plan_ptr);
-}
-//*********************************** Not used***********************************//
 }  // namespace gpu
 
 void initialize_syclfft() {
-  tsl::Status status =
+  absl::Status status =
       PluginRegistry::Instance()->RegisterFactory<PluginRegistry::FftFactory>(
-          sycl::kSyclPlatformId, "syFFT",
+          sycl::kSyclPlatformId, "syclFFT",
           [](internal::StreamExecutorInterface *parent) -> fft::FftSupport * {
             gpu::GpuExecutor *sycl_executor =
                 dynamic_cast<gpu::GpuExecutor *>(parent);
             if (sycl_executor == nullptr) {
-              LOG(ERROR) << "Attempting to initialize an instance of the syFFT "
+              LOG(ERROR) << "Attempting to initialize an instance of the syclFFT "
                          << "support library with a non-SYCL StreamExecutor";
               return nullptr;
             }

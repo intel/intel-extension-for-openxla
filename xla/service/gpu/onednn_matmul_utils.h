@@ -38,7 +38,7 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
+absl::Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
                se::DeviceMemoryBase rhs_buffer, se::DeviceMemoryBase add_buffer,
                se::DeviceMemoryBase output_buffer,
                se::DeviceMemoryBase bias_buffer, se::Stream* stream,

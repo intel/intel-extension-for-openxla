@@ -475,7 +475,7 @@ def _create_local_sycl_repository(repository_ctx):
     sycl_defines["%{cxx_builtin_include_directories}"] = to_list_of_strings(cxx_builtin_includes_list)
     sycl_defines["%{extra_no_canonical_prefixes_flags}"] = "\"-fno-canonical-system-headers\""
     sycl_defines["%{unfiltered_compile_flags}"] = to_list_of_strings([
-        "-DGOOGLE_SYCL=1",
+        "-DTENSORFLOW_USE_SYCL=1",
         "-DMKL_ILP64",
         "-fPIC",
     ])
