@@ -34,6 +34,8 @@ limitations under the License.
 #include "xla/stream_executor/integrations/device_host_allocator.h"
 #include "xla/stream_executor/integrations/device_mem_allocator.h"
 #include "xla/stream_executor/integrations/tf_allocator_adapter.h"
+#include "xla/stream_executor/sycl/hw_info.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 
 namespace xla {
 namespace {
@@ -119,6 +121,7 @@ GetStreamExecutorXpuDeviceAllocator(
                                allocator_config.memory_fraction,
                                allocator_config.preallocate));
         bfc_allocator->SetAllocateLimit(limit_byte);
+        if (IsARC()) bfc_allocator->SetArcDevice();
         allocators_and_streams.emplace_back(
             std::move(bfc_allocator),
             ordinal_and_device.second->compute_stream());

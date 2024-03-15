@@ -550,6 +550,7 @@ void GpuExecutor::DeallocateStream(Stream* stream) {
 
 bool GpuExecutor::CreateStreamDependency(Stream* dependent, Stream* other) {
   // For thread safe, event should be thread local.
+#if 0
   auto* other_queue = AsGpuStreamValue(other);
   auto event = other_queue->ext_oneapi_submit_barrier();
 
@@ -559,6 +560,14 @@ bool GpuExecutor::CreateStreamDependency(Stream* dependent, Stream* other) {
 
   return GpuDriver::WaitStreamOnEvent(context_, AsGpuStreamValue(dependent),
                                       &event_wrapper);
+#endif
+
+  if (IsMultipleStreamEnabled()) {
+    AsGpuStreamValue(dependent)->ext_oneapi_submit_barrier(std::move(event));
+  } else {
+    AsGpuStreamValue(dependent)->wait();
+  }
+  return true;
 }
 
 absl::Status GpuExecutor::BlockHostUntilDone(Stream* stream) {

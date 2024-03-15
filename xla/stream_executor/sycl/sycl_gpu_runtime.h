@@ -49,6 +49,9 @@ SYCLError_t SYCLGetDeviceCount(int* count);
 
 SYCLError_t SYCLGetDevice(sycl::device** device, int device_ordinal);
 
+SYCLError_t SYCLGetDeviceOrdinal(const sycl::device& device,
+                                 int* device_ordinal);
+
 SYCLError_t SYCLCreateStream(sycl::device* device_handle, sycl::queue** stream);
 
 SYCLError_t SYCLDestroyStream(sycl::device* device_handle, sycl::queue* stream);

@@ -101,5 +101,88 @@ cc_library(
         "@xla//xla/stream_executor:stream_executor_internal",
         "@xla//xla/stream_executor/integrations:device_mem_allocator",
         "@xla//xla/stream_executor/integrations:tf_allocator_adapter",
+        "//xla/stream_executor/sycl:sycl_gpu_runtime",
+        "//xla/stream_executor/sycl:hw_info",
     ],
 )
+
+cc_library(
+    name = "tf_pjrt_helper",
+    srcs = ["tf_pjrt_helper.cc"],
+    hdrs = ["tf_pjrt_helper.h"],
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":itex_pjrt_buffer",
+        ":tf_xpu_pjrt_client",
+        "//xla/stream_executor/sycl:sycl_gpu_runtime_imp",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings",
+        "@xla//xla/pjrt:pjrt_stream_executor_client",
+        "@xla//xla/service:platform_util",
+        "@xla//xla/service/gpu:gpu_executable_run_options",
+        "@xla//xla/stream_executor:device_mem_allocator",
+        "@xla//xla/stream_executor:device_memory",
+        "@xla//xla/stream_executor:tf_allocator_adapter",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "tf_pjrt_helper_hdrs",
+    hdrs = ["tf_pjrt_helper.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "tf_xpu_pjrt_client",
+    srcs = ["tf_xpu_pjrt_client.cc"],
+    hdrs = [
+        "tf_xpu_pjrt_client.h",
+        "xpu_pjrt_client.h",
+    ],
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":itex_pjrt_buffer",
+        ":se_xpu_client",
+        "//xla/service/gpu:gpu_computation_placer",
+        "//xla/service/gpu:gpu_transfer_manager",
+        "//xla/service/gpu:spir_compiler",
+        "//xla/stream_executor:sycl_platform",
+        "@xla//xla:literal",
+        "@xla//xla:shape_util",
+        "@xla//xla:status",
+        "@xla//xla:statusor",
+        "@xla//xla/client:xla_computation",
+        "@xla//xla/pjrt:pjrt_compiler",
+        "@xla//xla/pjrt:pjrt_stream_executor_client",
+        "@xla//xla/pjrt/c:pjrt_c_api_helpers",
+        "@xla//xla/pjrt/c:pjrt_c_api_tpu_hdrs",
+        "@xla//xla/service:compiler",
+        "@xla//xla/service:computation_placer",
+        "@xla//xla/stream_executor/tpu:c_api_conversions",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "itex_pjrt_buffer",
+    srcs = ["itex_pjrt_buffer.cc"],
+    hdrs = ["itex_pjrt_buffer.h"],
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings",
+        "@xla//xla/pjrt:pjrt_stream_executor_client",
+        "@xla//xla/service:platform_util",
+        "@xla//xla/service/gpu:gpu_executable_run_options",
+        "@xla//xla/stream_executor:device_mem_allocator",
+        "@xla//xla/stream_executor:device_memory",
+        "@xla//xla/stream_executor:tf_allocator_adapter",
+    ],
+    alwayslink = True,
+ )
