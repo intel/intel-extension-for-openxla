@@ -72,6 +72,14 @@ template <>
 struct PrimitiveTypeToXetlaNative<BF16> {
   using type = ::gpu::xetla::bf16;
 };
+template <>
+struct PrimitiveTypeToXetlaNative<S8> {
+  using type = int8_t;
+};
+template <>
+struct PrimitiveTypeToXetlaNative<S32> {
+  using type = int32_t;
+};
 
 /// Return oneDNN data type (memory::data_type) for input type T
 ///
@@ -98,22 +106,12 @@ inline dnnl::memory::data_type OneDnnType<sycl::half>() {
 }
 
 template <>
-inline dnnl::memory::data_type OneDnnType<tsl::quint8>() {
-  return dnnl::memory::data_type::u8;
-}
-
-template <>
-inline dnnl::memory::data_type OneDnnType<tsl::uint8>() {
-  return dnnl::memory::data_type::u8;
-}
-
-template <>
-inline dnnl::memory::data_type OneDnnType<tsl::qint8>() {
+inline dnnl::memory::data_type OneDnnType<int8_t>() {
   return dnnl::memory::data_type::s8;
 }
 
 template <>
-inline dnnl::memory::data_type OneDnnType<tsl::qint32>() {
+inline dnnl::memory::data_type OneDnnType<int32_t>() {
   return dnnl::memory::data_type::s32;
 }
 
@@ -261,7 +259,9 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
 }
 
 template <typename InputT>
-std::enable_if_t<std::is_same_v<InputT, float>, absl::StatusOr<bool>>
+std::enable_if_t<!std::is_same_v<InputT, ::gpu::xetla::bf16> &&
+                     !std::is_same_v<InputT, sycl::half>,
+                 absl::StatusOr<bool>>
 RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
              const MatrixDescriptor& rhs, const MatrixDescriptor& c,
              const MatrixDescriptor& out, se::DeviceMemoryBase bias,
@@ -345,7 +345,9 @@ absl::Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
   bool xetla_support = flag && IsXetlaHardwareSupport() && (batch_size == 1) &&
                        (fabs(alpha - 1.0f) < 1e-6);
   if (xetla_support &&
-      (!std::is_same_v<InputT, float> && std::is_same_v<InputT, OutputT>)) {
+      ((std::is_same_v<InputT, sycl::half> ||
+        std::is_same_v<InputT, ::gpu::xetla::bf16>)&&std::is_same_v<InputT,
+                                                                    OutputT>)) {
     TF_ASSIGN_OR_RETURN(bool fallback,
                         RunXetlaGemm<InputT>(stream_handle, lhs, rhs, c, output,
                                              bias, epilogue, beta));
@@ -466,13 +468,11 @@ void MakeBlasGemmCompatible(MatrixDescriptor& lhs, MatrixDescriptor& rhs,
 }
 }  // namespace
 
-absl::Status RunGemm(const GemmConfig& config,
-                     se::DeviceMemoryBase lhs_buffer,
+absl::Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
                      se::DeviceMemoryBase rhs_buffer,
                      se::DeviceMemoryBase c_buffer,
                      se::DeviceMemoryBase output_buffer,
-                     se::DeviceMemoryBase bias_buffer,
-                     se::Stream* stream,
+                     se::DeviceMemoryBase bias_buffer, se::Stream* stream,
                      se::gpu::BlasLt::Epilogue epilogue,
                      se::ScratchAllocator* scratch_allocator) {
   VLOG(2) << "Executing a GemmThunk";
@@ -509,6 +509,7 @@ absl::Status RunGemm(const GemmConfig& config,
   TYPED_GEMM(BF16, BF16, F32)
   TYPED_GEMM(F16, F16, F32)
   TYPED_GEMM(F32, F32, F32)
+  TYPED_GEMM(S8, S8, S32)
 
 #undef TYPED_GEMM
   return Internal(
