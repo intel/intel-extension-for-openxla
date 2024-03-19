@@ -15,7 +15,7 @@
 
 class VersionClass(object):
     def __init__(self):
-        self.version = '0.2.1'
+        self.version = '0.3.0'
         self.hash = "@VERSION_HASH@"
 
     def get_version(self):

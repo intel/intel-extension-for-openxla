@@ -331,6 +331,9 @@ void stream_wait_streamlist(se::gpu::GpuStreamHandle stream,
                             const std::vector<T>& p) {
   std::vector<sycl::event> event_list;
   for (int i = 1; i < p.size(); i++) {
+    // FIXME(intel): WA to avoid incorrect dependency after Toolkit 2024.1.
+    // Remove this wait once use get last event optimization.
+    p[i].stream->wait();
     sycl::event event = p[i].stream->ext_oneapi_submit_barrier();
     event_list.push_back(event);
   }
@@ -340,6 +343,9 @@ void stream_wait_streamlist(se::gpu::GpuStreamHandle stream,
 template <class T>
 void streamlist_wait_stream(se::gpu::GpuStreamHandle stream,
                             const std::vector<T>& p) {
+  // FIXME(intel): WA to avoid incorrect dependency after Toolkit 2024.1.
+  // Remove this wait once use get last event optimization.
+  stream->wait();
   sycl::event event = stream->ext_oneapi_submit_barrier();
 
   const std::vector<sycl::event> event_list{event};
