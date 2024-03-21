@@ -1,0 +1,23 @@
+diff --git a/t5x/partitioning.py b/t5x/partitioning.py
+index 20b0abb..b19ecc1 100644
+--- a/t5x/partitioning.py
++++ b/t5x/partitioning.py
+@@ -78,13 +78,13 @@ def bounds_from_last_device(last_device: jax.Device) -> HardwareMesh:
+   # Must be passed the device at the highest-coordinate corner of the
+   # relevant mesh, which is a requirement we know is satisfied by the last
+   # device in jax.devices().
+-  if hasattr(last_device, 'coords'):
+-    x, y, z = last_device.coords
+-    return x + 1, y + 1, z + 1, last_device.core_on_chip + 1
+-  else:
++  # if hasattr(last_device, 'coords'):
++  #   x, y, z = last_device.coords
++  #   return x + 1, y + 1, z + 1, last_device.core_on_chip + 1
++  # else:
+     # On non-TPU platforms, the "mesh" is hosts x devices per host in order
+     # to take advantage of faster within-host interconnect.
+-    return jax.host_count(), jax.local_device_count()
++  return jax.host_count(), jax.local_device_count()
+
+
+ def get_coords(device: jax.Device) -> HardwareMesh:
