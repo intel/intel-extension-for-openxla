@@ -36,7 +36,7 @@ Verified Hardware Platforms:
   * Intel® Data Center GPU Flex Series
 * Ubuntu 22.04, SUSE Linux Enterprise Server(SLES) 15 SP4
   * Intel® Data Center GPU Max Series
-* Intel® oneAPI Base Toolkit 2024.0
+* Intel® oneAPI Base Toolkit 2024.1
 * Jax/Jaxlib 0.4.24
 * Python 3.9-3.11
 * pip 19.0 or later (requires manylinux2014 support)
@@ -56,8 +56,18 @@ Need to install components of Intel® oneAPI Base Toolkit:
 
 * Intel® oneAPI DPC++ Compiler
 * Intel® oneAPI Math Kernel Library (oneMKL)
-* Intel® oneAPI Threading Building Blocks (TBB), dependency of DPC++ Compiler.
 
+```bash
+$ wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/fdc7a2bc-b7a8-47eb-8876-de6201297144/l_BaseKit_p_2024.1.0.596.sh
+# 2 components are necessary: DPC++/C++ Compiler and oneMKL
+sudo sh l_BaseKit_p_2024.1.0.596.sh
+
+# Source OneAPI env
+source /opt/intel/oneapi/compiler/2024.1/env/vars.sh
+source /opt/intel/oneapi/mkl/2024.1/env/vars.sh
+```
+
+**Backup**: Recommend to rollback to **Toolkit 2024.0** if need collective feature. See [Release Notes](https://github.com/intel-innersource/frameworks.ai.intel-extension-for-openxla.intel-extension-for-openxla/releases) for more details.
 ```bash
 wget https://registrationcenter-download.intel.com/akdlm//IRC_NAS/20f4e6a1-6b0b-4752-b8c1-e5eacba10e01/l_BaseKit_p_2024.0.0.49564.sh
 # 2 components are necessary: DPC++/C++ Compiler and oneMKL
@@ -90,7 +100,7 @@ git clone https://github.com/intel/intel-extension-for-openxla.git
 ./configure        # Choose Yes for all.
 bazel build //xla/tools/pip_package:build_pip_package
 ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-pip install intel_extension_for_openxla-0.2.0-cp39-cp39-linux_x86_64.whl
+pip install intel_extension_for_openxla-0.3.0-cp39-cp39-linux_x86_64.whl
 ```
 
 **Aditional Build Option**:
