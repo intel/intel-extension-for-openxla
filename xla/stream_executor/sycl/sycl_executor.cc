@@ -34,24 +34,25 @@ limitations under the License.
 #include "absl/strings/string_view.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
+#include "tsl/platform/fingerprint.h"
 #include "tsl/platform/numbers.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/util/env_var.h"
-#include "tsl/platform/fingerprint.h"
 // #include "xla/stream_executor/kernel_cache_config.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/platform/initialize.h"
 // #include "xla/stream_executor/platform/logging.h"
+#include "xla/stream_executor/gpu/gpu_command_buffer.h"
 #include "xla/stream_executor/platform/port.h"
+#include "xla/stream_executor/plugin_registry.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor_internal.h"
 #include "xla/stream_executor/stream_executor_pimpl.h"
+#include "xla/stream_executor/sycl/hw_info.h"
 #include "xla/stream_executor/sycl/sycl_event.h"
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
-#include "xla/stream_executor/plugin_registry.h"
-#include "xla/stream_executor/gpu/gpu_command_buffer.h"
 
 namespace stream_executor {
 namespace gpu {
@@ -685,6 +686,24 @@ void* GpuExecutor::platform_specific_context() { return context_; }
 
 GpuContext* GpuExecutor::gpu_context() { return context_; }
 
+int fpus_per_core(const GpuDeviceHandle& device) {
+  int eu_count_per_slice =
+      device->template get_info<sycl::ext::intel::info::device::gpu_eu_count>();
+  int core_count = GpuDriver::GetMultiprocessorCount(device).value();
+  int eu_count_per_core = eu_count_per_slice / core_count;
+
+  // operations/EU/clk
+  int n = 0;
+  if (IsXeHPC(device)) {
+    n = 16;
+  } else if (IsXeHPG(device)) {
+    n = 8;
+  }
+  assert(n != 0);
+
+  return eu_count_per_core * n;
+}
+
 absl::StatusOr<std::unique_ptr<DeviceDescription>>
 GpuExecutor::CreateDeviceDescription(int device_ordinal) {
   GpuDeviceHandle device;
@@ -696,7 +715,7 @@ GpuExecutor::CreateDeviceDescription(int device_ordinal) {
       device->template get_info<sycl::info::device::max_work_group_size>();
   builder.set_threads_per_block_limit(max_workgroup_size);
 
-  int clock_ghz =
+  float clock_ghz =
       device->template get_info<sycl::info::device::max_clock_frequency>() /
       1000.;
   builder.set_clock_rate_ghz(clock_ghz);
@@ -737,9 +756,7 @@ GpuExecutor::CreateDeviceDescription(int device_ordinal) {
       GpuDriver::GetMaxSharedMemoryPerBlock(device).value());
   int core_count = GpuDriver::GetMultiprocessorCount(device).value();
   builder.set_core_count(core_count);
-  int eu_count =
-      device->template get_info<sycl::ext::intel::info::device::gpu_eu_count>();
-  builder.set_fpus_per_core(eu_count);
+  builder.set_fpus_per_core(fpus_per_core(device));
   builder.set_threads_per_core_limit(max_workgroup_size);
   builder.set_threads_per_warp(32);
 

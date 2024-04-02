@@ -187,6 +187,7 @@ cc_library(
     srcs = ["sycl_executor.cc"],
     hdrs = ["sycl_executor.h"],
     deps = [
+        ":hw_info",
         ":sycl_driver",
         ":sycl_event",
         ":sycl_kernel",

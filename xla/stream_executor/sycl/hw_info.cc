@@ -17,6 +17,9 @@ limitations under the License.
 
 #include <string>
 
+#define XE_MASK 0xff0
+#define ARC_MASK 0xff00
+
 const int32_t XeHPC_id = 0xbd0;
 const int32_t XeHPC_id_2 = 0xb60;
 
@@ -35,7 +38,7 @@ bool IsXeHPC(const sycl::device* device_ptr) {
         if (device.is_gpu()) {
           auto id =
               device.get_info<sycl::ext::intel::info::device::device_id>();
-          if ((id & 0xff0) == XeHPC_id || (id & 0xff0) == XeHPC_id_2) {
+          if ((id & XE_MASK) == XeHPC_id || (id & XE_MASK) == XeHPC_id_2) {
             return true;
           }
         }
@@ -43,7 +46,7 @@ bool IsXeHPC(const sycl::device* device_ptr) {
     }
   } else {
     auto id = device_ptr->get_info<sycl::ext::intel::info::device::device_id>();
-    if ((id & 0xff0) == XeHPC_id || (id & 0xff0) == XeHPC_id_2) {
+    if ((id & XE_MASK) == XeHPC_id || (id & XE_MASK) == XeHPC_id_2) {
       return true;
     }
   }
@@ -89,7 +92,9 @@ bool IsXetlaHardwareSupport() {
   return flag;
 }
 
-bool IsARC(sycl::device* device_ptr) {
+bool IsXeHPG(const sycl::device* device_ptr) { return IsARC(device_ptr); }
+
+bool IsARC(const sycl::device* device_ptr) {
   if (device_ptr == nullptr) {
     auto platform_list = sycl::platform::get_platforms();
     for (const auto& platform : platform_list) {
@@ -98,7 +103,7 @@ bool IsARC(sycl::device* device_ptr) {
         if (device.is_gpu()) {
           auto id =
               device.get_info<sycl::ext::intel::info::device::device_id>();
-          if ((id & 0xff00) == ARC_id) {
+          if ((id & ARC_MASK) == ARC_id) {
             return true;
           }
         }
@@ -106,7 +111,7 @@ bool IsARC(sycl::device* device_ptr) {
     }
   } else {
     auto id = device_ptr->get_info<sycl::ext::intel::info::device::device_id>();
-    if ((id & 0xff00) == ARC_id) {
+    if ((id & ARC_MASK) == ARC_id) {
       return true;
     }
   }
@@ -121,8 +126,8 @@ uint64_t GetMaxAllocateLimitByte(sycl::device* device_ptr) {
       auto device_list = platform.get_devices();
       for (const auto& device : device_list) {
         if (device.is_gpu()) {
-          limit = std::min(limit,
-                           device.get_info<sycl::info::device::max_mem_alloc_size>());
+          limit = std::min(
+              limit, device.get_info<sycl::info::device::max_mem_alloc_size>());
         }
       }
     }

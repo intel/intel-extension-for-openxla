@@ -20,11 +20,13 @@ limitations under the License.
 
 bool IsXeHPC(const sycl::device* device_ptr = nullptr);
 
+bool IsXeHPG(const sycl::device* device_ptr = nullptr);
+
 bool HasXMX(const sycl::device* device_ptr = nullptr);
 
 bool IsXetlaHardwareSupport();
 
-bool IsARC(sycl::device* device_ptr = nullptr);
+bool IsARC(const sycl::device* device_ptr = nullptr);
 
 uint64_t GetMaxAllocateLimitByte(sycl::device* device_ptr = nullptr);
 #endif  // XLA_STREAM_EXECUTOR_SYCL_HW_INFO_H_

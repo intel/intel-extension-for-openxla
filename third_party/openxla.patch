@@ -3656,10 +3656,34 @@ index 2efbdd386..1988b3a46 100644
  namespace gpu {
  
 diff --git a/xla/service/gpu/model/gpu_performance_model.cc b/xla/service/gpu/model/gpu_performance_model.cc
-index d03686306..a6940de0a 100644
+index d03686306..3a6bf8c15 100644
 --- a/xla/service/gpu/model/gpu_performance_model.cc
 +++ b/xla/service/gpu/model/gpu_performance_model.cc
-@@ -263,7 +263,12 @@ LaunchDimensions EstimateFusionLaunchDimensions(
+@@ -55,7 +55,11 @@ namespace gpu {
+ namespace {
+ 
+ // Estimated values in the absence of easy ways to query them.
++#if TENSORFLOW_USE_SYCL
++static constexpr absl::Duration kKernelLaunchOverhead = absl::Microseconds(5);
++#else
+ static constexpr absl::Duration kKernelLaunchOverhead = absl::Microseconds(1);
++#endif
+ static constexpr absl::Duration kNcclKernelLaunchOverhead =
+     absl::Microseconds(5);
+ static constexpr float kL2CacheSpeedup = 2.5;
+@@ -108,7 +112,11 @@ int GetCoalescingWasteFactor(PrimitiveType element_type) {
+ // (1830 MHz) to saturate the memory bandwidth (3.35 TB/s).
+ float AdjustBandwidth(const se::DeviceDescription& gpu_device_info,
+                       float bandwidth, int64_t num_blocks) {
++#if TENSORFLOW_USE_SYCL
++  float per_block_bandwidth = gpu_device_info.clock_rate_ghz() * 1.0e9f * 64;
++#else
+   float per_block_bandwidth = gpu_device_info.clock_rate_ghz() * 1.0e9f * 32;
++#endif
+   float max_bandwidth = num_blocks * per_block_bandwidth;
+ 
+   return std::min(bandwidth, max_bandwidth);
+@@ -263,7 +271,12 @@ LaunchDimensions EstimateFusionLaunchDimensions(
        return kernel_emitter->launch_dimensions();
      }
    }

@@ -828,15 +828,13 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
 }
 
 /* static */ absl::Status GpuDriver::GetGridLimits(int* x, int* y, int* z,
-                                                  sycl::device* device) {
-  BlockDim block_dim_limit;
-  *x = device->template get_info<
-      sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
-  *y = device->template get_info<
-      sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
-  *z = device->template get_info<
-      sycl::ext::oneapi::experimental::info::device::max_work_groups<1>>();
-  return absl::OkStatus();
+                                                   sycl::device* device) {
+  sycl::id<3> groups = device->template get_info<
+      sycl::ext::oneapi::experimental::info::device::max_work_groups<3>>();
+  *x = groups[2];
+  *y = groups[1];
+  *z = groups[0];
+  return tsl::OkStatus();
 }
 
 /* static */ absl::StatusOr<int32_t> GpuDriver::GetDriverVersion() {
