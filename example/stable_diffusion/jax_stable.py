@@ -60,14 +60,18 @@ prng_seed = jax.random.PRNGKey(0)
 
 num_samples = jax.device_count()
 prompt = num_samples * [prompt]
-init_image = num_samples * [init_image]
-prompt_ids, processed_image = pipeline.prepare_inputs(prompt, init_image)
+
+if args.pipeline_mode == "img2img":    
+    init_image = num_samples * [init_image]
+    prompt_ids, processed_image = pipeline.prepare_inputs(prompt, init_image)
+    processed_image = shard(processed_image)
+else:
+    prompt_ids = pipeline.prepare_inputs(prompt)
 
 # shard inputs and rng
 params = replicate(params)
 prng_seed = jax.random.split(prng_seed, jax.device_count())
 prompt_ids = shard(prompt_ids)
-processed_image = shard(processed_image)
 
 def elapsed_time(num_iter=10, num_inference_steps=20):
     # warmup
