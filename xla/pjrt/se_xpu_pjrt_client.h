@@ -23,7 +23,6 @@ limitations under the License.
 #include "xla/pjrt/gpu/gpu_helpers.h"
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/statusor.h"
-#include "xla/stream_executor/sycl/hw_info.h"
 
 namespace stream_executor {
 

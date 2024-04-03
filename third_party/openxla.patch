@@ -398,15 +398,11 @@ index fa02d95b4..405cee4be 100644
              "//third_party/llvm:build.patch",
              "//third_party/llvm:mathextras.patch",
 diff --git a/third_party/tsl/tsl/framework/bfc_allocator.cc b/third_party/tsl/tsl/framework/bfc_allocator.cc
-index e19c0018d..6bbeb5878 100644
+index e19c0018d..79a8ea7c8 100644
 --- a/third_party/tsl/tsl/framework/bfc_allocator.cc
 +++ b/third_party/tsl/tsl/framework/bfc_allocator.cc
-@@ -133,26 +133,23 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
- 
-   // Try allocating.
+@@ -135,24 +135,19 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
    size_t bytes = std::min(curr_region_allocation_bytes_, available_bytes);
-+  // SYCL: set limit
-+  bytes = std::min(bytes, limit_byte_);
    size_t bytes_received;
    void* mem_addr = sub_allocator_->Alloc(alignment, bytes, &bytes_received);
 -  if (mem_addr == nullptr && !started_backpedal_) {
@@ -435,29 +431,10 @@ index e19c0018d..6bbeb5878 100644
      // Increase the region size of the next required allocation.
      curr_region_allocation_bytes_ *= 2;
 diff --git a/third_party/tsl/tsl/framework/bfc_allocator.h b/third_party/tsl/tsl/framework/bfc_allocator.h
-index 47619856a..f82348a79 100644
+index 47619856a..76921c5f0 100644
 --- a/third_party/tsl/tsl/framework/bfc_allocator.h
 +++ b/third_party/tsl/tsl/framework/bfc_allocator.h
-@@ -97,6 +97,9 @@ class BFCAllocator : public Allocator {
- 
-   bool ClearStats() override;
- 
-+  // SYCL: set limit
-+  void SetAllocateLimit(uint64_t limit_byte) { limit_byte_ = limit_byte; }
-+
-   void SetTimingCounter(SharedCounter* sc) { timing_counter_ = sc; }
- 
-   void SetSafeFrontier(uint64 count) override;
-@@ -108,6 +111,8 @@ class BFCAllocator : public Allocator {
-   MemoryDump RecordMemoryMap();
- 
-  private:
-+  // SYCL: set limit
-+  uint64_t limit_byte_ = std::numeric_limits<uint64_t>::max();
-   struct Bin;
- 
-   void* AllocateRawInternal(size_t alignment, size_t num_bytes,
-@@ -579,10 +584,6 @@ class BFCAllocator : public Allocator {
+@@ -579,10 +579,6 @@ class BFCAllocator : public Allocator {
    // The size of the current region allocation.
    size_t curr_region_allocation_bytes_;
  
@@ -562,7 +539,7 @@ index d77ebf6bd..000ad13fb 100644
  
  }  // namespace xla
 diff --git a/xla/pjrt/gpu/se_gpu_pjrt_client.cc b/xla/pjrt/gpu/se_gpu_pjrt_client.cc
-index 20ecb49c0..4f3eed474 100644
+index 20ecb49c0..aadff0e29 100644
 --- a/xla/pjrt/gpu/se_gpu_pjrt_client.cc
 +++ b/xla/pjrt/gpu/se_gpu_pjrt_client.cc
 @@ -81,6 +81,8 @@ limitations under the License.
@@ -583,36 +560,7 @@ index 20ecb49c0..4f3eed474 100644
  #endif  // TENSORFLOW_USE_ROCM && defined(TF_ROCM_VERSION)
  }
  
-@@ -753,12 +755,28 @@ GetStreamExecutorGpuDeviceAllocator(
-     case GpuAllocatorConfig::Kind::kDefault:
-     case GpuAllocatorConfig::Kind::kBFC: {
-       LOG(INFO) << "Using BFC allocator.";
-+      // SYCL: set allocate limit
-+      int64_t default_limit_MB = -1;
-+      TF_CHECK_OK(tsl::ReadInt64FromEnvVar(
-+          "XLA_LIMIT_MEMORY_SIZE_IN_MB", default_limit_MB, &default_limit_MB));
-+      if (IsARC() && default_limit_MB > 4095) {
-+        default_limit_MB = 4095;
-+        LOG(WARNING)
-+            << "ARC or FLEX series allocation size should be less than 4096MB. "
-+            << "Set as default 4095MB.";
-+      }
-+      uint64_t limit_byte =
-+          default_limit_MB > 0
-+              ? std::min(static_cast<uint64_t>(default_limit_MB * 1024 * 1024),
-+                         GetMaxAllocateLimitByte())
-+              : GetMaxAllocateLimitByte();
-       for (const auto& ordinal_and_device : addressable_devices) {
-         TF_ASSIGN_OR_RETURN(
-             auto bfc_allocator,
-             CreateBFCAllocator(ordinal_and_device.second->executor(),
-                                allocator_config.memory_fraction,
-                                allocator_config.preallocate));
-+        bfc_allocator->SetAllocateLimit(limit_byte);
-         allocators.emplace_back(std::move(bfc_allocator),
-                                 ordinal_and_device.second->compute_stream(),
-                                 /*memory_space=*/0);
-@@ -951,6 +969,8 @@ StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorGpuClient(
+@@ -951,6 +953,8 @@ StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorGpuClient(
      const GpuClientOptions& options) {
  #if TENSORFLOW_USE_ROCM
    auto pjrt_platform_name = xla::RocmName();

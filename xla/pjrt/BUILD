@@ -69,7 +69,6 @@ cc_library(
     srcs = ["se_xpu_pjrt_client.cc"],
     hdrs = ["se_xpu_pjrt_client.h"],
     deps = [
-        "//xla/stream_executor/sycl:hw_info",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:inlined_vector",
