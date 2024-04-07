@@ -211,6 +211,13 @@ void XetlaGemmKernel<ComputeType>::dispatch(se::gpu::GpuStreamHandle handle) {
                         reinterpret_cast<ComputeType*>(b_->data.opaque()), m_,
                         n_, k_, alpha_, epilogue_params_[0]);
     }
+  } else if (num_epilogues_ == 1 && epilogue_types_[0] == GELU) {
+    CHECK(alpha_ == 1.0f);
+    hgemm_gelu<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
+               true>(q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
+                     reinterpret_cast<ComputeType*>(a_->data.opaque()),
+                     reinterpret_cast<ComputeType*>(b_->data.opaque()), m_, n_,
+                     k_);
   } else if (num_epilogues_ == 1 && epilogue_types_[0] == BIAS) {
     CHECK(alpha_ == 1.0f);
     hgemm_bias<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,

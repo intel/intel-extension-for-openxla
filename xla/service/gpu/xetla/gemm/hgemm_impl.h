@@ -44,6 +44,10 @@ class HGEMM_BIAS_KERNEL;
 template <typename scalar_t, int WG_M = 8, int WG_N = 32, int SG_M = 8,
           int SG_N = 16, int SG_K = 64, int SLM_KS = 8, int L3_KS = 1,
           int SYNC_FREQ = 1, int STAGES = 3, bool B_ROW_MAJOR = true>
+class HGEMM_GELU_KERNEL;
+template <typename scalar_t, int WG_M = 8, int WG_N = 32, int SG_M = 8,
+          int SG_N = 16, int SG_K = 64, int SLM_KS = 8, int L3_KS = 1,
+          int SYNC_FREQ = 1, int STAGES = 3, bool B_ROW_MAJOR = true>
 class HGEMM_BIAS_GELU_KERNEL;
 template <typename scalar_t, int WG_M = 8, int WG_N = 32, int SG_M = 8,
           int SG_N = 16, int SG_K = 64, int SLM_KS = 8, int L3_KS = 1,
@@ -280,6 +284,54 @@ inline void hgemm_bias(sycl::queue& queue, scalar_t* out, const scalar_t* a,
               m, k, n, const_cast<scalar_t*>(a), lda, const_cast<scalar_t*>(b),
               ldb, out, ldc,
               {{{const_cast<scalar_t*>(bias), {n, 1, n}, bias_factor}}});
+          slm_barrier_init<gemm_op_t>();
+          gemm_op_t gemm_op;
+          gemm_op(ei, arg);
+        });
+  };
+  DPCPP_Q_SUBMIT(queue, cgf);
+}
+
+template <typename scalar_t, int WG_M, int WG_N, int SG_M, int SG_N, int SG_K,
+          int SLM_KS, int L3_KS = 1, int SYNC_FREQ = 1, int STAGES = 3,
+          bool B_ROW_MAJOR = true>
+inline void hgemm_gelu(sycl::queue& queue, scalar_t* out, const scalar_t* a,
+                       const scalar_t* b, const int m, const int n,
+                       const int k) {
+  HGEMM_DEFINITIONS
+  auto cgf = DPCPP_Q_CGF(cgh) {
+    cgh.parallel_for<
+        HGEMM_GELU_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, L3_KS,
+                          SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
+        NDRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
+          xetla_exec_item<3> ei(item);
+          using data_type_b = scalar_t;
+          using data_type_a = scalar_t;
+          using data_type_c = scalar_t;
+          using data_type_bias = scalar_t;
+          using data_type_acc = float;
+          static constexpr uint32_t periodic_sync_interval = SYNC_FREQ;
+          static constexpr uint32_t prefetch_distance = STAGES;
+          using tile_shape = group::tile_shape_t<WG_N, WG_M, SG_N, SG_M>;
+          using brgemm_t = typename group::brgemm_selector_t<
+              data_type_a, data_type_b, layout_a, layout_b, mem_space::global,
+              mem_space::global, 8, 8, data_type_acc, tile_shape, SG_K,
+              mma_engine::xmx, gpu_arch::Xe, prefetch_distance,
+              periodic_sync_interval>::brgemm;
+          using epilogue_t = group::epilogue_t<
+              xetla::group::epilogue_policy_tile_op<
+                  xetla::subgroup::chained_tile_op_t<
+                      epilogue_impl::bias_op_t<data_type_bias>>,
+                  gpu_arch::Xe>,
+              tile_shape,
+              mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>>;
+          using gemm_op_t = gpu::xetla::kernel::gemm_t<
+              gpu::xetla::kernel::dispatch_policy_kslicing<L3_KS, SLM_KS,
+                                                           gpu_arch::Xe>,
+              brgemm_t, epilogue_t>;
+          typename gemm_op_t::arguments_t arg(m, k, n, const_cast<scalar_t*>(a),
+                                              lda, const_cast<scalar_t*>(b),
+                                              ldb, out, ldc, {{{}}});
           slm_barrier_init<gemm_op_t>();
           gemm_op_t gemm_op;
           gemm_op(ei, arg);
