@@ -2863,6 +2863,36 @@ index c69d218c6..a0c242f94 100644
                        DataLayout::kBatchYXDepth);
  
    // Integer convolution must use NHWC or NCHW_VECT_C.
+diff --git a/xla/service/gpu/gpu_sanitize_constant_names.cc b/xla/service/gpu/gpu_sanitize_constant_names.cc
+index c8ef2d60b..69fdfd096 100644
+--- a/xla/service/gpu/gpu_sanitize_constant_names.cc
++++ b/xla/service/gpu/gpu_sanitize_constant_names.cc
+@@ -17,11 +17,11 @@ limitations under the License.
+
+ #include <string>
+
++#include "tsl/platform/logging.h"
++#include "tsl/platform/status.h"
+ #include "xla/hlo/ir/hlo_instruction.h"
+ #include "xla/hlo/ir/hlo_opcode.h"
+ #include "xla/service/llvm_ir/buffer_assignment_util.h"
+-#include "tsl/platform/logging.h"
+-#include "tsl/platform/status.h"
+
+ namespace xla {
+
+@@ -39,8 +39,9 @@ absl::StatusOr<bool> GpuSanitizeConstantNames::Run(
+       if (instr->opcode() == HloOpcode::kConstant) {
+         continue;
+       }
+-
+-      instr->UniquifyName(&instr_name_uniquer);
++      // Record the non-constant HLO instruction name in uniquer, and keep
++      // original instruction name unchanged.
++      instr_name_uniquer.GetUniqueName(instr->name());
+     }
+   }
+
 diff --git a/xla/service/gpu/gpu_transfer_manager.cc b/xla/service/gpu/gpu_transfer_manager.cc
 index 4ef4ece8d..1ca8d7352 100644
 --- a/xla/service/gpu/gpu_transfer_manager.cc
