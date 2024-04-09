@@ -37,6 +37,7 @@ enum SYCLError_t {
   SYCL_ERROR_INVALID_POINTER,
   SYCL_ERROR_INVALID_STREAM,
   SYCL_ERROR_DESTROY_DEFAULT_STREAM,
+  SYCL_ERROR_ZE_ERROR,
 };
 
 bool IsMultipleStreamEnabled();
@@ -48,6 +49,9 @@ SYCLError_t SYCLGetContext(sycl::context** context);
 SYCLError_t SYCLGetDeviceCount(int* count);
 
 SYCLError_t SYCLGetDevice(sycl::device** device, int device_ordinal);
+
+SYCLError_t SYCLGetFrequency(sycl::device* device_handle, uint64_t* freq,
+                             uint64_t* mask);
 
 SYCLError_t SYCLCreateStream(sycl::device* device_handle, sycl::queue** stream);
 

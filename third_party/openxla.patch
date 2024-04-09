@@ -717,7 +717,7 @@ index 649729d87..873b1ee51 100644
  
    // Check for NaN, since it's a special case.
 diff --git a/xla/service/gpu/BUILD b/xla/service/gpu/BUILD
-index 3812f8ece..e4e7dbfe2 100644
+index 3812f8ece..c70787c09 100644
 --- a/xla/service/gpu/BUILD
 +++ b/xla/service/gpu/BUILD
 @@ -36,6 +36,7 @@ load(
@@ -990,7 +990,7 @@ index 3812f8ece..e4e7dbfe2 100644
          "//xla/stream_executor/rocm:rocm_platform_id",
          "@tsl//tsl/platform:numbers",
      ]) + xla_export_hlo_deps() + [
-@@ -3759,6 +3792,60 @@ xla_cc_test(
+@@ -3759,6 +3792,61 @@ xla_cc_test(
      ],
  )
  
@@ -1003,6 +1003,7 @@ index 3812f8ece..e4e7dbfe2 100644
 +        "spir_compiler.h",
 +    ],
 +    deps = [
++        "@intel_extension_for_openxla//xla/service/gpu:gemm_impl_picker",
 +        "@intel_extension_for_openxla//xla/service/gpu:redundant_convert_mover",
 +        "@intel_extension_for_openxla//xla/stream_executor/sycl:hw_info",
 +        "@intel_extension_for_openxla//xla/stream_executor/sycl:sycl_platform_id",
@@ -4621,10 +4622,10 @@ index e7eaf3a35..dd3d72935 100644
    int64_t algorithm_idx_;
 diff --git a/xla/service/gpu/spir_compiler.cc b/xla/service/gpu/spir_compiler.cc
 new file mode 100644
-index 000000000..efc3aa744
+index 000000000..243beb3a1
 --- /dev/null
 +++ b/xla/service/gpu/spir_compiler.cc
-@@ -0,0 +1,273 @@
+@@ -0,0 +1,280 @@
 +/* Copyright (c) 2023 Intel Corporation
 +
 +Licensed under the Apache License, Version 2.0 (the "License");
@@ -4667,6 +4668,7 @@ index 000000000..efc3aa744
 +#include "xla/service/gpu/cudnn_fused_conv_rewriter.h"
 +#include "xla/service/gpu/cudnn_fused_mha_rewriter.h"
 +#include "xla/service/gpu/cusolver_rewriter.h"
++#include "xla/service/gpu/gemm_impl_picker.h"
 +#include "xla/service/gpu/gpu_conv_padding_legalization.h"
 +#include "xla/service/gpu/gpu_conv_rewriter.h"
 +#include "xla/service/gpu/gpu_layout_assignment.h"
@@ -4857,6 +4859,12 @@ index 000000000..efc3aa744
 +  return absl::OkStatus();
 +}
 +
++absl::Status SPIRCompiler::AddConvAndGemmAutotuningPasses(
++    HloPassPipeline* pipeline, HloModule* hlo_module,
++    AutotuneConfig& autotune_config, tsl::thread::ThreadPool* thread_pool) {
++  pipeline->AddPass<GemmAlgorithmPicker>(autotune_config);
++  return OkStatus();
++}
 +
 +SPIRCompiler::SPIRCompiler()
 +    : GpuCompiler(stream_executor::sycl::kSyclPlatformId, spir::TargetTriple(),
@@ -4900,10 +4908,10 @@ index 000000000..efc3aa744
 +}  // namespace xla
 diff --git a/xla/service/gpu/spir_compiler.h b/xla/service/gpu/spir_compiler.h
 new file mode 100644
-index 000000000..c4ceec8e3
+index 000000000..f620a7904
 --- /dev/null
 +++ b/xla/service/gpu/spir_compiler.h
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,70 @@
 +/* Copyright (c) 2023 Intel Corporation
 +
 +Licensed under the Apache License, Version 2.0 (the "License");
@@ -4949,6 +4957,11 @@ index 000000000..c4ceec8e3
 +  absl::Status OptimizeHloPostLayoutAssignment(
 +      HloModule* hlo_module, se::StreamExecutor* stream_exec,
 +      const CompileOptions& options, const TargetConfig& gpu_target_config,
++      tsl::thread::ThreadPool* thread_pool) override;
++
++  absl::Status AddConvAndGemmAutotuningPasses(
++      HloPassPipeline* pipeline, HloModule* hlo_module,
++      AutotuneConfig& autotune_config,
 +      tsl::thread::ThreadPool* thread_pool) override;
 +
 +  HloDataflowAnalysis::CanShareBuffer GetCanShareBuffer() const override;
@@ -5326,6 +5339,20 @@ index db8222c7a..39febfb3d 100644
  TEST_P(SpmdPartitioningTest, WindowedEinsumShouldMatchLhs_b305313406) {
    absl::string_view hlo_string = R"(
  HloModule module
+diff --git a/xla/stream_executor/blas.h b/xla/stream_executor/blas.h
+index 2d5493614..c481880a1 100644
+--- a/xla/stream_executor/blas.h
++++ b/xla/stream_executor/blas.h
+@@ -137,6 +137,9 @@ constexpr AlgorithmType kDefaultBlasGemv = -3;
+ constexpr AlgorithmType kNoAlgorithm = -4;
+ constexpr AlgorithmType kRuntimeAutotuning = -5;
+
++constexpr AlgorithmType kXetlaGemm = -6;
++constexpr AlgorithmType kOneDnnGemm = -7;
++
+ // blas uses -1 to represent the default algorithm. This happens to match up
+ // with the CUBLAS_GEMM_DFALT constant, so cuda_blas.cc is using static_cast
+ // to convert from AlgorithmType to cublasGemmAlgo_t, and uses a static_assert
 diff --git a/xla/stream_executor/build_defs.bzl b/xla/stream_executor/build_defs.bzl
 index a29f7d28d..e77a9b6f3 100644
 --- a/xla/stream_executor/build_defs.bzl
@@ -5473,6 +5500,23 @@ index 16f18454f..cd2de4ea1 100644
  
  // Type traits to get CUDA complex types from std::complex<>.
  
+diff --git a/xla/stream_executor/gpu/gpu_timer.cc b/xla/stream_executor/gpu/gpu_timer.cc
+index cda8c5646..0bfdf5034 100644
+--- a/xla/stream_executor/gpu/gpu_timer.cc
++++ b/xla/stream_executor/gpu/gpu_timer.cc
+@@ -51,10 +51,10 @@ absl::Duration RandomDuration() {
+ /*static*/ absl::StatusOr<GpuTimer> GpuTimer::Create(GpuStream* stream) {
+   GpuExecutor* parent = stream->parent();
+   GpuContext* context = parent->gpu_context();
+-  GpuEventHandle start_event;
++  GpuEventHandle start_event = nullptr;
+   TF_RETURN_IF_ERROR(GpuDriver::InitEvent(context, &start_event,
+                                           GpuDriver::EventFlags::kDefault));
+-  GpuEventHandle stop_event;
++  GpuEventHandle stop_event = nullptr;
+   TF_RETURN_IF_ERROR(GpuDriver::InitEvent(context, &stop_event,
+                                           GpuDriver::EventFlags::kDefault));
+   CHECK(start_event != nullptr && stop_event != nullptr);
 diff --git a/xla/stream_executor/gpu/gpu_types.h b/xla/stream_executor/gpu/gpu_types.h
 index c8d6266b3..c552f1acb 100644
 --- a/xla/stream_executor/gpu/gpu_types.h

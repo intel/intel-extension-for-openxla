@@ -29,7 +29,6 @@ xetla_library(
         ":scratch_allocator",
         "//xla/service:onednn_util",
         "//xla/service/gpu/xetla/gemm:gemm_kernel",
-        "//xla/stream_executor/sycl:hw_info",
         "//xla/stream_executor/sycl:sycl_executor",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/types:span",
@@ -52,6 +51,36 @@ xetla_library(
         "@xla//xla/service/gpu:matmul_utils",
         "@xla//xla/stream_executor:stream_executor_headers",
     ],
+)
+
+cc_library(
+    name = "gemm_impl_picker",
+    srcs = ["gemm_impl_picker.cc",],
+    hdrs = ["gemm_impl_picker.h"],
+    deps = [
+        ":onednn_matmul_utils",
+        "//xla/stream_executor/sycl:hw_info",
+        "@com_google_absl//absl/algorithm:container",
+        "@tsl//tsl/platform:errors",
+        "@tsl//tsl/platform:logging",
+        "@tsl//tsl/platform:statusor",
+        "@tsl//tsl/util:env_var",
+        "@xla//xla:literal",
+        "@xla//xla:literal_util",
+        "@xla//xla/hlo/ir:hlo",
+        "@xla//xla/service:hlo_pass",
+        "@xla//xla/service/gpu:autotuner_util",
+        "@xla//xla/service/gpu:cublas_cudnn",
+        "@xla//xla/stream_executor",
+        "@xla//xla/stream_executor:device_description",
+        "@xla//xla/stream_executor:device_memory_allocator",
+        "@xla//xla/stream_executor/gpu:gpu_stream",
+        "@xla//xla/stream_executor/gpu:gpu_timer",
+        "@xla//xla/service/gpu:ir_emission_utils",
+        "@xla//xla/service/gpu:matmul_utils",
+        "@xla//xla/service/gpu:stream_executor_util",
+        "@xla//xla:util",
+    ]
 )
 
 xpu_library(

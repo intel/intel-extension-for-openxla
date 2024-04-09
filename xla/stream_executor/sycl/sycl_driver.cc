@@ -35,6 +35,7 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/synchronization/notification.h"
+#include "level_zero/ze_api.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"
@@ -56,6 +57,8 @@ limitations under the License.
 
 namespace stream_executor {
 namespace gpu {
+
+#define MSEC_IN_SEC 1000
 
 class GpuContext {
  public:
@@ -665,6 +668,50 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
     stream->ext_oneapi_submit_barrier(event_list);
   }
 
+  return true;
+}
+
+/* static */ bool GpuDriver::GetEventElapsedTime(GpuContext* context,
+                                                 float* elapsed_milliseconds,
+                                                 GpuEventHandle start,
+                                                 GpuEventHandle stop) {
+  ze_event_handle_t s_event =
+      sycl::get_native<sycl::backend::ext_oneapi_level_zero>(*(start->event));
+  ze_event_handle_t e_event =
+      sycl::get_native<sycl::backend::ext_oneapi_level_zero>(*(stop->event));
+  zeEventHostSynchronize(e_event, UINT64_MAX);
+  ze_kernel_timestamp_result_t start_timestamp{}, end_timestamp{};
+  if (zeEventQueryKernelTimestamp(s_event, &start_timestamp) !=
+          ZE_RESULT_SUCCESS ||
+      zeEventQueryKernelTimestamp(e_event, &end_timestamp) !=
+          ZE_RESULT_SUCCESS) {
+    LOG(ERROR) << "failed to get elapsed time on event: " << start << " or "
+               << stop;
+    return false;
+  }
+  uint64_t t_s = start_timestamp.global.kernelStart;
+  uint64_t t_e = end_timestamp.global.kernelEnd;
+  // Assuming the devices have the same frequency
+  uint64_t freq = 0;
+  uint64_t mask = 0;
+  sycl::device* device;
+  if (GetDevice(0, &device) != tsl::OkStatus() ||
+      SYCLGetFrequency(device, &freq, &mask) != SYCL_SUCCESS) {
+    LOG(ERROR) << "failed to get device frequency";
+    return false;
+  }
+
+  if (t_s < t_e) {
+    *elapsed_milliseconds = static_cast<float>(
+        (t_e - t_s) * static_cast<double>(MSEC_IN_SEC) / freq);
+  } else {
+    *elapsed_milliseconds =
+        ((mask + 1ull) + t_e - t_s) * static_cast<uint64_t>(MSEC_IN_SEC) / freq;
+  }
+
+  VLOG(1) << "Frequency is " << freq << " and mask is " << mask;
+  VLOG(1) << "The duration between " << start->event << " and " << stop->event
+          << " is: " << *elapsed_milliseconds;
   return true;
 }
 

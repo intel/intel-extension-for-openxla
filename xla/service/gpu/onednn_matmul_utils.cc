@@ -46,7 +46,6 @@ limitations under the License.
 #include "xla/statusor.h"
 #include "xla/stream_executor/blas.h"
 #include "xla/stream_executor/device_memory.h"
-#include "xla/stream_executor/sycl/hw_info.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
 #include "xla/types.h"
 #include "xla/util.h"
@@ -164,7 +163,7 @@ struct OneDnnMatMulParams {
 template <typename InputT>
 std::enable_if_t<std::is_same_v<InputT, ::gpu::xetla::bf16> ||
                      std::is_same_v<InputT, sycl::half>,
-                 StatusOr<bool>>
+                 absl::StatusOr<bool>>
 RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
              const MatrixDescriptor& rhs, const MatrixDescriptor& c,
              const MatrixDescriptor& out, se::DeviceMemoryBase bias,
@@ -308,14 +307,44 @@ std::unique_ptr<OneDnnMatMulParams> CreateMatMulParams(
       out_strides, bias_strides);
 }
 
+template <typename InputT>
+absl::Status DoXetlaGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
+                         const MatrixDescriptor& lhs,
+                         const MatrixDescriptor& rhs, const MatrixDescriptor& c,
+                         const MatrixDescriptor& output,
+                         se::DeviceMemoryBase bias, float alpha, float beta,
+                         se::gpu::BlasLt::Epilogue epilogue, se::Stream* stream,
+                         std::optional<se::blas::AlgorithmType> algorithm,
+                         se::ScratchAllocator* scratch_allocator,
+                         se::blas::ComputePrecision compute_precision) {
+  CHECK(output.transpose == se::blas::Transpose::kNoTranspose);
+  se::gpu::GpuStreamHandle stream_handle =
+      stream_executor::gpu::AsGpuStreamValue(stream);
+  TF_ASSIGN_OR_RETURN(bool fallback,
+                      RunXetlaGemm<InputT>(stream_handle, lhs, rhs, c, output,
+                                           bias, epilogue, beta));
+  if (!fallback) return OkStatus();
+  VLOG(2) << "lhs: " << batch_size << " " << lhs.num_rows << " "
+          << lhs.num_cols;
+  VLOG(2) << "rhs: " << batch_size << " " << rhs.num_rows << " "
+          << rhs.num_cols;
+  VLOG(2) << "out: " << batch_size << " " << output.num_rows << " "
+          << output.num_cols;
+  return absl::InternalError("Anyway, something is wrong in DoXetlaGemm.");
+}
+
 template <typename InputT, typename OutputT>
-absl::Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
-                    const MatrixDescriptor& lhs, const MatrixDescriptor& rhs,
-                    const MatrixDescriptor& c, const MatrixDescriptor& output,
-                    se::DeviceMemoryBase bias, float alpha, float beta,
-                    se::gpu::BlasLt::Epilogue epilogue, se::Stream* stream,
-                    se::ScratchAllocator* scratch_allocator,
-                    se::blas::ComputePrecision compute_precision) {
+absl::Status DoOnednnGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
+                          const MatrixDescriptor& lhs,
+                          const MatrixDescriptor& rhs,
+                          const MatrixDescriptor& c,
+                          const MatrixDescriptor& output,
+                          se::DeviceMemoryBase bias, float alpha, float beta,
+                          se::gpu::BlasLt::Epilogue epilogue,
+                          se::Stream* stream,
+                          std::optional<se::blas::AlgorithmType> algorithm,
+                          se::ScratchAllocator* scratch_allocator,
+                          se::blas::ComputePrecision compute_precision) {
   CHECK(output.transpose == se::blas::Transpose::kNoTranspose);
   se::gpu::GpuStreamHandle stream_handle =
       stream_executor::gpu::AsGpuStreamValue(stream);
@@ -340,19 +369,6 @@ absl::Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
   VLOG(2) << "lhs trans: " << TransposeString(lhs.transpose);
   VLOG(2) << "rhs trans: " << TransposeString(rhs.transpose);
 
-  bool flag = false;
-  TF_CHECK_OK(tsl::ReadBoolFromEnvVar("XETLA_GEMM", false, &flag));
-  bool xetla_support = flag && IsXetlaHardwareSupport() && (batch_size == 1) &&
-                       (fabs(alpha - 1.0f) < 1e-6);
-  if (xetla_support &&
-      ((std::is_same_v<InputT, sycl::half> ||
-        std::is_same_v<InputT, ::gpu::xetla::bf16>)&&std::is_same_v<InputT,
-                                                                    OutputT>)) {
-    TF_ASSIGN_OR_RETURN(bool fallback,
-                        RunXetlaGemm<InputT>(stream_handle, lhs, rhs, c, output,
-                                             bias, epilogue, beta));
-    if (!fallback) return absl::OkStatus();
-  }
   auto params = CreateMatMulParams(batch_size, lhs, rhs, output);
 
   auto src_md = dnnl::memory::desc(params->a_dims, OneDnnType<InputT>(),
@@ -435,6 +451,28 @@ absl::Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
   return absl::OkStatus();
 }
 
+template <typename InputT, typename OutputT>
+absl::Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
+                    const MatrixDescriptor& lhs, const MatrixDescriptor& rhs,
+                    const MatrixDescriptor& c, const MatrixDescriptor& output,
+                    se::DeviceMemoryBase bias, float alpha, float beta,
+                    se::gpu::BlasLt::Epilogue epilogue, se::Stream* stream,
+                    std::optional<se::blas::AlgorithmType> algorithm,
+                    se::ScratchAllocator* scratch_allocator,
+                    se::blas::ComputePrecision compute_precision) {
+  if (algorithm == se::blas::kXetlaGemm) {
+    VLOG(1) << "Run Xetla gemm kernel";
+    return DoXetlaGemm<InputT>(batch_size, m, n, k, lhs, rhs, c, output, bias,
+                               alpha, beta, epilogue, stream, algorithm,
+                               scratch_allocator, compute_precision);
+  } else {
+    VLOG(1) << "Run OneDnn gemm kernel";
+    return DoOnednnGemm<InputT, OutputT>(
+        batch_size, m, n, k, lhs, rhs, c, output, bias, alpha, beta, epilogue,
+        stream, algorithm, scratch_allocator, compute_precision);
+  }
+}
+
 void TransposeMatrixDesc(MatrixDescriptor& matrix_desc) {
   matrix_desc.transpose =
       (matrix_desc.transpose == se::blas::Transpose::kNoTranspose)
@@ -494,14 +532,14 @@ absl::Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
 
   std::tuple operand_types{lhs_layout.dtype, rhs_layout.dtype,
                            output_layout.dtype};
-#define TYPED_GEMM(ATYPE, BTYPE, CTYPE)                                        \
-  if (operand_types == std::make_tuple(ATYPE, BTYPE, CTYPE)) {                 \
-    using NativeAType = PrimitiveTypeToXetlaNative<ATYPE>::type;               \
-    using NativeCType = PrimitiveTypeToXetlaNative<CTYPE>::type;               \
-    return DoGemm<NativeAType, NativeCType>(                                   \
-        batch_size, m, n, k, lhs, rhs, c, output, bias_buffer,                 \
-        config.alpha.real(), config.beta, epilogue, stream, scratch_allocator, \
-        config.compute_precision);                                             \
+#define TYPED_GEMM(ATYPE, BTYPE, CTYPE)                                       \
+  if (operand_types == std::make_tuple(ATYPE, BTYPE, CTYPE)) {                \
+    using NativeAType = PrimitiveTypeToXetlaNative<ATYPE>::type;              \
+    using NativeCType = PrimitiveTypeToXetlaNative<CTYPE>::type;              \
+    return DoGemm<NativeAType, NativeCType>(                                  \
+        batch_size, m, n, k, lhs, rhs, c, output, bias_buffer,                \
+        config.alpha.real(), config.beta, epilogue, stream, config.algorithm, \
+        scratch_allocator, config.compute_precision);                         \
   }
 
   TYPED_GEMM(BF16, BF16, BF16)

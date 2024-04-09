@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "absl/base/call_once.h"
 #include "absl/synchronization/mutex.h"
+#include "level_zero/ze_api.h"
 #include "tsl/platform/status.h"
 #include "tsl/util/env_var.h"
 
@@ -242,7 +243,8 @@ class SYCLStreamPool {
   static SYCLError_t createStream(sycl::device* device_handle,
                                   sycl::queue** stream_p) {
     if (IsMultipleStreamEnabled()) {
-      sycl::property_list propList{sycl::property::queue::in_order()};
+      sycl::property_list propList{sycl::property::queue::enable_profiling(),
+                                   sycl::property::queue::in_order()};
       SYCLStreamPool::GetStreamsPool(device_handle)
           .push_back(std::make_shared<sycl::queue>(
               DevicePool::getDeviceContext(), *device_handle, SYCLAsyncHandler,
@@ -280,7 +282,8 @@ class SYCLStreamPool {
         stream_pool_map;
     auto iter = stream_pool_map.find(device_handle);
     if (iter != stream_pool_map.end()) return iter->second;
-    sycl::property_list propList{sycl::property::queue::in_order()};
+    sycl::property_list propList{sycl::property::queue::enable_profiling(),
+                                 sycl::property::queue::in_order()};
     std::vector<std::shared_ptr<sycl::queue>> stream_pool = {
         std::make_shared<sycl::queue>(DevicePool::getDeviceContext(),
                                       *device_handle, SYCLAsyncHandler,
@@ -300,6 +303,26 @@ SYCLError_t SYCLGetDeviceCount(int* count) {
 
 SYCLError_t SYCLGetDevice(sycl::device** device, int device_ordinal) {
   return DevicePool::getDevice(device, device_ordinal);
+}
+
+SYCLError_t SYCLGetFrequency(sycl::device* device_handle, uint64_t* freq,
+                             uint64_t* mask) {
+  auto zDevice =
+      sycl::get_native<sycl::backend::ext_oneapi_level_zero>(*device_handle);
+  ze_device_properties_t props{
+      ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2,
+  };
+  ze_result_t status = zeDeviceGetProperties(zDevice, &props);
+  if (status != ZE_RESULT_SUCCESS) {
+    LOG(ERROR) << "zeDeviceGetProperties Failed with return code: "
+               << std::to_string(status);
+    return SYCL_ERROR_ZE_ERROR;
+  }
+
+  *freq = props.timerResolution;
+  *mask = (1ull << props.kernelTimestampValidBits) - 1ull;
+
+  return SYCL_SUCCESS;
 }
 
 SYCLError_t SYCLCreateStream(sycl::device* device_handle,
