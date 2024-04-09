@@ -249,7 +249,7 @@ index e055a619f..fa5e93af6 100644
          "@com_google_absl//absl/strings",
          "@com_google_absl//absl/types:optional",
 diff --git a/third_party/tsl/tsl/framework/bfc_allocator.cc b/third_party/tsl/tsl/framework/bfc_allocator.cc
-index 9e4447108..e3e083b10 100644
+index 9e4447108..3e9cd2054 100644
 --- a/third_party/tsl/tsl/framework/bfc_allocator.cc
 +++ b/third_party/tsl/tsl/framework/bfc_allocator.cc
 @@ -48,7 +48,7 @@ BFCAllocator::BFCAllocator(std::unique_ptr<SubAllocator> sub_allocator,
@@ -261,14 +261,15 @@ index 9e4447108..e3e083b10 100644
      // 2MiB smallest initial allocation, unless total memory available
      // is less.
      curr_region_allocation_bytes_ =
-@@ -111,6 +111,14 @@ const BFCAllocator::Chunk* BFCAllocator::ChunkFromHandle(ChunkHandle h) const {
+@@ -111,6 +111,15 @@ const BFCAllocator::Chunk* BFCAllocator::ChunkFromHandle(ChunkHandle h) const {
    return &(chunks_[h]);
  }
  
 +bool CheckIfUsingMachineWithLimitMem() {
 +  const char* hardware_env = std::getenv("ITEX_USING_DATA_CENTER_GPU_MAX");
 +  if (hardware_env) {
-+    return false;
++    std::string env_value = absl::AsciiStrToLower(hardware_env);
++    return !(env_value == "1" || env_value == "true");
 +  }
 +  return true;
 +}
@@ -276,21 +277,16 @@ index 9e4447108..e3e083b10 100644
  bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
    size_t available_bytes = memory_limit_ - *stats_.pool_bytes;
    // Rounds available_bytes down to the nearest multiple of kMinAllocationSize.
-@@ -133,6 +141,13 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
+@@ -133,6 +142,8 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
  
    // Try allocating.
    size_t bytes = std::min(curr_region_allocation_bytes_, available_bytes);
-+
-+  if (CheckIfUsingMachineWithLimitMem()) {
-+    bytes = std::min(bytes, GetLimitAlloc());
-+  } else {
-+    bytes = std::min(bytes, static_cast<size_t>(memory_limit_ * 0.75)); 
-+  }
++  bytes = std::min(bytes, GetLimitAlloc());
 +
    size_t bytes_received;
    void* mem_addr = sub_allocator_->Alloc(alignment, bytes, &bytes_received);
    if (mem_addr == nullptr && !started_backpedal_) {
-@@ -1248,4 +1263,33 @@ AllocatorMemoryType BFCAllocator::GetMemoryType() const {
+@@ -1248,4 +1259,40 @@ AllocatorMemoryType BFCAllocator::GetMemoryType() const {
    return sub_allocator_->GetMemoryType();
  }
  
@@ -315,11 +311,18 @@ index 9e4447108..e3e083b10 100644
 +size_t BFCAllocator::GetLimitAlloc() {
 +  // set default limit to 4GB
 +  int64 limit_size = 4 * 1024 - 1;
++  if (!CheckIfUsingMachineWithLimitMem()) {
++    // If on XeHPC platform, set limit of 75% of system avalable
++    // memory, and remaining 25% for further extension or other
++    // third-party backend.
++    limit_size = memory_limit_ / 1024 / 1024 * 0.75;
++  }
 +  Status status = ReadInt64FromEnvVar("ITEX_LIMIT_MEMORY_SIZE_IN_MB",
 +                                        limit_size, &limit_size);
 +  if (!status.ok()) {
 +    LOG(ERROR) << "Failed to read environment variable ITEX_LIMIT_MEMORY_SIZE_IN_MB!"; 
 +  }
++  
 +
 +  return limit_size * 1024 * 1024;
 +}
