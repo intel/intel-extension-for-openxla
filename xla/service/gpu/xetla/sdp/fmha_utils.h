@@ -153,17 +153,20 @@ struct group_row_reduce_t {
   using store_tile_desc =
       subgroup::tile_desc_t<kNum, 1, kNum, 1, reg_layout::tiled>;
   using store_tile_t = subgroup::tile_t<T, store_tile_desc>;
+  using mem_desc_store_t =
+      mem_desc_t<T, mem_layout::row_major, mem_space::local>;
+  using mem_desc_load_t =
+      mem_desc_t<T, mem_layout::row_major, mem_space::local>;
   using store_payload_t =
-      subgroup::mem_payload_t<T, store_tile_desc, msg_type::block_1d,
-                              mem_layout::row_major, mem_space::local,
-                              gpu_arch::Xe>;
+      subgroup::mem_payload_t<mem_desc_store_t, store_tile_desc,
+                              msg_type::block_1d, gpu_arch::Xe>;
   // load all subgroup results together
   using load_tile_desc =
       subgroup::tile_desc_t<kTotal, 1, kTotal, 1, reg_layout::tiled>;
   using load_tile_t = subgroup::tile_t<T, load_tile_desc>;
   using load_payload_t = subgroup::mem_payload_t<
-      T, load_tile_desc, subgroup::msg_type_v<load_tile_desc, mem_space::local>,
-      mem_layout::row_major, mem_space::local, gpu_arch::Xe>;
+      mem_desc_load_t, load_tile_desc,
+      subgroup::msg_type_v<load_tile_desc, mem_space::local>, gpu_arch::Xe>;
 
   xetla_nbarrier_t<kNumSg, kNumSg> nbarrier;
   uint32_t slm_base;
