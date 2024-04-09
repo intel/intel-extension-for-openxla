@@ -38,7 +38,7 @@ namespace xla {
 namespace gpu {
 
 void sycl_allreduce(const void* send_buffer, void* recv_buffer,
-                    int element_count, PrimitiveType dtype,
+                    size_t element_count, PrimitiveType dtype,
                     ReductionKind reduction_kind,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
 

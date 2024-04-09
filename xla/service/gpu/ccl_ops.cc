@@ -20,6 +20,9 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 
+#include "xla/service/gpu/utils.h"
+#include "xla/stream_executor/gpu/gpu_driver.h"
+
 // TODO: It crashes when using public Eigen::bfloat16, need investigation.
 #include <sycl/ext/oneapi/bfloat16.hpp>
 
@@ -29,6 +32,9 @@ namespace gpu {
 
 using bfloat16 = sycl::ext::oneapi::bfloat16;
 using float16 = sycl::half;
+
+// After tuned, we found 8 has highest performance and XeLink bandwidth.
+constexpr size_t VecBytes = 8;
 
 namespace {
 struct Participant {
@@ -59,11 +65,14 @@ struct PermuteParticipant {
 
 template <typename T>
 struct Collective {
-  Collective() : done(false) {}
+  Collective() : done(false), ready_to_launch(false) {}
   tsl::mutex mu;
   tsl::condition_variable cv;
-  bool done;
+  bool ready_to_launch TF_GUARDED_BY(mu);
+  bool done TF_GUARDED_BY(mu);
   std::vector<T> participants TF_GUARDED_BY(mu);
+  std::vector<sycl::event> begin_events TF_GUARDED_BY(mu);
+  std::vector<sycl::event> end_events TF_GUARDED_BY(mu);
 };
 
 struct Manager {
@@ -83,43 +92,151 @@ struct Manager {
       permute_collectives TF_GUARDED_BY(mu);
 };
 
-template <typename T, typename Func>
+template <typename T, typename Func, bool PartialStore>
 struct AllReduceKernel;
 
 template <typename T, typename Func, typename AccT = T>
-void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
-                     std::vector<Participant>& participants,
+void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, size_t element_count,
+                     std::vector<Participant>& participants, int rank,
                      int reduction_size) {
-  auto group_size =
-      (*stream)
-          .get_device()
-          .template get_info<sycl::info::device::max_work_group_size>();
-  auto num_workgroup = (tensor_size + group_size - 1) / group_size;
+  constexpr size_t VecSize = VecBytes / sizeof(T);
+  size_t vec_count = element_count / VecSize;
+  size_t vec_tail_element_count = element_count % VecSize;
+  size_t total_vec_count = vec_count + (vec_tail_element_count > 0 ? 1 : 0);
+
+  // Each rank allreduces a sub slice of the tensors. Last rank
+  // also allreduce the tail vectors of the tensor.
+  size_t slice_vec_count = total_vec_count / reduction_size;
+  size_t tail_vec_count = total_vec_count % reduction_size;
+  size_t local_vec_count =
+      slice_vec_count + ((rank == (reduction_size - 1)) ? tail_vec_count : 0);
+
+  if (local_vec_count == 0) return;
+
+  auto device = stream->get_device();
+  size_t group_size =
+      device.template get_info<sycl::info::device::max_work_group_size>();
+
+  // set max_workitems = HW_workgroup_num * max_workgroup_size
+  int num_max_concurrent_workitem =
+      stream_executor::gpu::GpuDriver::GetMultiprocessorCount(&device).value() *
+      group_size;
+  int num_workitem = local_vec_count <= num_max_concurrent_workitem
+                         ? local_vec_count
+                         : num_max_concurrent_workitem;
+  size_t num_vec_per_workitem = local_vec_count / num_workitem;
+  size_t num_tail_vec = local_vec_count % num_workitem;
+
+  int num_workgroup = (num_workitem + group_size - 1) / group_size;
 
   if (reduction_size <= MAX_RANK_SIZE) {
     stream->submit([&](sycl::handler& cgh) {
-      const T* in_ptr[MAX_RANK_SIZE];
+      T* in_ptr[MAX_RANK_SIZE];
       T* out_ptr[MAX_RANK_SIZE];
 
       for (int i = 0; i < reduction_size; ++i) {
-        in_ptr[i] = static_cast<const T*>(participants[i].send);
-        out_ptr[i] = static_cast<T*>(participants[i].recv);
+        in_ptr[i] = static_cast<T*>(const_cast<void*>(participants[i].send)) +
+                    rank * slice_vec_count * VecSize;
+        out_ptr[i] = static_cast<T*>(participants[i].recv) +
+                     rank * slice_vec_count * VecSize;
       }
 
-      cgh.parallel_for<AllReduceKernel<T, Func>>(
-          sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
-                            sycl::range<1>(group_size)),
-          [=](sycl::nd_item<1> item) {
-            const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
+      // Last rank may need to process the tail elements which can't form a
+      // full vector and need partial block store.
+      if (rank != (reduction_size - 1) || vec_tail_element_count == 0) {
+        cgh.parallel_for<AllReduceKernel<T, Func, false>>(
+            sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
+                              sycl::range<1>(group_size)),
+            [=](sycl::nd_item<1> item) {
+              const int index = item.get_global_linear_id();
+              if (index >= num_workitem) return;
 
-            out_ptr[0][index] = in_ptr[0][index];
-            for (int i = 1; i < reduction_size; ++i)
-              out_ptr[0][index] =
-                  T(Func()(AccT(out_ptr[0][index]), AccT(in_ptr[i][index])));
-            for (int i = 1; i < reduction_size; ++i)
-              out_ptr[i][index] = out_ptr[0][index];
-          });
+              for (size_t n = 0; n < num_vec_per_workitem; ++n) {
+                size_t offset = (num_workitem * n + index) * VecSize;
+                AlignedVector<AccT, VecSize, Func> result;
+                result.Load(*reinterpret_cast<AlignedVector<T, VecSize>*>(
+                    &(in_ptr[0][offset])));
+                for (int i = 1; i < reduction_size; ++i)
+                  result.Accumulate(
+                      *reinterpret_cast<AlignedVector<T, VecSize>*>(
+                          &(in_ptr[i][offset])));
+                for (int i = 0; i < reduction_size; ++i)
+                  result.Store(*reinterpret_cast<AlignedVector<T, VecSize>*>(
+                      &(out_ptr[i][offset])));
+              }
+
+              if (index < num_tail_vec) {
+                size_t offset =
+                    (num_workitem * num_vec_per_workitem + index) * VecSize;
+                AlignedVector<AccT, VecSize, Func> result;
+                result.Load(*reinterpret_cast<AlignedVector<T, VecSize>*>(
+                    &(in_ptr[0][offset])));
+                for (int i = 1; i < reduction_size; ++i)
+                  result.Accumulate(
+                      *reinterpret_cast<AlignedVector<T, VecSize>*>(
+                          &(in_ptr[i][offset])));
+                for (int i = 0; i < reduction_size; ++i)
+                  result.Store(*reinterpret_cast<AlignedVector<T, VecSize>*>(
+                      &(out_ptr[i][offset])));
+              }
+            });
+      } else {
+        cgh.parallel_for<AllReduceKernel<T, Func, true>>(
+            sycl::nd_range<1>(sycl::range<1>(group_size * num_workgroup),
+                              sycl::range<1>(group_size)),
+            [=](sycl::nd_item<1> item) {
+              const int index = item.get_global_linear_id();
+              if (index >= num_workitem) return;
+
+              for (size_t n = 0; n < num_vec_per_workitem; ++n) {
+                size_t offset = (num_workitem * n + index) * VecSize;
+                AlignedVector<AccT, VecSize, Func> result;
+                result.Load(*reinterpret_cast<AlignedVector<T, VecSize>*>(
+                    &(in_ptr[0][offset])));
+                for (int i = 1; i < reduction_size; ++i)
+                  result.Accumulate(
+                      *reinterpret_cast<AlignedVector<T, VecSize>*>(
+                          &(in_ptr[i][offset])));
+
+                if (local_vec_count > num_workitem ||
+                    index != (num_workitem - 1)) {
+                  for (int i = 0; i < reduction_size; ++i)
+                    result.Store(*reinterpret_cast<AlignedVector<T, VecSize>*>(
+                        &(out_ptr[i][offset])));
+                } else {  // the last workitem may process a partial vector
+                  for (int i = 0; i < reduction_size; ++i)
+                    result.PartialStore(
+                        *reinterpret_cast<AlignedVector<T, VecSize>*>(
+                            &(out_ptr[i][offset])),
+                        vec_tail_element_count);
+                }
+              }
+
+              if (index < num_tail_vec) {
+                size_t offset =
+                    (num_workitem * num_vec_per_workitem + index) * VecSize;
+                AlignedVector<AccT, VecSize, Func> result;
+                result.Load(*reinterpret_cast<AlignedVector<T, VecSize>*>(
+                    &(in_ptr[0][offset])));
+                for (int i = 1; i < reduction_size; ++i)
+                  result.Accumulate(
+                      *reinterpret_cast<AlignedVector<T, VecSize>*>(
+                          &(in_ptr[i][offset])));
+
+                if (index != num_tail_vec - 1) {
+                  for (int i = 0; i < reduction_size; ++i)
+                    result.Store(*reinterpret_cast<AlignedVector<T, VecSize>*>(
+                        &(out_ptr[i][offset])));
+                } else {  // the last workitem may process a partial vector
+                  for (int i = 0; i < reduction_size; ++i)
+                    result.PartialStore(
+                        *reinterpret_cast<AlignedVector<T, VecSize>*>(
+                            &(out_ptr[i][offset])),
+                        vec_tail_element_count);
+                }
+              }
+            });
+      }
     });
   } else {
     LOG(FATAL) << "Reduction size " << reduction_size
@@ -356,11 +473,12 @@ void streamlist_wait_stream(se::gpu::GpuStreamHandle stream,
 }  // namespace
 
 void sycl_allreduce(const void* send_buffer, void* recv_buffer,
-                    int element_count, PrimitiveType dtype,
+                    size_t element_count, PrimitiveType dtype,
                     ReductionKind reduction_kind,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+  gpu_stream
+      ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
   std::shared_ptr<Collective<Participant>> collective;
-  bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
     if (Manager::instance().collectives.find(comm->id) ==
@@ -368,174 +486,178 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
       collective = std::make_shared<Collective<Participant>>();
       collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
+      collective->begin_events.push_back(
+          gpu_stream->ext_oneapi_submit_barrier());
       Manager::instance().collectives[comm->id] = collective;
     } else {
       collective = Manager::instance().collectives[comm->id];
       tsl::mutex_lock lock(collective->mu);
       collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
+      collective->begin_events.push_back(
+          gpu_stream->ext_oneapi_submit_barrier());
+
       if (collective->participants.size() == comm->nranks) {
         Manager::instance().collectives.erase(comm->id);
-        rank_to_launch_kernel = true;
+        auto p = collective->participants;
+        std::sort(p.begin(), p.end(),
+                  [](const Participant& a, const Participant& b) -> bool {
+                    return a.rank < b.rank;
+                  });
+        collective->ready_to_launch = true;
+        collective->cv.notify_all();
       }
     }
   }
 
   {
     tsl::mutex_lock lock(collective->mu);
-    if (!rank_to_launch_kernel) {
-      if (!collective->done) collective->cv.wait(lock);
-    } else {
-      auto p = collective->participants;
-      std::sort(p.begin(), p.end(),
-                [](const Participant& a, const Participant& b) -> bool {
-                  return a.rank < b.rank;
-                });
+    if (!collective->ready_to_launch) {
+      collective->cv.wait(lock);
+    }
+  }
 
-      se::gpu::GpuStreamHandle stream = p[0].stream;
-      stream_wait_streamlist(stream, p);
+  auto& p = collective->participants;
+  // TODO(intel):uncomment this barrier once barrier bug is fixed.
+  // gpu_stream->ext_oneapi_submit_barrier(collective->begin_events);
 
-      if (reduction_kind == ReductionKind::SUM) {
-        if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::plus<bool>>(stream, element_count, p,
-                                                  comm->nranks);
-        else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::plus<float>>(stream, element_count, p,
-                                                    comm->nranks);
-        else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::plus<double>>(stream, element_count, p,
-                                                      comm->nranks);
-        else if (dtype == S32)
-          allreduce_dpcpp<int32_t, sycl::plus<int32_t>>(stream, element_count,
-                                                        p, comm->nranks);
-        else if (dtype == S64)
-          allreduce_dpcpp<int64_t, sycl::plus<int64_t>>(stream, element_count,
-                                                        p, comm->nranks);
-        else if (dtype == U32)
-          allreduce_dpcpp<uint32_t, sycl::plus<uint32_t>>(stream, element_count,
-                                                          p, comm->nranks);
-        else if (dtype == U64)
-          allreduce_dpcpp<uint64_t, sycl::plus<uint64_t>>(stream, element_count,
-                                                          p, comm->nranks);
-        else if (dtype == C64)
-          allreduce_dpcpp<std::complex<float>, sycl::plus<std::complex<float>>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == C128)
-          allreduce_dpcpp<std::complex<double>,
-                          sycl::plus<std::complex<double>>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == BF16)
-          allreduce_dpcpp<bfloat16, sycl::plus<float>, float>(
-              stream, element_count, p, comm->nranks);
-        else
-          LOG(FATAL) << "PrimitiveType "
-                     << primitive_util::LowercasePrimitiveTypeName(dtype)
-                     << " is not supported in AllReduce.";
-      } else if (reduction_kind == ReductionKind::PRODUCT) {
-        if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::multiplies<bool>>(stream, element_count,
-                                                        p, comm->nranks);
-        else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::multiplies<float>>(stream, element_count,
-                                                          p, comm->nranks);
-        else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::multiplies<double>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == S32)
-          allreduce_dpcpp<int32_t, sycl::multiplies<int32_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == S64)
-          allreduce_dpcpp<int64_t, sycl::multiplies<int64_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == U32)
-          allreduce_dpcpp<uint32_t, sycl::multiplies<uint32_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == U64)
-          allreduce_dpcpp<uint64_t, sycl::multiplies<uint64_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == C64)
-          allreduce_dpcpp<std::complex<float>,
-                          sycl::multiplies<std::complex<float>>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == C128)
-          allreduce_dpcpp<std::complex<double>,
-                          sycl::multiplies<std::complex<double>>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == BF16)
-          allreduce_dpcpp<bfloat16, sycl::multiplies<float>, float>(
-              stream, element_count, p, comm->nranks);
-        else
-          LOG(FATAL) << "PrimitiveType "
-                     << primitive_util::LowercasePrimitiveTypeName(dtype)
-                     << " is not supported in AllReduce.";
-      } else if (reduction_kind == ReductionKind::MIN) {
-        if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::minimum<bool>>(stream, element_count, p,
-                                                     comm->nranks);
-        else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::minimum<float>>(stream, element_count, p,
-                                                       comm->nranks);
-        else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::minimum<double>>(stream, element_count,
-                                                         p, comm->nranks);
-        else if (dtype == S32)
-          allreduce_dpcpp<int32_t, sycl::minimum<int32_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == S64)
-          allreduce_dpcpp<int64_t, sycl::minimum<int64_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == U32)
-          allreduce_dpcpp<uint32_t, sycl::minimum<uint32_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == U64)
-          allreduce_dpcpp<uint64_t, sycl::minimum<uint64_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == BF16)
-          allreduce_dpcpp<bfloat16, sycl::minimum<float>, float>(
-              stream, element_count, p, comm->nranks);
-        else
-          LOG(FATAL) << "PrimitiveType "
-                     << primitive_util::LowercasePrimitiveTypeName(dtype)
-                     << " is not supported in AllReduce.";
-      } else if (reduction_kind == ReductionKind::MAX) {
-        if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::maximum<bool>>(stream, element_count, p,
-                                                     comm->nranks);
-        else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::maximum<float>>(stream, element_count, p,
-                                                       comm->nranks);
-        else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::maximum<double>>(stream, element_count,
-                                                         p, comm->nranks);
-        else if (dtype == S32)
-          allreduce_dpcpp<int32_t, sycl::maximum<int32_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == S64)
-          allreduce_dpcpp<int64_t, sycl::maximum<int64_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == U32)
-          allreduce_dpcpp<uint32_t, sycl::maximum<uint32_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == U64)
-          allreduce_dpcpp<uint64_t, sycl::maximum<uint64_t>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == BF16)
-          allreduce_dpcpp<bfloat16, sycl::maximum<float>, float>(
-              stream, element_count, p, comm->nranks);
-        else
-          LOG(FATAL) << "PrimitiveType "
-                     << primitive_util::LowercasePrimitiveTypeName(dtype)
-                     << " is not supported in AllReduce.";
-      } else {
-        LOG(FATAL) << "ReductionKind " << static_cast<int>(reduction_kind)
-                   << " is not supported in AllReduce.";
-      }
+  if (reduction_kind == ReductionKind::SUM) {
+    if (dtype == PRED)
+      allreduce_dpcpp<bool, sycl::plus<bool>>(gpu_stream, element_count, p,
+                                              comm->rank, comm->nranks);
+    else if (dtype == F32 || dtype == C64)
+      allreduce_dpcpp<float, sycl::plus<float>>(gpu_stream, element_count, p,
+                                                comm->rank, comm->nranks);
+    else if (dtype == F64 || dtype == C128)
+      allreduce_dpcpp<double, sycl::plus<double>>(gpu_stream, element_count, p,
+                                                  comm->rank, comm->nranks);
+    else if (dtype == S32)
+      allreduce_dpcpp<int32_t, sycl::plus<int32_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == S64)
+      allreduce_dpcpp<int64_t, sycl::plus<int64_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == U32)
+      allreduce_dpcpp<uint32_t, sycl::plus<uint32_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == U64)
+      allreduce_dpcpp<uint64_t, sycl::plus<uint64_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == BF16)
+      allreduce_dpcpp<bfloat16, sycl::plus<float>, float>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else
+      LOG(FATAL) << "PrimitiveType "
+                 << primitive_util::LowercasePrimitiveTypeName(dtype)
+                 << " is not supported in AllReduce.";
+  } else if (reduction_kind == ReductionKind::PRODUCT) {
+    if (dtype == PRED)
+      allreduce_dpcpp<bool, sycl::multiplies<bool>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == F32 || dtype == C64)
+      allreduce_dpcpp<float, sycl::multiplies<float>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == F64 || dtype == C128)
+      allreduce_dpcpp<double, sycl::multiplies<double>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == S32)
+      allreduce_dpcpp<int32_t, sycl::multiplies<int32_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == S64)
+      allreduce_dpcpp<int64_t, sycl::multiplies<int64_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == U32)
+      allreduce_dpcpp<uint32_t, sycl::multiplies<uint32_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == U64)
+      allreduce_dpcpp<uint64_t, sycl::multiplies<uint64_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == BF16)
+      allreduce_dpcpp<bfloat16, sycl::multiplies<float>, float>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else
+      LOG(FATAL) << "PrimitiveType "
+                 << primitive_util::LowercasePrimitiveTypeName(dtype)
+                 << " is not supported in AllReduce.";
+  } else if (reduction_kind == ReductionKind::MIN) {
+    if (dtype == PRED)
+      allreduce_dpcpp<bool, sycl::minimum<bool>>(gpu_stream, element_count, p,
+                                                 comm->rank, comm->nranks);
+    else if (dtype == F32)
+      allreduce_dpcpp<float, sycl::minimum<float>>(gpu_stream, element_count, p,
+                                                   comm->rank, comm->nranks);
+    else if (dtype == F64)
+      allreduce_dpcpp<double, sycl::minimum<double>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == S32)
+      allreduce_dpcpp<int32_t, sycl::minimum<int32_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == S64)
+      allreduce_dpcpp<int64_t, sycl::minimum<int64_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == U32)
+      allreduce_dpcpp<uint32_t, sycl::minimum<uint32_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == U64)
+      allreduce_dpcpp<uint64_t, sycl::minimum<uint64_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == BF16)
+      allreduce_dpcpp<bfloat16, sycl::minimum<float>, float>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else
+      LOG(FATAL) << "PrimitiveType "
+                 << primitive_util::LowercasePrimitiveTypeName(dtype)
+                 << " is not supported in AllReduce.";
+  } else if (reduction_kind == ReductionKind::MAX) {
+    if (dtype == PRED)
+      allreduce_dpcpp<bool, sycl::maximum<bool>>(gpu_stream, element_count, p,
+                                                 comm->rank, comm->nranks);
+    else if (dtype == F32)
+      allreduce_dpcpp<float, sycl::maximum<float>>(gpu_stream, element_count, p,
+                                                   comm->rank, comm->nranks);
+    else if (dtype == F64)
+      allreduce_dpcpp<double, sycl::maximum<double>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == S32)
+      allreduce_dpcpp<int32_t, sycl::maximum<int32_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == S64)
+      allreduce_dpcpp<int64_t, sycl::maximum<int64_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == U32)
+      allreduce_dpcpp<uint32_t, sycl::maximum<uint32_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == U64)
+      allreduce_dpcpp<uint64_t, sycl::maximum<uint64_t>>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else if (dtype == BF16)
+      allreduce_dpcpp<bfloat16, sycl::maximum<float>, float>(
+          gpu_stream, element_count, p, comm->rank, comm->nranks);
+    else
+      LOG(FATAL) << "PrimitiveType "
+                 << primitive_util::LowercasePrimitiveTypeName(dtype)
+                 << " is not supported in AllReduce.";
+  } else {
+    LOG(FATAL) << "ReductionKind " << static_cast<int>(reduction_kind)
+               << " is not supported in AllReduce.";
+  }
 
-      streamlist_wait_stream(stream, p);
+  gpu_stream
+      ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
+  {
+    tsl::mutex_lock lock(collective->mu);
+    collective->end_events.push_back(gpu_stream->ext_oneapi_submit_barrier());
+    if (collective->end_events.size() == comm->nranks) {
       collective->done = true;
       collective->cv.notify_all();
     }
+
+    if (!collective->done) {
+      collective->cv.wait(lock);
+    }
   }
+  // TODO(intel):uncomment this barrier once barrier bug is fixed.
+  // gpu_stream->ext_oneapi_submit_barrier(collective->end_events);
 }
 
 void sycl_allgather(const void* send_buffer, void* recv_buffer,

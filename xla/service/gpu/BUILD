@@ -128,6 +128,11 @@ xpu_library(
 )
 
 xpu_library(
+    name = "utils",
+    hdrs = ["utils.h"],
+)
+
+xpu_library(
     name = "ccl_ops",
     srcs = [
         "ccl_ops.cc",
@@ -137,6 +142,8 @@ xpu_library(
     ],
 
     deps = [
+        "//xla/service/gpu:utils",
+        "//xla/stream_executor/sycl:sycl_driver",
         "@xla//xla/service:collective_ops_utils",
         "@xla//xla/stream_executor/gpu:gpu_types_header",
     ],
