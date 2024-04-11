@@ -1947,7 +1947,7 @@ index f4ddb497d..ad95a1921 100644
    // kernels makes sense.
  
 diff --git a/xla/service/gpu/fusions/reduction.cc b/xla/service/gpu/fusions/reduction.cc
-index 55519f58e..b20f5d9d0 100644
+index 55519f58e..7e70e802a 100644
 --- a/xla/service/gpu/fusions/reduction.cc
 +++ b/xla/service/gpu/fusions/reduction.cc
 @@ -105,6 +105,8 @@ constexpr int kColMajorKeptDimension = 0;
@@ -1959,7 +1959,7 @@ index 55519f58e..b20f5d9d0 100644
  using TypedPointer = std::pair<llvm::Value* const, llvm::Type* const>;
  
  // Fusion root -> array of indexes, one per reduction output.
-@@ -249,13 +251,15 @@ std::vector<std::vector<const HloInstruction*>> GroupDisjointReductions(
+@@ -249,18 +251,24 @@ std::vector<std::vector<const HloInstruction*>> GroupDisjointReductions(
  int GetVectorSize(const HloFusionAnalysis& analysis,
                    const ReductionDimensions& reduction_dimensions,
                    int num_threads, Vector3 reduction_tiling) {
@@ -1970,16 +1970,27 @@ index 55519f58e..b20f5d9d0 100644
  
 -  if (reduction_dimensions.dimensions[kRowMinorReducedDimension] % 2 != 0 ||
 -      MayPreventVectorization(analysis.fusion())) {
--    return 1;
 +  if (!reduction_dimensions.is_row_reduction) {
 +    // Check if the last dimension is divisible by (vector_size * num_threads).
 +    auto num_kept_minor =
 +        reduction_dimensions.dimensions[kColMinorKeptDimension];
 +    return num_kept_minor % (2 * num_threads) == 0 ? 2 : 1;
++  }
++
++  if (reduction_dimensions.dimensions[kRowMinorReducedDimension] % 2 != 0) {
+     return 1;
    }
  
-   // Enabling vectorization if number of threads is <= warpsize leads to half or
-@@ -280,6 +284,60 @@ int GetVectorSize(const HloFusionAnalysis& analysis,
+-  // Enabling vectorization if number of threads is <= warpsize leads to half or
+-  // more of the threads not doing any work.
+-  if (num_threads <= WarpSize()) {
++  // Enabling vectorization if (number_threads * vector_size) is <= minor_reduced_dimension
++  // otherwise exist threads not doing any work.
++  if (num_threads * 2 > reduction_dimensions.dimensions[kRowMinorReducedDimension]) {
+     return 1;
+   }
+ 
+@@ -280,6 +288,60 @@ int GetVectorSize(const HloFusionAnalysis& analysis,
    return 1;
  }
  
@@ -2040,7 +2051,7 @@ index 55519f58e..b20f5d9d0 100644
  llvm::Value* CastSharedToGlobal(llvm::IRBuilder<>* builder, llvm::Value* input,
                                  llvm::Type* element_type, llvm::Twine name) {
    return builder->CreateAddrSpaceCast(
-@@ -448,20 +506,12 @@ ReductionFusion::ReductionGroupEmitter::ReductionGroupEmitter(
+@@ -448,20 +510,12 @@ ReductionFusion::ReductionGroupEmitter::ReductionGroupEmitter(
             << reduction_emitter_.fusion_.ToString();
  
    auto* builder = reduction_emitter_.builder_;
@@ -2062,7 +2073,7 @@ index 55519f58e..b20f5d9d0 100644
        const HloInstruction* init_value =
            reduce_hlo->init_values()[op_result_idx];
  
-@@ -469,8 +519,33 @@ ReductionFusion::ReductionGroupEmitter::ReductionGroupEmitter(
+@@ -469,8 +523,33 @@ ReductionFusion::ReductionGroupEmitter::ReductionGroupEmitter(
        llvm::Value* init_ir_value = (*fused_emitter.GetGenerator(
            *init_value))(llvm_ir::IrArray::Index(builder->getInt32Ty()))
                                         .value();
@@ -2098,7 +2109,7 @@ index 55519f58e..b20f5d9d0 100644
        const Tiling& tiling = reduction_info.GetTiling();
        auto shared_cache = [&]() -> std::optional<llvm_ir::SharedMemoryTile> {
          auto* module = reduction_emitter.ir_emitter_context_.llvm_module();
-@@ -774,7 +849,9 @@ ReductionFusion::ReductionGroupEmitter::GetOutputIndexForReduction(
+@@ -774,7 +853,9 @@ ReductionFusion::ReductionGroupEmitter::GetOutputIndexForReduction(
      auto* minor_idx = builder->CreateAdd(offset[kColMinorKeptDimension],
                                           thread_ids[kColReducedDimension]);
      return {{major_idx, minor_idx},
@@ -2109,7 +2120,7 @@ index 55519f58e..b20f5d9d0 100644
              index_ty};
    }();
  
-@@ -956,8 +1033,11 @@ void ReductionFusion::ReductionGroupEmitter::
+@@ -956,8 +1037,11 @@ void ReductionFusion::ReductionGroupEmitter::
    auto* builder = reduction_emitter_.builder_;
    KernelSupportLibrary ksl(builder);
    const HloComputation* reducer = reduction->to_apply();
@@ -2123,7 +2134,7 @@ index 55519f58e..b20f5d9d0 100644
  
    auto constant = [&](uint64_t c) -> llvm::Constant* {
      return llvm::ConstantInt::get(reduction_emitter_.index_ty_, c);
-@@ -967,53 +1047,75 @@ void ReductionFusion::ReductionGroupEmitter::
+@@ -967,53 +1051,75 @@ void ReductionFusion::ReductionGroupEmitter::
    };
    const auto& reduction_info = reduction_emitter_.reduction_codegen_info_;
    const Tiling& tiling = reduction_info.GetTiling();
@@ -2237,7 +2248,7 @@ index 55519f58e..b20f5d9d0 100644
  }
  
  // Generate a single element of the tile (update the accumulator state) for a
-@@ -1023,6 +1125,8 @@ void ReductionFusion::ReductionGroupEmitter::GenerateElementForReducer(
+@@ -1023,6 +1129,8 @@ void ReductionFusion::ReductionGroupEmitter::GenerateElementForReducer(
      const llvm_ir::IrArray::Index& index) const {
    HloComputation* reducer = reduction->to_apply();
    auto* builder = reduction_emitter_.builder_;
@@ -2246,7 +2257,7 @@ index 55519f58e..b20f5d9d0 100644
    CHECK_EQ(reducer->num_parameters() % 2, 0);
  
    absl::InlinedVector<llvm::Value*, 2> reduction_accumulators;
-@@ -1030,12 +1134,21 @@ void ReductionFusion::ReductionGroupEmitter::GenerateElementForReducer(
+@@ -1030,12 +1138,21 @@ void ReductionFusion::ReductionGroupEmitter::GenerateElementForReducer(
    for (int red_idx = 0; red_idx < reducer->num_parameters() / 2; red_idx++) {
      const auto& state = GetCalculationStateFor(reduction, red_idx);
  
@@ -2270,7 +2281,7 @@ index 55519f58e..b20f5d9d0 100644
      reduction_input_value.push_back(input_address);
    }
  
-@@ -1329,7 +1442,8 @@ ReductionFusion::ComputeReductionCodegenInfo(
+@@ -1329,7 +1446,8 @@ ReductionFusion::ComputeReductionCodegenInfo(
    // parallelizing the z dimension (major reduced dimensions). The general
    // recommendation is to use between 128 and 512 threads, so we just go for
    // 256. See https://forums.developer.nvidia.com/t/55529
@@ -2280,7 +2291,7 @@ index 55519f58e..b20f5d9d0 100644
    if (reduction_dimensions.is_row_reduction &&
        num_threads_x * 2 <= kThreadsPerBlockTarget) {
      int64_t kept_size = reduction_dimensions.dimensions[kRowKeptDimension];
-@@ -1348,14 +1462,21 @@ ReductionFusion::ComputeReductionCodegenInfo(
+@@ -1348,14 +1466,21 @@ ReductionFusion::ComputeReductionCodegenInfo(
  
    int vector_size = GetVectorSize(analysis, reduction_dimensions, num_threads_x,
                                    reduction_tiling);
@@ -2305,7 +2316,7 @@ index 55519f58e..b20f5d9d0 100644
      num_threads.push_back(1);  // The vector dimension is a loop.
      tiled_shape.push_back(vector_size);
      tile_per_thread.push_back(vector_size);
-@@ -1365,6 +1486,8 @@ ReductionFusion::ComputeReductionCodegenInfo(
+@@ -1365,6 +1490,8 @@ ReductionFusion::ComputeReductionCodegenInfo(
                  /*loops_to_unroll=*/{false, false, true, false});
    bool reduction_is_race_free = ReductionIsRaceFree(
        hero_reduction->GetModule()->config(), reduction_dimensions);
@@ -2869,9 +2880,9 @@ index c8ef2d60b..69fdfd096 100644
 --- a/xla/service/gpu/gpu_sanitize_constant_names.cc
 +++ b/xla/service/gpu/gpu_sanitize_constant_names.cc
 @@ -17,11 +17,11 @@ limitations under the License.
-
+ 
  #include <string>
-
+ 
 +#include "tsl/platform/logging.h"
 +#include "tsl/platform/status.h"
  #include "xla/hlo/ir/hlo_instruction.h"
@@ -2879,9 +2890,9 @@ index c8ef2d60b..69fdfd096 100644
  #include "xla/service/llvm_ir/buffer_assignment_util.h"
 -#include "tsl/platform/logging.h"
 -#include "tsl/platform/status.h"
-
+ 
  namespace xla {
-
+ 
 @@ -39,8 +39,9 @@ absl::StatusOr<bool> GpuSanitizeConstantNames::Run(
        if (instr->opcode() == HloOpcode::kConstant) {
          continue;
@@ -2893,7 +2904,7 @@ index c8ef2d60b..69fdfd096 100644
 +      instr_name_uniquer.GetUniqueName(instr->name());
      }
    }
-
+ 
 diff --git a/xla/service/gpu/gpu_transfer_manager.cc b/xla/service/gpu/gpu_transfer_manager.cc
 index 4ef4ece8d..1ca8d7352 100644
 --- a/xla/service/gpu/gpu_transfer_manager.cc
@@ -4622,10 +4633,10 @@ index e7eaf3a35..dd3d72935 100644
    int64_t algorithm_idx_;
 diff --git a/xla/service/gpu/spir_compiler.cc b/xla/service/gpu/spir_compiler.cc
 new file mode 100644
-index 000000000..243beb3a1
+index 000000000..93711c700
 --- /dev/null
 +++ b/xla/service/gpu/spir_compiler.cc
-@@ -0,0 +1,280 @@
+@@ -0,0 +1,281 @@
 +/* Copyright (c) 2023 Intel Corporation
 +
 +Licensed under the Apache License, Version 2.0 (the "License");
@@ -4829,8 +4840,8 @@ index 000000000..243beb3a1
 +    // Rewrite Multi-Headed Attention modules to Fused MHA custom-calls.
 +    mha_fusion_pipeline.AddPass<RedundantConvertMover>();
 +    mha_fusion_pipeline.AddPass<HloDCE>();
-+    mha_fusion_pipeline.AddPass<CudnnFusedMHARewriter>(
-+        cuda_compute_capability, stream_exec);
++    mha_fusion_pipeline.AddPass<CudnnFusedMHARewriter>(cuda_compute_capability,
++                                                       stream_exec);
 +    mha_fusion_pipeline.AddPass<AlgebraicSimplifier>(alg_sim_options);
 +    mha_fusion_pipeline.AddPass<HloDCE>();
 +    mha_fusion_pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true,
@@ -4892,8 +4903,9 @@ index 000000000..243beb3a1
 +    XLA_SCOPED_LOGGING_TIMER_IF(
 +        "SPIRCompiler::CompileTargetBinary - CompileToSpir",
 +        !options.is_autotuning_compilation);
-+    TF_ASSIGN_OR_RETURN(spir, spir::CompileToSpir(llvm_module, gpu_version,
-+                                                  module_config.debug_options()));
++    TF_ASSIGN_OR_RETURN(spir,
++                        spir::CompileToSpir(llvm_module, gpu_version,
++                                            module_config.debug_options()));
 +  }
 +
 +  return BackendCompileResult{"", std::move(spir)};
@@ -5346,7 +5358,7 @@ index 2d5493614..c481880a1 100644
 @@ -137,6 +137,9 @@ constexpr AlgorithmType kDefaultBlasGemv = -3;
  constexpr AlgorithmType kNoAlgorithm = -4;
  constexpr AlgorithmType kRuntimeAutotuning = -5;
-
+ 
 +constexpr AlgorithmType kXetlaGemm = -6;
 +constexpr AlgorithmType kOneDnnGemm = -7;
 +
