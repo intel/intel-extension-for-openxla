@@ -1620,16 +1620,6 @@ index 295f9ca78..c64e97820 100644
    // check if matched attention block is supported by cuDNN flash attention.
    TF_ASSIGN_OR_RETURN(is_flash_attention,
                        IsFlashAttention(bmm_1, is_causal_mask, custom_call_name,
-@@ -1370,6 +1371,9 @@ absl::StatusOr<HloInstruction*> ChangeCheckedDimToFastest(
-                 minor_to_major_to_check),
-             operand_bmm, perm),
-         &operand_bmm->metadata());
-+#if TENSORFLOW_USE_SYCL
-+    bmm->ReplaceOperandWithDifferentShape(bmm_operand, operand_bmm);
-+#endif
-     *((DynCast<HloDotInstruction>(bmm))->mutable_dot_dimension_numbers()) =
-         new_dot_dims_bmm;
-   }
 @@ -1857,15 +1861,15 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
          comp->parent()->config().debug_options();
      const auto cudnn_version =
