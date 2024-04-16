@@ -187,7 +187,7 @@ std::tuple<int, int, int, int, int, int> selectXetlaQKVGemmConfig(int m, int n,
 
 template <typename ComputeType>
 template <int WG_M, int WG_N, int SG_M, int SG_N, int SG_K, int SLM_KS>
-void XetlaGemmKernel<ComputeType>::dispatch(se::gpu::GpuStreamHandle handle) {
+bool XetlaGemmKernel<ComputeType>::dispatch(se::gpu::GpuStreamHandle handle) {
   sycl::queue q = *handle;
   if (num_epilogues_ == 0) {
     hgemm_common<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
@@ -247,8 +247,10 @@ void XetlaGemmKernel<ComputeType>::dispatch(se::gpu::GpuStreamHandle handle) {
                           m_, n_, k_, epilogue_params_[0]);
 
   } else {
-    LOG(ERROR) << "No mateched policy";
+    LOG(ERROR) << "No mateched policy, will fallback to oneDNN kernel";
+    return false;
   }
+  return true;
 }
 
 template <typename ComputeType, int WG_M, int WG_N, int SG_M, int SG_N,
@@ -260,9 +262,8 @@ struct GemmPolicy {
                             se::gpu::GpuStreamHandle handle) {
     if (WG_M == wg_m && WG_N == wg_n && SG_M == sg_m && SG_N == sg_n &&
         SG_K == sg_k && SLM_KS == slm_ks) {
-      gemm_kernel->template dispatch<WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS>(
-          handle);
-      return true;
+      return gemm_kernel
+          ->template dispatch<WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS>(handle);
     }
     return false;
   }
@@ -339,7 +340,7 @@ template class XetlaGemmKernel<gpu::xetla::bf16>;
 
 template <typename ComputeType>
 template <int WG_M, int WG_N, int SG_M, int SG_N, int SG_K, int SLM_KS>
-void XetlaQKVGemmKernel<ComputeType>::dispatch(
+bool XetlaQKVGemmKernel<ComputeType>::dispatch(
     se::gpu::GpuStreamHandle handle) {
   sycl::queue q = *handle;
   if (q_out_ != nullptr && k_out_ != nullptr && v_out_ != nullptr) {
@@ -350,8 +351,10 @@ void XetlaQKVGemmKernel<ComputeType>::dispatch(
         reinterpret_cast<ComputeType*>(v_out_->data.opaque()),
         reinterpret_cast<ComputeType*>(a_->data.opaque()),
         reinterpret_cast<ComputeType*>(b_->data.opaque()), m_, n_, k_);
+    return true;
   } else {
     LOG(ERROR) << "No mateched policy";
+    return false;
   }
 }
 

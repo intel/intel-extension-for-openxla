@@ -113,7 +113,7 @@ class XetlaGemmKernel {
   }
 
   template <int WG_M, int WG_N, int SG_M, int SG_N, int SG_K, int SLM_KS>
-  void dispatch(se::gpu::GpuStreamHandle handle);
+  bool dispatch(se::gpu::GpuStreamHandle handle);
 
   void run(se::gpu::GpuStreamHandle handle);
 };
@@ -175,7 +175,7 @@ class XetlaQKVGemmKernel : public XetlaGemmKernel<ComputeType> {
   }
 
   template <int WG_M, int WG_N, int SG_M, int SG_N, int SG_K, int SLM_KS>
-  void dispatch(se::gpu::GpuStreamHandle handle);
+  bool dispatch(se::gpu::GpuStreamHandle handle);
 
   void run(se::gpu::GpuStreamHandle handle);
 };
