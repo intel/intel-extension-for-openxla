@@ -107,7 +107,7 @@ inline void hgemm_addmm(sycl::queue& queue, scalar_t* out, const scalar_t* res,
         HGEMM_ADDMM_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
                            L3_KS, SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
         NDRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          xetla_exec_item<3> ei(item);
+          sycl::nd_item<3> ei(item);
           using data_type_b = scalar_t;
           using data_type_a = scalar_t;
           using data_type_c = scalar_t;
@@ -115,11 +115,11 @@ inline void hgemm_addmm(sycl::queue& queue, scalar_t* out, const scalar_t* res,
           static constexpr uint32_t periodic_sync_interval = SYNC_FREQ;
           static constexpr uint32_t prefetch_distance = STAGES;
           using tile_shape = group::tile_shape_t<WG_N, WG_M, SG_N, SG_M>;
-          using brgemm_t = typename group::brgemm_selector_t<
+          using brgemm_t = typename group::gemm_selector_t<
               data_type_a, data_type_b, layout_a, layout_b, mem_space::global,
               mem_space::global, 8, 8, data_type_acc, tile_shape, SG_K,
               mma_engine::xmx, gpu_arch::Xe, prefetch_distance,
-              periodic_sync_interval>::brgemm;
+              periodic_sync_interval>::gemm;
           using epilogue_t = group::epilogue_t<
               xetla::group::epilogue_policy_tile_op<
                   xetla::subgroup::chained_tile_op_t<
@@ -128,13 +128,15 @@ inline void hgemm_addmm(sycl::queue& queue, scalar_t* out, const scalar_t* res,
               tile_shape,
               mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>>;
 
-          using gemm_op_t = gpu::xetla::kernel::gemm_t<
-              gpu::xetla::kernel::dispatch_policy_kslicing<L3_KS, SLM_KS,
-                                                           gpu_arch::Xe>,
+          using group_swizzle =
+              gpu::xetla::kernel::group_swizzle_default<gpu_arch::Xe>;
+          using gemm_op_t = gpu::xetla::kernel::gemm_universal_t<
+              gpu::xetla::kernel::dispatch_policy_kslicing<group_swizzle, L3_KS,
+                                                           SLM_KS>,
               brgemm_t, epilogue_t>;
           typename gemm_op_t::arguments_t arg(
               m, k, n, const_cast<scalar_t*>(a), lda, const_cast<scalar_t*>(b),
-              ldb, out, ldc,
+              ldb, out, ldc, {}, {},
               {{{const_cast<scalar_t*>(res), {n, m, n}, alpha, beta}}});
           slm_barrier_init<gemm_op_t>();
           gemm_op_t gemm_op;
@@ -156,7 +158,7 @@ inline void hgemm_common(sycl::queue& queue, scalar_t* out, const scalar_t* a,
         HGEMM_COMMON_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
                             L3_KS, SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
         NDRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          xetla_exec_item<3> ei(item);
+          sycl::nd_item<3> ei(item);
           using data_type_b = scalar_t;
           using data_type_a = scalar_t;
           using data_type_c = scalar_t;
@@ -164,19 +166,21 @@ inline void hgemm_common(sycl::queue& queue, scalar_t* out, const scalar_t* a,
           static constexpr uint32_t periodic_sync_interval = SYNC_FREQ;
           static constexpr uint32_t prefetch_distance = STAGES;
           using tile_shape = group::tile_shape_t<WG_N, WG_M, SG_N, SG_M>;
-          using brgemm_t = typename group::brgemm_selector_t<
+          using brgemm_t = typename group::gemm_selector_t<
               data_type_a, data_type_b, layout_a, layout_b, mem_space::global,
               mem_space::global, 8, 8, data_type_acc, tile_shape, SG_K,
               mma_engine::xmx, gpu_arch::Xe, prefetch_distance,
-              periodic_sync_interval>::brgemm;
+              periodic_sync_interval>::gemm;
           using epilogue_t = group::epilogue_t<
               xetla::group::epilogue_policy_tile_op<
                   xetla::subgroup::chained_tile_op_t<>, gpu_arch::Xe>,
               tile_shape,
               mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>>;
-          using gemm_op_t = gpu::xetla::kernel::gemm_t<
-              gpu::xetla::kernel::dispatch_policy_kslicing<L3_KS, SLM_KS,
-                                                           gpu_arch::Xe>,
+          using group_swizzle =
+              gpu::xetla::kernel::group_swizzle_default<gpu_arch::Xe>;
+          using gemm_op_t = gpu::xetla::kernel::gemm_universal_t<
+              gpu::xetla::kernel::dispatch_policy_kslicing<group_swizzle, L3_KS,
+                                                           SLM_KS>,
               brgemm_t, epilogue_t>;
           typename gemm_op_t::arguments_t arg(m, k, n, const_cast<scalar_t*>(a),
                                               lda, const_cast<scalar_t*>(b),
@@ -201,7 +205,7 @@ inline void hgemm_res(sycl::queue& queue, scalar_t* out, const scalar_t* a,
         HGEMM_RES_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, L3_KS,
                          SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
         NDRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          xetla_exec_item<3> ei(item);
+          sycl::nd_item<3> ei(item);
 
           using data_type_b = scalar_t;
           using data_type_a = scalar_t;
@@ -211,11 +215,11 @@ inline void hgemm_res(sycl::queue& queue, scalar_t* out, const scalar_t* a,
           static constexpr uint32_t periodic_sync_interval = SYNC_FREQ;
           static constexpr uint32_t prefetch_distance = STAGES;
           using tile_shape = group::tile_shape_t<WG_N, WG_M, SG_N, SG_M>;
-          using brgemm_t = typename group::brgemm_selector_t<
+          using brgemm_t = typename group::gemm_selector_t<
               data_type_a, data_type_b, layout_a, layout_b, mem_space::global,
               mem_space::global, 8, 8, data_type_acc, tile_shape, SG_K,
               mma_engine::xmx, gpu_arch::Xe, prefetch_distance,
-              periodic_sync_interval>::brgemm;
+              periodic_sync_interval>::gemm;
           using epilogue_t = group::epilogue_t<
               xetla::group::epilogue_policy_tile_op<
                   xetla::subgroup::chained_tile_op_t<
@@ -223,13 +227,15 @@ inline void hgemm_res(sycl::queue& queue, scalar_t* out, const scalar_t* a,
                   gpu_arch::Xe>,
               tile_shape,
               mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>>;
-          using gemm_op_t = gpu::xetla::kernel::gemm_t<
-              gpu::xetla::kernel::dispatch_policy_kslicing<L3_KS, SLM_KS,
-                                                           gpu_arch::Xe>,
+          using group_swizzle =
+              gpu::xetla::kernel::group_swizzle_default<gpu_arch::Xe>;
+          using gemm_op_t = gpu::xetla::kernel::gemm_universal_t<
+              gpu::xetla::kernel::dispatch_policy_kslicing<group_swizzle, L3_KS,
+                                                           SLM_KS>,
               brgemm_t, epilogue_t>;
           typename gemm_op_t::arguments_t arg(
               m, k, n, const_cast<scalar_t*>(a), lda, const_cast<scalar_t*>(b),
-              ldb, out, ldc,
+              ldb, out, ldc, {}, {},
               {{{const_cast<scalar_t*>(res), {n, m, n}, res_factor}}});
           slm_barrier_init<gemm_op_t>();
           gemm_op_t gemm_op;
@@ -251,7 +257,7 @@ inline void hgemm_bias(sycl::queue& queue, scalar_t* out, const scalar_t* a,
         HGEMM_BIAS_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, L3_KS,
                           SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
         NDRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          xetla_exec_item<3> ei(item);
+          sycl::nd_item<3> ei(item);
           using data_type_b = scalar_t;
           using data_type_a = scalar_t;
           using data_type_c = scalar_t;
@@ -260,11 +266,11 @@ inline void hgemm_bias(sycl::queue& queue, scalar_t* out, const scalar_t* a,
           static constexpr uint32_t periodic_sync_interval = SYNC_FREQ;
           static constexpr uint32_t prefetch_distance = STAGES;
           using tile_shape = group::tile_shape_t<WG_N, WG_M, SG_N, SG_M>;
-          using brgemm_t = typename group::brgemm_selector_t<
+          using brgemm_t = typename group::gemm_selector_t<
               data_type_a, data_type_b, layout_a, layout_b, mem_space::global,
               mem_space::global, 8, 8, data_type_acc, tile_shape, SG_K,
               mma_engine::xmx, gpu_arch::Xe, prefetch_distance,
-              periodic_sync_interval>::brgemm;
+              periodic_sync_interval>::gemm;
           using epilogue_t = group::epilogue_t<
               xetla::group::epilogue_policy_tile_op<
                   xetla::subgroup::chained_tile_op_t<
@@ -272,13 +278,15 @@ inline void hgemm_bias(sycl::queue& queue, scalar_t* out, const scalar_t* a,
                   gpu_arch::Xe>,
               tile_shape,
               mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>>;
-          using gemm_op_t = gpu::xetla::kernel::gemm_t<
-              gpu::xetla::kernel::dispatch_policy_kslicing<L3_KS, SLM_KS,
-                                                           gpu_arch::Xe>,
+          using group_swizzle =
+              gpu::xetla::kernel::group_swizzle_default<gpu_arch::Xe>;
+          using gemm_op_t = gpu::xetla::kernel::gemm_universal_t<
+              gpu::xetla::kernel::dispatch_policy_kslicing<group_swizzle, L3_KS,
+                                                           SLM_KS>,
               brgemm_t, epilogue_t>;
           typename gemm_op_t::arguments_t arg(
               m, k, n, const_cast<scalar_t*>(a), lda, const_cast<scalar_t*>(b),
-              ldb, out, ldc,
+              ldb, out, ldc, {}, {},
               {{{const_cast<scalar_t*>(bias), {n, 1, n}, bias_factor}}});
           slm_barrier_init<gemm_op_t>();
           gemm_op_t gemm_op;
@@ -302,7 +310,7 @@ inline void hgemm_bias_res(sycl::queue& queue, scalar_t* out, const scalar_t* a,
         HGEMM_BIAS_RES_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
                               L3_KS, SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
         NDRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          xetla_exec_item<3> ei(item);
+          sycl::nd_item<3> ei(item);
           using data_type_b = scalar_t;
           using data_type_a = scalar_t;
           using data_type_c = scalar_t;
@@ -312,11 +320,11 @@ inline void hgemm_bias_res(sycl::queue& queue, scalar_t* out, const scalar_t* a,
           static constexpr uint32_t periodic_sync_interval = SYNC_FREQ;
           static constexpr uint32_t prefetch_distance = STAGES;
           using tile_shape = group::tile_shape_t<WG_N, WG_M, SG_N, SG_M>;
-          using brgemm_t = typename group::brgemm_selector_t<
+          using brgemm_t = typename group::gemm_selector_t<
               data_type_a, data_type_b, layout_a, layout_b, mem_space::global,
               mem_space::global, 8, 8, data_type_acc, tile_shape, SG_K,
               mma_engine::xmx, gpu_arch::Xe, prefetch_distance,
-              periodic_sync_interval>::brgemm;
+              periodic_sync_interval>::gemm;
           using epilogue_t = group::epilogue_t<
               xetla::group::epilogue_policy_tile_op<
                   xetla::subgroup::chained_tile_op_t<
@@ -325,13 +333,15 @@ inline void hgemm_bias_res(sycl::queue& queue, scalar_t* out, const scalar_t* a,
                   gpu_arch::Xe>,
               tile_shape,
               mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>>;
-          using gemm_op_t = gpu::xetla::kernel::gemm_t<
-              gpu::xetla::kernel::dispatch_policy_kslicing<L3_KS, SLM_KS,
-                                                           gpu_arch::Xe>,
+          using group_swizzle =
+              gpu::xetla::kernel::group_swizzle_default<gpu_arch::Xe>;
+          using gemm_op_t = gpu::xetla::kernel::gemm_universal_t<
+              gpu::xetla::kernel::dispatch_policy_kslicing<group_swizzle, L3_KS,
+                                                           SLM_KS>,
               brgemm_t, epilogue_t>;
           typename gemm_op_t::arguments_t arg(
               m, k, n, const_cast<scalar_t*>(a), lda, const_cast<scalar_t*>(b),
-              ldb, out, ldc,
+              ldb, out, ldc, {}, {},
               {{{const_cast<scalar_t*>(bias), {n, 1, n}, bias_factor},
                 {const_cast<scalar_t*>(res), {n, m, n}, res_factor}}});
           slm_barrier_init<gemm_op_t>();
@@ -355,7 +365,7 @@ inline void hgemm_bias_gelu(sycl::queue& queue, scalar_t* out,
         HGEMM_BIAS_GELU_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
                                L3_KS, SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
         NDRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          xetla_exec_item<3> ei(item);
+          sycl::nd_item<3> ei(item);
           using data_type_b = scalar_t;
           using data_type_a = scalar_t;
           using data_type_c = scalar_t;
@@ -364,11 +374,11 @@ inline void hgemm_bias_gelu(sycl::queue& queue, scalar_t* out,
           static constexpr uint32_t periodic_sync_interval = SYNC_FREQ;
           static constexpr uint32_t prefetch_distance = STAGES;
           using tile_shape = group::tile_shape_t<WG_N, WG_M, SG_N, SG_M>;
-          using brgemm_t = typename group::brgemm_selector_t<
+          using brgemm_t = typename group::gemm_selector_t<
               data_type_a, data_type_b, layout_a, layout_b, mem_space::global,
               mem_space::global, 8, 8, data_type_acc, tile_shape, SG_K,
               mma_engine::xmx, gpu_arch::Xe, prefetch_distance,
-              periodic_sync_interval>::brgemm;
+              periodic_sync_interval>::gemm;
           using epilogue_t = group::epilogue_t<
               xetla::group::epilogue_policy_tile_op<
                   xetla::subgroup::chained_tile_op_t<
@@ -377,13 +387,15 @@ inline void hgemm_bias_gelu(sycl::queue& queue, scalar_t* out,
                   gpu_arch::Xe>,
               tile_shape,
               mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>>;
-          using gemm_op_t = gpu::xetla::kernel::gemm_t<
-              gpu::xetla::kernel::dispatch_policy_kslicing<L3_KS, SLM_KS,
-                                                           gpu_arch::Xe>,
+          using group_swizzle =
+              gpu::xetla::kernel::group_swizzle_default<gpu_arch::Xe>;
+          using gemm_op_t = gpu::xetla::kernel::gemm_universal_t<
+              gpu::xetla::kernel::dispatch_policy_kslicing<group_swizzle, L3_KS,
+                                                           SLM_KS>,
               brgemm_t, epilogue_t>;
           typename gemm_op_t::arguments_t arg(
               m, k, n, const_cast<scalar_t*>(a), lda, const_cast<scalar_t*>(b),
-              ldb, out, ldc,
+              ldb, out, ldc, {}, {},
               {{{const_cast<scalar_t*>(bias), {n, 1, n}, bias_factor}, {}}});
           slm_barrier_init<gemm_op_t>();
           gemm_op_t gemm_op;
@@ -419,7 +431,7 @@ inline void hgemm_qkv(sycl::queue& queue, scalar_t* out0, scalar_t* out1,
         HGEMM_QKV_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, L3_KS,
                          SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
         NDRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          xetla_exec_item<3> ei(item);
+          sycl::nd_item<3> ei(item);
 
           using data_type_b = scalar_t;
           using data_type_a = scalar_t;
@@ -429,19 +441,21 @@ inline void hgemm_qkv(sycl::queue& queue, scalar_t* out0, scalar_t* out1,
           static constexpr uint32_t prefetch_distance = STAGES;
           using tile_shape = group::tile_shape_t<WG_N, WG_M, SG_N, SG_M>;
 
-          using brgemm_t = typename group::brgemm_selector_t<
+          using brgemm_t = typename group::gemm_selector_t<
               data_type_a, data_type_b, layout_a, layout_b, mem_space::global,
               mem_space::global, 8, 8, data_type_acc, tile_shape, SG_K,
               mma_engine::xmx, gpu_arch::Xe, prefetch_distance,
-              periodic_sync_interval>::brgemm;
+              periodic_sync_interval>::gemm;
           using epilogue_t = group::epilogue_t<
               xetla::group::epilogue_policy_tile_op<
                   xetla::subgroup::chained_tile_op_t<>, gpu_arch::Xe>,
               tile_shape,
               mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>>;
-          using gemm_op_t = gpu::xetla::kernel::gemm_t<
-              gpu::xetla::kernel::dispatch_policy_kslicing<L3_KS, SLM_KS,
-                                                           gpu_arch::Xe>,
+          using group_swizzle =
+              gpu::xetla::kernel::group_swizzle_default<gpu_arch::Xe>;
+          using gemm_op_t = gpu::xetla::kernel::gemm_universal_t<
+              gpu::xetla::kernel::dispatch_policy_kslicing<group_swizzle, L3_KS,
+                                                           SLM_KS>,
               brgemm_t, epilogue_t>;
 
           uint32_t batch_id = ei.get_group(0);
@@ -488,7 +502,7 @@ inline void hgemm_qkv_bias(sycl::queue& queue, scalar_t* out0, scalar_t* out1,
         HGEMM_QKV_BIAS_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
                               L3_KS, SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
         NDRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          xetla_exec_item<3> ei(item);
+          sycl::nd_item<3> ei(item);
 
           using data_type_b = scalar_t;
           using data_type_a = scalar_t;
@@ -499,11 +513,11 @@ inline void hgemm_qkv_bias(sycl::queue& queue, scalar_t* out0, scalar_t* out1,
           static constexpr uint32_t prefetch_distance = STAGES;
           using tile_shape = group::tile_shape_t<WG_N, WG_M, SG_N, SG_M>;
 
-          using brgemm_t = typename group::brgemm_selector_t<
+          using brgemm_t = typename group::gemm_selector_t<
               data_type_a, data_type_b, layout_a, layout_b, mem_space::global,
               mem_space::global, 8, 8, data_type_acc, tile_shape, SG_K,
               mma_engine::xmx, gpu_arch::Xe, prefetch_distance,
-              periodic_sync_interval>::brgemm;
+              periodic_sync_interval>::gemm;
           using epilogue_t = group::epilogue_t<
               xetla::group::epilogue_policy_tile_op<
                   xetla::subgroup::chained_tile_op_t<
@@ -511,9 +525,11 @@ inline void hgemm_qkv_bias(sycl::queue& queue, scalar_t* out0, scalar_t* out1,
                   gpu_arch::Xe>,
               tile_shape,
               mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>>;
-          using gemm_op_t = gpu::xetla::kernel::gemm_t<
-              gpu::xetla::kernel::dispatch_policy_kslicing<L3_KS, SLM_KS,
-                                                           gpu_arch::Xe>,
+          using group_swizzle =
+              gpu::xetla::kernel::group_swizzle_default<gpu_arch::Xe>;
+          using gemm_op_t = gpu::xetla::kernel::gemm_universal_t<
+              gpu::xetla::kernel::dispatch_policy_kslicing<group_swizzle, L3_KS,
+                                                           SLM_KS>,
               brgemm_t, epilogue_t>;
 
           uint32_t batch_id = ei.get_group(0);
@@ -526,7 +542,8 @@ inline void hgemm_qkv_bias(sycl::queue& queue, scalar_t* out0, scalar_t* out1,
 
           typename gemm_op_t::arguments_t arg(
               m, k, n, const_cast<scalar_t*>(a), lda,
-              const_cast<scalar_t*>(b) + size_b * batch_id, ldb, out, ldc,
+              const_cast<scalar_t*>(b) + size_b * batch_id, ldb, out, ldc, {},
+              {},
               {{{const_cast<scalar_t*>(bias) + size_bias * batch_id,
                  {n, 1, n},
                  {1}}}});

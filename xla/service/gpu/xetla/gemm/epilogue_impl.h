@@ -61,9 +61,9 @@ struct alpha_beta_op_t {
                               block_size_y, reg_layout::tiled>;
     using mat_in_tile_t = subgroup::tile_t<dtype_in, mat_in_tile_desc_t>;
     using mat_in_payload_t = subgroup::mem_payload_t<
-        dtype_in, mat_in_tile_desc_t,
+        mem_desc_in_t, mat_in_tile_desc_t,
         subgroup::msg_type_v<mat_in_tile_desc_t, mem_desc_in_t::space>,
-        mem_desc_in_t::layout, mem_desc_in_t::space, gpu_arch::Xe>;
+        gpu_arch::Xe>;
     using mat_in_tile_acc_t = subgroup::tile_t<dtype_acc, mat_in_tile_desc_t>;
     mem_desc_in_t mem_desc_in(args.base, args.shape, coord);
     mat_in_tile_t mat_in;
@@ -139,9 +139,9 @@ struct res_op_t {
                               block_size_y, reg_layout::tiled>;
     using mat_in_tile_t = subgroup::tile_t<dtype_in, mat_in_tile_desc_t>;
     using mat_in_payload_t = subgroup::mem_payload_t<
-        dtype_in, mat_in_tile_desc_t,
+        mem_desc_in_t, mat_in_tile_desc_t,
         subgroup::msg_type_v<mat_in_tile_desc_t, mem_desc_in_t::space>,
-        mem_desc_in_t::layout, mem_desc_in_t::space, gpu_arch::Xe>;
+        gpu_arch::Xe>;
     using mat_in_tile_acc_t = subgroup::tile_t<dtype_acc, mat_in_tile_desc_t>;
     mem_desc_in_t mem_desc_in(args.base, args.shape, coord);
     mat_in_tile_t mat_in;
@@ -216,9 +216,9 @@ struct bias_op_t {
                                                    1, reg_layout::tiled>;
     using bias_t = subgroup::tile_t<dtype_bias, bias_tile_desc_t>;
     using bias_payload_t = subgroup::mem_payload_t<
-        dtype_bias, bias_tile_desc_t,
+        mem_desc_bias_t, bias_tile_desc_t,
         subgroup::msg_type_v<bias_tile_desc_t, mem_desc_bias_t::space>,
-        mem_desc_bias_t::layout, mem_desc_bias_t::space, gpu_arch::Xe>;
+        gpu_arch::Xe>;
     coord_t bias_coord(coord.x, 0);
     mem_desc_bias_t mem_desc_bias(args.base, args.shape, bias_coord);
     bias_t bias;
