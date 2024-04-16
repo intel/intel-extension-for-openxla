@@ -297,7 +297,7 @@ struct PolicyDispatcher<ComputeType, MATCHER> {
 };
 
 template <typename ComputeType>
-void XetlaGemmKernel<ComputeType>::run(se::gpu::GpuStreamHandle handle) {
+bool XetlaGemmKernel<ComputeType>::run(se::gpu::GpuStreamHandle handle) {
   using gemm_policy =
       PolicyDispatcher<ComputeType,
                        GemmPolicy<ComputeType, 8, 64, 8, 16, 32, 8>,
@@ -332,7 +332,7 @@ void XetlaGemmKernel<ComputeType>::run(se::gpu::GpuStreamHandle handle) {
   int SG_N = std::get<3>(selected_policy_id_);
   int SG_K = std::get<4>(selected_policy_id_);
   int SLM_KS = std::get<5>(selected_policy_id_);
-  gemm_policy::call(WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, this, handle);
+  return gemm_policy::call(WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, this, handle);
 }
 
 template class XetlaGemmKernel<sycl::half>;
@@ -359,7 +359,7 @@ bool XetlaQKVGemmKernel<ComputeType>::dispatch(
 }
 
 template <typename ComputeType>
-void XetlaQKVGemmKernel<ComputeType>::run(se::gpu::GpuStreamHandle handle) {
+bool XetlaQKVGemmKernel<ComputeType>::run(se::gpu::GpuStreamHandle handle) {
   using gemm_policy =
       PolicyDispatcher<ComputeType,
                        GemmPolicy<ComputeType, 8, 64, 8, 16, 32, 8>,
@@ -394,7 +394,7 @@ void XetlaQKVGemmKernel<ComputeType>::run(se::gpu::GpuStreamHandle handle) {
   int SG_N = std::get<3>(selected_policy_id_);
   int SG_K = std::get<4>(selected_policy_id_);
   int SLM_KS = std::get<5>(selected_policy_id_);
-  gemm_policy::call(WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, this, handle);
+  return gemm_policy::call(WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, this, handle);
 }
 
 template class XetlaQKVGemmKernel<sycl::half>;

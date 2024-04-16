@@ -189,7 +189,7 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
         }
       }
       if (policy.fallback() == false) {
-        policy.run(handle);
+        return !policy.run(handle);
       }
       return policy.fallback();
     }
@@ -212,7 +212,7 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
             .build();
       }
       if (policy.fallback() == false) {
-        policy.run(handle);
+        return !policy.run(handle);
       }
       return policy.fallback();
     }
@@ -227,7 +227,7 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
                   ::gpu::xetla::XetlaGemmKernel<InputT>::EpilogueType::GELU)
               .build();
       if (policy.fallback() == false) {
-        policy.run(handle);
+        return !policy.run(handle);
       }
       return policy.fallback();
     }
@@ -245,7 +245,7 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
                   ::gpu::xetla::XetlaGemmKernel<InputT>::EpilogueType::GELU)
               .build();
       if (policy.fallback() == false) {
-        policy.run(handle);
+        return !policy.run(handle);
       }
       return policy.fallback();
     }
