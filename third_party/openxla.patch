@@ -249,7 +249,7 @@ index e055a619f5..fa5e93af61 100644
          "@com_google_absl//absl/strings",
          "@com_google_absl//absl/types:optional",
 diff --git a/third_party/tsl/tsl/framework/bfc_allocator.cc b/third_party/tsl/tsl/framework/bfc_allocator.cc
-index 9e4447108a..7bd2abc108 100644
+index 9e4447108a..18e5356be4 100644
 --- a/third_party/tsl/tsl/framework/bfc_allocator.cc
 +++ b/third_party/tsl/tsl/framework/bfc_allocator.cc
 @@ -47,12 +47,13 @@ BFCAllocator::BFCAllocator(std::unique_ptr<SubAllocator> sub_allocator,
@@ -285,14 +285,21 @@ index 9e4447108a..7bd2abc108 100644
  bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
    size_t available_bytes = memory_limit_ - *stats_.pool_bytes;
    // Rounds available_bytes down to the nearest multiple of kMinAllocationSize.
-@@ -126,14 +136,33 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
-   // allocation, keep multiplying by a power of two until that is
-   // sufficient.
+@@ -122,17 +132,32 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
+     return false;
+   }
+ 
+-  // If curr_region_allocation_bytes_ is not enough to satisfy the
+-  // allocation, keep multiplying by a power of two until that is
+-  // sufficient.
    bool increased_allocation = false;
 -  while (rounded_bytes > curr_region_allocation_bytes_) {
 -    curr_region_allocation_bytes_ *= 2;
 -    increased_allocation = true;
 +  if (alloc_mode == BFC_EXTEND_LARGE) {
++    // If curr_region_allocation_bytes_ is not enough to satisfy the
++    // allocation, keep multiplying by a power of two until that is
++    // sufficient.
 +    while (rounded_bytes > curr_region_allocation_bytes_) {
 +      curr_region_allocation_bytes_ *= 2;
 +      increased_allocation = true;
@@ -316,25 +323,18 @@ index 9e4447108a..7bd2abc108 100644
 +  bytes = std::min(bytes, GetLimitAlloc());
 +
    size_t bytes_received;
-+  VLOG(1) << "CBOSS DBG try to alloc " << bytes << "bytes!\r\n";
-+  VLOG(1) << "CBOSS DBG cut available_bytes is " <<  available_bytes << "bytes!\r\n";
-+  VLOG(1) << "CBOSS DBG cut rounded_bytes is " <<  rounded_bytes << "bytes!\r\n";
-+  VLOG(1) << "CBOSS DBG cut curr_region_allocation_bytes_ is " <<  curr_region_allocation_bytes_ << "bytes!\r\n";
    void* mem_addr = sub_allocator_->Alloc(alignment, bytes, &bytes_received);
    if (mem_addr == nullptr && !started_backpedal_) {
-     // Only backpedal once.
-@@ -153,7 +182,9 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
+@@ -153,7 +178,7 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
      return false;
    }
  
 -  if (!increased_allocation) {
-+  if (alloc_mode == BFC_EXTEND_SMALL) {
-+    curr_region_allocation_bytes_ = kSmallSize;
-+  } else if (!increased_allocation) {
++  if ((alloc_mode == BFC_EXTEND_LARGE) && !increased_allocation) {
      // Increase the region size of the next required allocation.
      curr_region_allocation_bytes_ *= 2;
    }
-@@ -1248,4 +1279,38 @@ AllocatorMemoryType BFCAllocator::GetMemoryType() const {
+@@ -1248,4 +1273,36 @@ AllocatorMemoryType BFCAllocator::GetMemoryType() const {
    return sub_allocator_->GetMemoryType();
  }
  
@@ -368,8 +368,6 @@ index 9e4447108a..7bd2abc108 100644
 +    LOG(ERROR) << "Failed to read environment variable ITEX_LIMIT_MEMORY_SIZE_IN_MB!"; 
 +  }
 +  
-+  VLOG(1) << "CBOSS DBG CheckIfUsingMachineWithLimitMem res is " << CheckIfUsingMachineWithLimitMem() << "MB!\r\n";
-+  VLOG(1) << "CBOSS DBG GetLimitAlloc res is " << limit_size << "MB!\r\n";
 +  return limit_size * 1024 * 1024;
 +}
  }  // namespace tsl
