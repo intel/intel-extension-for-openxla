@@ -97,4 +97,9 @@ void* SYCLMallocShared(sycl::device* device, size_t ByteCount);
 
 void SYCLFree(sycl::device* device, void* ptr);
 
+sycl::event SYCLGetEventFromStream(sycl::queue* stream);
+
+void SYCLStreamDependOnEvents(sycl::queue* stream,
+                              const std::vector<sycl::event>& events);
+
 #endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_GPU_RUNTIME_H_

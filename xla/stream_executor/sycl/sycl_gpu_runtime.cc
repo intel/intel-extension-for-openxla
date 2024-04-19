@@ -509,6 +509,21 @@ void SYCLFree(sycl::device* device, void* ptr) {
   sycl::free(ptr, *stream);
 }
 
+sycl::event SYCLGetEventFromStream(sycl::queue* stream) {
+  return stream->submit([&](sycl::handler& cgh) { cgh.host_task([=]() {}); });
+  
+  // TODO(intel): use get_last_event once new basekit is ready.
+  // return stream->ext_oneapi_get_last_event();
+}
+
+void SYCLStreamDependOnEvents(sycl::queue* stream,
+                              const std::vector<sycl::event>& events) {
+  stream->submit([&](sycl::handler& cgh) {
+    cgh.depends_on(events);
+    cgh.host_task([=]() {});
+  });
+}
+
 const char* ToString(SYCLError_t error) {
   switch (error) {
     case SYCL_SUCCESS:
