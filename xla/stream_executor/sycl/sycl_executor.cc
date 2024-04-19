@@ -552,7 +552,7 @@ bool GpuExecutor::CreateStreamDependency(Stream* dependent, Stream* other) {
   // For thread safe, event should be thread local.
 #if 0
   auto* other_queue = AsGpuStreamValue(other);
-  auto event = other_queue->ext_oneapi_submit_barrier();
+  auto event = SYCLGetEventFromStream(other_queue);
 
   EventWrapper event_wrapper;
   event_wrapper.event = &event;

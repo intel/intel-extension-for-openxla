@@ -636,7 +636,7 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
                                                 GpuEventHandle event_handle,
                                                 GpuStreamHandle stream) {
   event_handle->queue = stream;
-  *(event_handle->event) = stream->ext_oneapi_submit_barrier();
+  *(event_handle->event) = SYCLGetEventFromStream(stream);
 
   return absl::OkStatus();
 }
@@ -662,7 +662,7 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
 
   if (!optimize_single_queue || stream != event_handle->queue) {
     const std::vector<sycl::event> event_list{*(event_handle->event)};
-    stream->ext_oneapi_submit_barrier(event_list);
+    SYCLStreamDependOnEvents(stream, {*(event_handle->event)});
   }
 
   return true;

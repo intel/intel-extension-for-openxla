@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "xla/service/gpu/utils.h"
 #include "xla/stream_executor/gpu/gpu_driver.h"
+#include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 
 // TODO: It crashes when using public Eigen::bfloat16, need investigation.
 #include <sycl/ext/oneapi/bfloat16.hpp>
@@ -448,20 +449,20 @@ void stream_wait_streamlist(se::gpu::GpuStreamHandle stream,
                             const std::vector<T>& p) {
   std::vector<sycl::event> event_list;
   for (int i = 1; i < p.size(); i++) {
-    sycl::event event = p[i].stream->ext_oneapi_submit_barrier();
+    sycl::event event = SYCLGetEventFromStream(p[i].stream);
     event_list.push_back(event);
   }
-  stream->ext_oneapi_submit_barrier(event_list);
+  SYCLStreamDependOnEvents(stream, event_list);
 }
 
 template <class T>
 void streamlist_wait_stream(se::gpu::GpuStreamHandle stream,
                             const std::vector<T>& p) {
-  sycl::event event = stream->ext_oneapi_submit_barrier();
+  sycl::event event = SYCLGetEventFromStream(stream);
 
   const std::vector<sycl::event> event_list{event};
   for (int i = 1; i < p.size(); i++) {
-    p[i].stream->ext_oneapi_submit_barrier(event_list);
+    SYCLStreamDependOnEvents(p[i].stream, event_list);
   }
 }
 }  // namespace
@@ -480,16 +481,14 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
       collective = std::make_shared<Collective<Participant>>();
       collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
-      collective->begin_events.push_back(
-          gpu_stream->ext_oneapi_submit_barrier());
+      collective->begin_events.push_back(SYCLGetEventFromStream(gpu_stream));
       Manager::instance().collectives[comm->id] = collective;
     } else {
       collective = Manager::instance().collectives[comm->id];
       tsl::mutex_lock lock(collective->mu);
       collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
-      collective->begin_events.push_back(
-          gpu_stream->ext_oneapi_submit_barrier());
+      collective->begin_events.push_back(SYCLGetEventFromStream(gpu_stream));
 
       if (collective->participants.size() == comm->nranks) {
         Manager::instance().collectives.erase(comm->id);
@@ -513,7 +512,7 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
 
   auto& p = collective->participants;
   // TODO(intel):uncomment this barrier once barrier bug is fixed.
-  // gpu_stream->ext_oneapi_submit_barrier(collective->begin_events);
+  // SYCLStreamDependOnEvents(gpu_stream, collective->begin_events);
 
   if (reduction_kind == ReductionKind::SUM) {
     if (dtype == PRED)
@@ -640,7 +639,7 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
       ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
   {
     tsl::mutex_lock lock(collective->mu);
-    collective->end_events.push_back(gpu_stream->ext_oneapi_submit_barrier());
+    collective->end_events.push_back(SYCLGetEventFromStream(gpu_stream));
     if (collective->end_events.size() == comm->nranks) {
       collective->done = true;
       collective->cv.notify_all();
@@ -651,7 +650,7 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
     }
   }
   // TODO(intel):uncomment this barrier once barrier bug is fixed.
-  // gpu_stream->ext_oneapi_submit_barrier(collective->end_events);
+  SYCLStreamDependOnEvents(gpu_stream, collective->end_events);
 }
 
 void sycl_allgather(const void* send_buffer, void* recv_buffer,

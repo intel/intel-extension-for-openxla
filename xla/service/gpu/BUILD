@@ -144,6 +144,7 @@ xpu_library(
     deps = [
         "//xla/service/gpu:utils",
         "//xla/stream_executor/sycl:sycl_driver",
+        "//xla/stream_executor/sycl:sycl_gpu_runtime",
         "@xla//xla/service:collective_ops_utils",
         "@xla//xla/stream_executor/gpu:gpu_types_header",
     ],
