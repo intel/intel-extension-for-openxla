@@ -36,7 +36,7 @@ pip install transformers==4.37 diffusers==0.26.3 datasets==2.12.0 msgpack==1.0.7
 
 ```
 --dtype: support bfloat16 and float16, default is bfloat16.
---num-iter: The number of times to run generation, default is 10.
+--num-iter: The number of times to run generation, default is 1.
 --num-inference-steps: The inference steps for each generated image, default is 25.
 ```
 

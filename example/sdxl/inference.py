@@ -19,7 +19,7 @@ parser.add_argument(
   default="bfloat16",
   help="bfloat16, float16",
 )
-parser.add_argument("--num-iter", default=10, type=int, help="num iter")
+parser.add_argument("--num-iter", default=1, type=int, help="num iter")
 parser.add_argument("--num-inference-steps", default=25, type=int, help="inference steps")
 
 args = parser.parse_args()
