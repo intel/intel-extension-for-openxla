@@ -665,7 +665,7 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
 
   if (!optimize_single_queue || stream != event_handle->queue) {
     const std::vector<sycl::event> event_list{*(event_handle->event)};
-    SYCLStreamDependOnEvents(stream, {*(event_handle->event)});
+    SYCLStreamDependOnEvents(stream, event_list);
   }
 
   return true;

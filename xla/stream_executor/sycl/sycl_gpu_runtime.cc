@@ -510,10 +510,15 @@ void SYCLFree(sycl::device* device, void* ptr) {
 }
 
 sycl::event SYCLGetEventFromStream(sycl::queue* stream) {
-  return stream->submit([&](sycl::handler& cgh) { cgh.host_task([=]() {}); });
-  
+  // FIXME(intel): Below WA caused backend mismatch error in OOB test,
+  // need to fix it before reenabling.
+  // return stream->submit([&](sycl::handler& cgh) {
+  //     cgh.host_task([=]() {}); });
+
   // TODO(intel): use get_last_event once new basekit is ready.
   // return stream->ext_oneapi_get_last_event();
+
+  return stream->ext_oneapi_submit_barrier();
 }
 
 void SYCLStreamDependOnEvents(sycl::queue* stream,
