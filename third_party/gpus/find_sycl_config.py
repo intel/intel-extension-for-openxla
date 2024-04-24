@@ -43,8 +43,8 @@ def _get_toolkit_path():
   """Determines and returns the SYCL installation path."""
   sycl_toolkit_path = None
   sycl_toolkit_path = _get_default_sycl_toolkit_path()
-  if "SYCL_TOOLKIT_PATH" in os.environ:
-    sycl_toolkit_path = os.environ["SYCL_TOOLKIT_PATH"]
+  if "DPCPP_TOOLKIT_PATH" in os.environ:
+    sycl_toolkit_path = os.environ["DPCPP_TOOLKIT_PATH"]
   return os.path.realpath(sycl_toolkit_path)
 
 def _get_basekit_path():
