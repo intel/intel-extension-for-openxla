@@ -42,11 +42,11 @@ Status RegisterCustomCallTarget(const PJRT_Api* c_api,
     return Unimplemented(
         "The xpu plugin does not have extension in PJRT c api.");
   }
-  const PJRT_Structure_Base* next =
-      reinterpret_cast<const PJRT_Structure_Base*>(c_api->extension_start);
+  const PJRT_Extension_Base* next =
+      reinterpret_cast<const PJRT_Extension_Base*>(c_api->extension_start);
   while (next != nullptr &&
          next->type !=
-             PJRT_Structure_Type::PJRT_Structure_Type_Gpu_Custom_Call) {
+             PJRT_Extension_Type::PJRT_Extension_Type_Gpu_Custom_Call) {
     next = next->next;
   }
   if (next == nullptr) {

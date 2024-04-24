@@ -1,6 +1,6 @@
 /* Copyright (c) 2024 Intel Corporation
 
-Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+Copyright 2019 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.h"
 #include "xla/service/collective_ops_utils.h"
-#include "xla/service/gpu/ccl_collective_thunk.h"
 #include "xla/service/gpu/nccl_api.h"
+#include "xla/service/gpu/ccl_collective_thunk.h"
 #include "xla/stream_executor/stream.h"
 
 namespace xla {
@@ -39,6 +39,8 @@ struct NcclAllReduceConfig {
   ReductionKind reduction_kind;
 };
 
+// Thunk that performs a NCCL-based All-Reduce or Reduce-Scatter among CUDA
+// GPU-based replicas.
 class NcclAllReduceReduceScatterThunkBase : public NcclCollectiveThunk {
  public:
   static std::optional<ReductionKind> MatchAllReduceComputation(

@@ -84,13 +84,6 @@ class OnednnSupport : public dnn::DnnSupport {
         "DnnSupport::DoPoolBackward not implemented on this platform.");
   }
 
-  bool DoDepthConcatenate(
-      Stream* stream, absl::Span<const dnn::BatchDescriptor> input_dimensions,
-      absl::Span<const DeviceMemory<float>* const> input_data,
-      DeviceMemory<float>* output_data) override {
-    return false;
-  }
-
  private:
   GpuExecutor* parent_;  // Parent executor object. Not owned.
 

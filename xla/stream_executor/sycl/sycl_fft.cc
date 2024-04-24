@@ -549,5 +549,6 @@ void initialize_syclfft() {
 
 }  // namespace stream_executor
 
-REGISTER_MODULE_INITIALIZER(register_syclfft,
-                            { stream_executor::initialize_syclfft(); });
+STREAM_EXECUTOR_REGISTER_MODULE_INITIALIZER(register_syclfft, {
+  stream_executor::initialize_syclfft();
+});

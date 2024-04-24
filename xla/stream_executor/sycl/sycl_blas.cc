@@ -426,5 +426,7 @@ void initialize_syclblas() {
 }  // namespace sycl
 }  // namespace stream_executor
 
-REGISTER_MODULE_INITIALIZER(register_syclblas,
-                            { stream_executor::sycl::initialize_syclblas(); });
+STREAM_EXECUTOR_REGISTER_MODULE_INITIALIZER(register_syclblas, {
+  stream_executor::sycl::initialize_syclblas();
+});
+

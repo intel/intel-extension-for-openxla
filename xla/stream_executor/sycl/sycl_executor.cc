@@ -34,17 +34,15 @@ limitations under the License.
 #include "absl/strings/string_view.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
-#include "tsl/platform/fingerprint.h"
 #include "tsl/platform/numbers.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/util/env_var.h"
+#include "tsl/platform/fingerprint.h"
 // #include "xla/stream_executor/kernel_cache_config.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/platform/initialize.h"
 // #include "xla/stream_executor/platform/logging.h"
-#include "xla/stream_executor/gpu/gpu_command_buffer.h"
 #include "xla/stream_executor/platform/port.h"
-#include "xla/stream_executor/plugin_registry.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor_internal.h"
 #include "xla/stream_executor/stream_executor_pimpl.h"
@@ -53,6 +51,9 @@ limitations under the License.
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
+#include "xla/stream_executor/plugin_registry.h"
+#include "xla/stream_executor/gpu/gpu_command_buffer.h"
+#include "xla/stream_executor/gpu/gpu_kernel.h"
 
 namespace stream_executor {
 namespace gpu {
@@ -449,18 +450,28 @@ absl::Status GpuExecutor::Memset32(Stream* stream, DeviceMemoryBase* location,
       AsGpuStreamValue(stream));
 }
 
-bool GpuExecutor::Memcpy(Stream* stream, void* host_dst,
-                         const DeviceMemoryBase& gpu_src, uint64_t size) {
-  return GpuDriver::AsynchronousMemcpyD2H(context_, host_dst,
-                                          AsSyclDevicePtr(gpu_src), size,
-                                          AsGpuStreamValue(stream));
+absl::Status GpuExecutor::Memcpy(Stream* stream, void* host_dst,
+                                 const DeviceMemoryBase& gpu_src, uint64_t size) {
+  bool ok = GpuDriver::AsynchronousMemcpyD2H(context_, host_dst,
+                                             AsSyclDevicePtr(gpu_src), size,
+                                             AsGpuStreamValue(stream));
+    // TODO(b/326130105): Change AsynchronousMemcpyD2H calls to return Status.
+  if (!ok) {
+    return absl::InternalError("Failed to memcpy from device to host.");
+  }
+  return absl::OkStatus();
 }
 
-bool GpuExecutor::Memcpy(Stream* stream, DeviceMemoryBase* gpu_dst,
-                         const void* host_src, uint64_t size) {
-  return GpuDriver::AsynchronousMemcpyH2D(context_, AsSyclDevicePtr(gpu_dst),
-                                          host_src, size,
-                                          AsGpuStreamValue(stream));
+absl::Status GpuExecutor::Memcpy(Stream* stream, DeviceMemoryBase* gpu_dst,
+                                 const void* host_src, uint64_t size) {
+  bool ok = GpuDriver::AsynchronousMemcpyH2D(context_, AsSyclDevicePtr(gpu_dst),
+                                             host_src, size,
+                                             AsGpuStreamValue(stream));
+  // TODO(b/326130105): Change AsynchronousMemcpyD2H calls to return Status.
+  if (!ok) {
+    return absl::InternalError("Failed to memcpy from device to host.");
+  }
+  return absl::OkStatus();
 }
 
 bool GpuExecutor::MemcpyDeviceToDevice(Stream* stream,
@@ -659,14 +670,18 @@ GpuExecutor::CreateEventImplementation() {
   return std::unique_ptr<internal::EventInterface>(new GpuEvent(this));
 }
 
-std::unique_ptr<internal::KernelInterface>
-GpuExecutor::CreateKernelImplementation() {
-  return std::unique_ptr<internal::KernelInterface>(new GpuKernel());
-}
+// std::unique_ptr<internal::KernelInterface>
+// GpuExecutor::CreateKernelImplementation() {
+//   return std::unique_ptr<internal::KernelInterface>(new GpuKernel());
+// }
 
 std::unique_ptr<internal::StreamInterface>
 GpuExecutor::GetStreamImplementation() {
   return std::unique_ptr<internal::StreamInterface>(new GpuStream(this));
+}
+
+absl::StatusOr<std::unique_ptr<Kernel>> GpuExecutor::CreateKernel() {
+  return std::make_unique<GpuKernel>(this);
 }
 
 absl::StatusOr<std::unique_ptr<CommandBuffer>> GpuExecutor::CreateCommandBuffer(

@@ -529,6 +529,7 @@ void SYCLStreamDependOnEvents(sycl::queue* stream,
   });
 }
 
+
 const char* ToString(SYCLError_t error) {
   switch (error) {
     case SYCL_SUCCESS:

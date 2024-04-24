@@ -10,7 +10,7 @@ please got the [main page](https://github.com/intel/intel-extension-for-openxla/
 
 ### 2. Install jax
 ```bash
-pip install jax==0.4.24 jaxlib==0.4.24 flax==0.8.1
+pip install jax==0.4.25 jaxlib==0.4.25 flax==0.8.2
 ```
 ### 3. Install huggingface transformers
 

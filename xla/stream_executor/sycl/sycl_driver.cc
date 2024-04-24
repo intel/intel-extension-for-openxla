@@ -215,20 +215,20 @@ GpuDriver::GraphNodeGetType(GpuGraphNodeHandle node) {
 
 /* static */ absl::StatusOr<GpuDriver::GpuGraphNodeResult>
 GpuDriver::GraphAddNode(GpuGraphNodeHandle* node, GpuGraphHandle graph,
-                        absl::Span<GpuGraphNodeHandle> deps,
+                        absl::Span<const GpuGraphNodeHandle> deps,
                         const GpuGraphNodeParams& params) {
   return absl::UnimplementedError(
       "GraphAddNode is not implemented");
 }
 
 /* static */ absl::Status GpuDriver::GraphAddEmptyNode(
-    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<GpuGraphNodeHandle> deps) {
+    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<const GpuGraphNodeHandle> deps) {
   return absl::UnimplementedError(
       "GraphAddEmptyNode is not implemented");
 }
 
 /* static */ absl::Status GpuDriver::GraphAddKernelNode(
-    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<GpuGraphNodeHandle> deps,
+    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<const GpuGraphNodeHandle> deps,
     absl::string_view kernel_name, GpuFunctionHandle function, unsigned int grid_dim_x,
     unsigned int grid_dim_y, unsigned int grid_dim_z, unsigned int block_dim_x,
     unsigned int block_dim_y, unsigned int block_dim_z,
@@ -248,7 +248,7 @@ GpuDriver::GraphAddNode(GpuGraphNodeHandle* node, GpuGraphHandle graph,
 }
 
 /*static*/ absl::Status GpuDriver::GraphAddMemAllocNode(
-    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<GpuGraphNodeHandle> deps,
+    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<const GpuGraphNodeHandle> deps,
     GpuDriver::MemAccessFlags access_flags,
     GpuDriver::MemLocationType location_type, int device_id,
     GpuDriver::MemAllocationType allocation_type, uint64_t size,
@@ -264,7 +264,7 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
 }
 
 /*static*/ absl::Status GpuDriver::GraphAddMemFreeNode(
-    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<GpuGraphNodeHandle> deps,
+    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<const GpuGraphNodeHandle> deps,
     GpuDevicePtr gpu_dst) {
   return absl::UnimplementedError(
       "GraphAddMemFreeNode is not implemented");
@@ -272,7 +272,7 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
 
 /* static */ absl::Status GpuDriver::GraphAddMemcpyD2DNode(
     GpuContext* context, GpuGraphNodeHandle* node, GpuGraphHandle graph,
-    absl::Span<GpuGraphNodeHandle> deps, GpuDevicePtr gpu_dst, GpuDevicePtr gpu_src,
+    absl::Span<const GpuGraphNodeHandle> deps, GpuDevicePtr gpu_dst, GpuDevicePtr gpu_src,
     uint64_t size) {
   return absl::UnimplementedError(
       "GraphAddMemcpyD2DNode is not implemented");
@@ -287,7 +287,7 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
 
 /* static */ absl::Status GpuDriver::GraphAddMemsetNode(
     GpuContext* context, GpuGraphNodeHandle* node, GpuGraphHandle graph,
-    absl::Span<GpuGraphNodeHandle> deps, GpuDevicePtr dst,
+    absl::Span<const GpuGraphNodeHandle> deps, GpuDevicePtr dst,
     std::variant<uint8_t, uint16_t, uint32_t> bit_pattern,
     uint64_t num_elements) {
   return absl::UnimplementedError(
@@ -303,7 +303,7 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
 }
 
 /* static */ absl::Status GpuDriver::GraphAddChildNode(
-    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<GpuGraphNodeHandle> deps,
+    GpuGraphNodeHandle* node, GpuGraphHandle graph, absl::Span<const GpuGraphNodeHandle> deps,
     GpuGraphHandle child) {
   return absl::UnimplementedError(
       "GraphAddChildNode is not implemented");

@@ -1,6 +1,6 @@
 /* Copyright (c) 2024 Intel Corporation
 
-Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+Copyright 2019 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ limitations under the License.
 #include <vector>
 
 #include "xla/service/collective_ops_utils.h"
-#include "xla/service/gpu/ccl_collective_thunk.h"
 #include "xla/service/gpu/nccl_api.h"
+#include "xla/service/gpu/ccl_collective_thunk.h"
 
 namespace xla {
 namespace gpu {
@@ -32,6 +32,7 @@ struct NcclAllToAllConfig {
   bool has_split_dimension;
 };
 
+// Thunk that performs a NCCL-based All-to-All among CUDA GPU-based replicas.
 class NcclAllToAllStartThunk : public NcclCollectiveThunk {
  public:
   NcclAllToAllStartThunk(ThunkInfo thunk_info, NcclApi* nccl_api,
@@ -75,4 +76,4 @@ absl::Status RunAllToAll(NcclApi* nccl_api, bool has_split_dimension,
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_NCCL_ALL_TO_ALL_THUNK_H_
+#endif  // XLA_SERVICE_GPU_CCL_ALL_TO_ALL_THUNK_H_

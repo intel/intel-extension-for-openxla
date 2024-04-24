@@ -1,6 +1,6 @@
 /* Copyright (c) 2024 Intel Corporation
 
-Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+Copyright 2019 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,25 +25,25 @@ limitations under the License.
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "mlir/IR/Block.h"      // from @llvm-project
+#include "mlir/IR/Block.h"  // from @llvm-project
 #include "mlir/IR/Operation.h"  // from @llvm-project
-#include "tsl/platform/errors.h"
-#include "tsl/platform/logging.h"
-#include "tsl/platform/statusor.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/gpu/backend_configs.pb.h"
+#include "xla/service/gpu/nccl_api.h"
 #include "xla/service/gpu/ccl_api.h"
 #include "xla/service/gpu/ccl_collective_thunk.h"
-#include "xla/service/gpu/nccl_api.h"
 #include "xla/service/gpu/thunk.h"
 #include "xla/status_macros.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/translate/hlo_to_mhlo/hlo_utils.h"
 #include "xla/translate/mhlo_to_hlo/type_to_shape.h"
 #include "xla/xla_data.pb.h"
+#include "tsl/platform/errors.h"
+#include "tsl/platform/logging.h"
+#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace gpu {
@@ -254,9 +254,7 @@ NcclAllReduceStartThunk::NcclAllReduceStartThunk(
     : NcclAllReduceReduceScatterThunkBase(
           Thunk::kNcclAllReduceStart, thunk_info, nccl_api,
           impl::GetNcclAllReduceConfigInst(inst), std::move(buffers),
-          inst->backend_config<GpuBackendConfig>()
-              ->collective_backend_config()
-              .is_sync()) {}
+          IsSyncCollective(inst)) {}
 
 absl::Status NcclAllReduceStartThunk::CheckImplementable(
     AllReduceStartOp op, int64_t replica_count, int64_t partition_count) {

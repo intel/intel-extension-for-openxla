@@ -97,5 +97,7 @@ void initialize_onednn() {
 
 }  // namespace stream_executor
 
-REGISTER_MODULE_INITIALIZER(register_cudnn,
-                            { stream_executor::initialize_onednn(); });
+STREAM_EXECUTOR_REGISTER_MODULE_INITIALIZER(register_cudnn, {
+  stream_executor::initialize_onednn();
+});
+

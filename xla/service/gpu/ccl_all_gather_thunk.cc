@@ -1,6 +1,6 @@
 /* Copyright (c) 2024 Intel Corporation
 
-Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+Copyright 2019 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,20 +22,19 @@ limitations under the License.
 
 #include "absl/status/status.h"
 #include "absl/strings/str_format.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/logging.h"
-#include "tsl/platform/statusor.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/gpu/backend_configs.pb.h"
-#include "xla/service/gpu/ccl_api.h"
-#include "xla/service/gpu/ccl_collective_thunk.h"
 #include "xla/service/gpu/nccl_api.h"
+#include "xla/service/gpu/ccl_collective_thunk.h"
 #include "xla/service/gpu/thunk.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/stream_executor/stream.h"
+#include "tsl/platform/errors.h"
+#include "tsl/platform/logging.h"
+#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace gpu {
@@ -103,9 +102,7 @@ NcclAllGatherStartThunk::NcclAllGatherStartThunk(
     ThunkInfo thunk_info, NcclApi* nccl_api,
     const HloAllGatherInstruction* inst, std::vector<Buffer> buffers)
     : NcclCollectiveThunk(Thunk::kNcclAllGatherStart, thunk_info, nccl_api,
-                          inst->backend_config<GpuBackendConfig>()
-                              ->collective_backend_config()
-                              .is_sync()),
+                          IsSyncCollective(inst)),
       config_(impl::GetNcclAllGatherConfig(inst)),
       buffers_(std::move(buffers)) {
   CHECK_EQ(config_.config.operand_count, buffers_.size());

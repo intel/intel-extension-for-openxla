@@ -27,6 +27,7 @@ limitations under the License.
 #include "xla/stream_executor/sycl/sycl_platform_id.h"
 #include "xla/stream_executor/gpu/gpu_executor.h"
 #include "xla/stream_executor/platform/initialize.h"
+#include "xla/stream_executor/platform_manager.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/status.h"
 
@@ -147,16 +148,16 @@ static void InitializeSyclPlatform() {
   // Disabling leak checking, MultiPlatformManager does not destroy its
   // registered platforms.
   std::unique_ptr<gpu::SyclPlatform> platform(new gpu::SyclPlatform);
-  TF_CHECK_OK(MultiPlatformManager::RegisterPlatform(std::move(platform)));
+  TF_CHECK_OK(PlatformManager::RegisterPlatform(std::move(platform)));
 }
 
 }  // namespace stream_executor
 
-REGISTER_MODULE_INITIALIZER(sycl_platform,
-                            stream_executor::InitializeSyclPlatform());
+STREAM_EXECUTOR_REGISTER_MODULE_INITIALIZER(
+    sycl_platform, stream_executor::InitializeSyclPlatform());
 
 // Note that module initialization sequencing is not supported in the
 // open-source project, so this will be a no-op there.
-REGISTER_MODULE_INITIALIZER_SEQUENCE(sycl_platform, multi_platform_manager);
-REGISTER_MODULE_INITIALIZER_SEQUENCE(multi_platform_manager_listener,
-                                     sycl_platform);
+STREAM_EXECUTOR_REGISTER_MODULE_INITIALIZER_SEQUENCE(sycl_platform, multi_platform_manager);
+STREAM_EXECUTOR_REGISTER_MODULE_INITIALIZER_SEQUENCE(multi_platform_manager_listener,
+                                                     sycl_platform);

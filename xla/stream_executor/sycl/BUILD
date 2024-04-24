@@ -203,6 +203,7 @@ cc_library(
         "@xla//xla/stream_executor/platform:dso_loader",
         "@xla//xla/stream_executor/gpu:gpu_command_buffer",
         "@com_google_absl//absl/strings:str_format",
+        "@tsl//tsl/platform:fingerprint",
     ],
     alwayslink = True,
 )

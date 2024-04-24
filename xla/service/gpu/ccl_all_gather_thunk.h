@@ -1,6 +1,6 @@
 /* Copyright (c) 2024 Intel Corporation
 
-Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+Copyright 2019 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,8 +25,8 @@ limitations under the License.
 #include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/collective_ops_utils.h"
-#include "xla/service/gpu/ccl_collective_thunk.h"
 #include "xla/service/gpu/nccl_api.h"
+#include "xla/service/gpu/ccl_collective_thunk.h"
 #include "xla/stream_executor/stream.h"
 
 namespace xla {
@@ -36,6 +36,7 @@ struct NcclAllGatherConfig {
   NcclCollectiveConfig config;
 };
 
+// Thunk that performs a NCCL-based All-Gather among CUDA GPU-based replicas.
 class NcclAllGatherStartThunk : public NcclCollectiveThunk {
  public:
   NcclAllGatherStartThunk(ThunkInfo thunk_info, NcclApi* nccl_api,
@@ -82,4 +83,4 @@ absl::Status RunAllGather(NcclApi* nccl_api,
 }  // namespace gpu
 }  // namespace xla
 
-#endif  // XLA_SERVICE_GPU_CCL_ALL_GATHER_THUNK_H_
+#endif  // XLA_SERVICE_GPU_NCCL_ALL_GATHER_THUNK_H_
