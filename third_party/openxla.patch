@@ -1822,87 +1822,8 @@ index 42026cec2..e71170a99 100644
    // TODO(b/65380986): Investigate if adding fast math flags for generated
    // kernels makes sense.
  
-diff --git a/xla/service/gpu/fusions/mlir/mlir_fusion_emitter.cc b/xla/service/gpu/fusions/mlir/mlir_fusion_emitter.cc
-index d42821697..fc2f5639a 100644
---- a/xla/service/gpu/fusions/mlir/mlir_fusion_emitter.cc
-+++ b/xla/service/gpu/fusions/mlir/mlir_fusion_emitter.cc
-@@ -74,40 +74,40 @@ namespace {
- 
- void AddRanges(llvm::Function* func, const LaunchDimensions& launch_dims,
-                llvm::Module* module) {
--  for (auto& block : *func) {
--    for (auto& instr : block) {
--      if (auto* call = llvm::dyn_cast<llvm::CallInst>(&instr)) {
--        if (auto* callee = call->getCalledFunction()) {
--          switch (callee->getIntrinsicID()) {
--            case llvm::Intrinsic::nvvm_read_ptx_sreg_tid_x:
--              llvm_ir::AddRangeMetadata(
--                  0, launch_dims.thread_counts_per_block().x, call, module);
--              break;
--            case llvm::Intrinsic::nvvm_read_ptx_sreg_tid_y:
--              llvm_ir::AddRangeMetadata(
--                  0, launch_dims.thread_counts_per_block().y, call, module);
--              break;
--            case llvm::Intrinsic::nvvm_read_ptx_sreg_tid_z:
--              llvm_ir::AddRangeMetadata(
--                  0, launch_dims.thread_counts_per_block().z, call, module);
--              break;
--            case llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_x:
--              llvm_ir::AddRangeMetadata(0, launch_dims.block_counts().x, call,
--                                        module);
--              break;
--            case llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_y:
--              llvm_ir::AddRangeMetadata(0, launch_dims.block_counts().y, call,
--                                        module);
--              break;
--            case llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_z:
--              llvm_ir::AddRangeMetadata(0, launch_dims.block_counts().z, call,
--                                        module);
--              break;
--          }
--        }
--      }
--    }
--  }
-+  // for (auto& block : *func) {
-+  //   for (auto& instr : block) {
-+  //     if (auto* call = llvm::dyn_cast<llvm::CallInst>(&instr)) {
-+  //       if (auto* callee = call->getCalledFunction()) {
-+  //         switch (callee->getIntrinsicID()) {
-+  //           case llvm::Intrinsic::nvvm_read_ptx_sreg_tid_x:
-+  //             llvm_ir::AddRangeMetadata(
-+  //                 0, launch_dims.thread_counts_per_block().x, call, module);
-+  //             break;
-+  //           case llvm::Intrinsic::nvvm_read_ptx_sreg_tid_y:
-+  //             llvm_ir::AddRangeMetadata(
-+  //                 0, launch_dims.thread_counts_per_block().y, call, module);
-+  //             break;
-+  //           case llvm::Intrinsic::nvvm_read_ptx_sreg_tid_z:
-+  //             llvm_ir::AddRangeMetadata(
-+  //                 0, launch_dims.thread_counts_per_block().z, call, module);
-+  //             break;
-+  //           case llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_x:
-+  //             llvm_ir::AddRangeMetadata(0, launch_dims.block_counts().x, call,
-+  //                                       module);
-+  //             break;
-+  //           case llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_y:
-+  //             llvm_ir::AddRangeMetadata(0, launch_dims.block_counts().y, call,
-+  //                                       module);
-+  //             break;
-+  //           case llvm::Intrinsic::nvvm_read_ptx_sreg_ctaid_z:
-+  //             llvm_ir::AddRangeMetadata(0, launch_dims.block_counts().z, call,
-+  //                                       module);
-+  //             break;
-+  //         }
-+  //       }
-+  //     }
-+  //   }
-+  // }
- }
- 
- }  // namespace
 diff --git a/xla/service/gpu/fusions/reduction.cc b/xla/service/gpu/fusions/reduction.cc
-index 02e89bccf..1d9d5079c 100644
+index 02e89bccf..51ea1a306 100644
 --- a/xla/service/gpu/fusions/reduction.cc
 +++ b/xla/service/gpu/fusions/reduction.cc
 @@ -106,6 +106,7 @@ constexpr int kRowMinorReducedDimension = 2;
@@ -2236,19 +2157,6 @@ index 02e89bccf..1d9d5079c 100644
      reduction_input_value.push_back(input_address);
    }
  
-@@ -1228,9 +1344,9 @@ absl::Status ReductionFusion::ReductionEmitter::EmitKernel(
- 
-   llvm::Value* block_id_y = gpu::EmitCallToTargetIntrinsic(
-       gpu::TargetIntrinsicID::kBlockIdy, {}, {}, builder_);
--  llvm_ir::AddRangeMetadata(0, instr_index_groups.size(),
--                            llvm::cast<llvm::Instruction>(block_id_y),
--                            builder_->GetInsertBlock()->getModule());
-+  // llvm_ir::AddRangeMetadata(0, instr_index_groups.size(),
-+  //                           llvm::cast<llvm::Instruction>(block_id_y),
-+  //                           builder_->GetInsertBlock()->getModule());
-   block_id_y = builder_->CreateZExtOrTrunc(block_id_y, builder_->getInt32Ty());
-   block_id_y->setName("block.id.y");
-   for (int i = 0; i < instr_index_groups.size(); ++i) {
 @@ -1319,7 +1435,8 @@ ReductionFusion::ComputeReductionCodegenInfo(
    // parallelizing the z dimension (major reduced dimensions). The general
    // recommendation is to use between 128 and 512 threads, so we just go for
@@ -2299,34 +2207,6 @@ index 02e89bccf..1d9d5079c 100644
    return ReductionCodegenInfo(
        tiling, reduction_dimensions.is_row_reduction, reduction_is_race_free,
        GroupDisjointReductions(analysis), hero_reduction);
-diff --git a/xla/service/gpu/fusions/tiling_util.cc b/xla/service/gpu/fusions/tiling_util.cc
-index 24456209e..d44ae69fd 100644
---- a/xla/service/gpu/fusions/tiling_util.cc
-+++ b/xla/service/gpu/fusions/tiling_util.cc
-@@ -130,9 +130,9 @@ llvm::Value* EmitBlockId(llvm::IRBuilder<>* builder, int32_t num_blocks,
-   llvm::Value* block_id =
-       EmitCallToTargetIntrinsic(TargetIntrinsicID::kBlockIdx, {}, {}, builder);
-   if (num_blocks != 0) {
--    llvm_ir::AddRangeMetadata(0, num_blocks,
--                              llvm::cast<llvm::Instruction>(block_id),
--                              builder->GetInsertBlock()->getModule());
-+    // llvm_ir::AddRangeMetadata(0, num_blocks,
-+    //                           llvm::cast<llvm::Instruction>(block_id),
-+    //                           builder->GetInsertBlock()->getModule());
-   }
-   auto ret = builder->CreateIntCast(block_id, index_ty, /*isSigned=*/true);
-   ret->setName("block.id.x");
-@@ -148,8 +148,8 @@ llvm::Value* EmitThreadId(llvm::IRBuilder<>* builder, int64_t threads_per_block,
-   // defined by (num_thread_y, num_thread_x) from thread_id.
-   llvm::CallInst* thread_id =
-       EmitCallToTargetIntrinsic(TargetIntrinsicID::kThreadIdx, {}, {}, builder);
--  llvm_ir::AddRangeMetadata(0, threads_per_block, thread_id,
--                            builder->GetInsertBlock()->getModule());
-+  // llvm_ir::AddRangeMetadata(0, threads_per_block, thread_id,
-+  //                           builder->GetInsertBlock()->getModule());
-   auto ret = builder->CreateIntCast(thread_id, index_ty, /*isSigned=*/true);
-   ret->setName("thread.id.x");
-   return ret;
 diff --git a/xla/service/gpu/gemm_rewriter.cc b/xla/service/gpu/gemm_rewriter.cc
 index 8a3919a75..a69632e96 100644
 --- a/xla/service/gpu/gemm_rewriter.cc
@@ -2568,7 +2448,7 @@ index 33de4453f..6d4b3c6d2 100644
    }
  
 diff --git a/xla/service/gpu/gpu_executable.cc b/xla/service/gpu/gpu_executable.cc
-index 92609b6f4..ee682d5dc 100644
+index 92609b6f4..7cfe1e7f7 100644
 --- a/xla/service/gpu/gpu_executable.cc
 +++ b/xla/service/gpu/gpu_executable.cc
 @@ -209,7 +209,9 @@ absl::Status GpuExecutable::CheckCompatibilityWithServiceExecutableRunOptions(
@@ -2718,7 +2598,7 @@ index c69d218c6..a0c242f94 100644
  
    // Integer convolution must use NHWC or NCHW_VECT_C.
 diff --git a/xla/service/gpu/gpu_sanitize_constant_names.cc b/xla/service/gpu/gpu_sanitize_constant_names.cc
-index c8ef2d60b..79c4443e3 100644
+index c8ef2d60b..f2d518c01 100644
 --- a/xla/service/gpu/gpu_sanitize_constant_names.cc
 +++ b/xla/service/gpu/gpu_sanitize_constant_names.cc
 @@ -40,7 +40,7 @@ absl::StatusOr<bool> GpuSanitizeConstantNames::Run(
@@ -3871,48 +3751,6 @@ index 15e6e6692..db8ebb0e1 100644
  
  }  // namespace xla::gpu
  
-diff --git a/xla/service/gpu/parallel_loop_emitter.cc b/xla/service/gpu/parallel_loop_emitter.cc
-index bb5dbf77d..908411b5c 100644
---- a/xla/service/gpu/parallel_loop_emitter.cc
-+++ b/xla/service/gpu/parallel_loop_emitter.cc
-@@ -65,18 +65,18 @@ ParallelLoopEmitter::EmitLinearBaseAndThreadIdx(llvm::Type* index_type,
-                                                 llvm::Value* base_index) {
-   llvm::Value* block_id =
-       EmitCallToTargetIntrinsic(TargetIntrinsicID::kBlockIdx, {}, {}, b_);
--  llvm_ir::AddRangeMetadata(0, launch_dimensions_.block_counts().x,
--                            static_cast<llvm::Instruction*>(block_id),
--                            b_->GetInsertBlock()->getModule());
-+  // llvm_ir::AddRangeMetadata(0, launch_dimensions_.block_counts().x,
-+  //                           static_cast<llvm::Instruction*>(block_id),
-+  //                           b_->GetInsertBlock()->getModule());
-   block_id = b_->CreateZExtOrTrunc(block_id, index_type, "block_id");
- 
-   // Per the PTX documentation:
-   //   "It is guaranteed that [...] 0  <=  %tid.x <  %ntid.x"
-   llvm::Value* thread_id_x =
-       EmitCallToTargetIntrinsic(TargetIntrinsicID::kThreadIdx, {}, {}, b_);
--  llvm_ir::AddRangeMetadata(0, launch_dimensions_.thread_counts_per_block().x,
--                            static_cast<llvm::Instruction*>(thread_id_x),
--                            b_->GetInsertBlock()->getModule());
-+  // llvm_ir::AddRangeMetadata(0, launch_dimensions_.thread_counts_per_block().x,
-+  //                           static_cast<llvm::Instruction*>(thread_id_x),
-+  //                           b_->GetInsertBlock()->getModule());
-   thread_id_x = b_->CreateZExtOrTrunc(thread_id_x, index_type, "thread_id_x");
- 
-   llvm::Value* linear_index_base =
-@@ -89,9 +89,9 @@ ParallelLoopEmitter::EmitLinearBaseAndThreadIdx(llvm::Type* index_type,
-   if (launch_dimensions_.thread_counts_per_block().y > 1) {
-     llvm::Value* thread_id_y =
-         EmitCallToTargetIntrinsic(TargetIntrinsicID::kThreadIdy, {}, {}, b_);
--    llvm_ir::AddRangeMetadata(0, launch_dimensions_.thread_counts_per_block().y,
--                              static_cast<llvm::Instruction*>(thread_id_y),
--                              b_->GetInsertBlock()->getModule());
-+    // llvm_ir::AddRangeMetadata(0, launch_dimensions_.thread_counts_per_block().y,
-+    //                           static_cast<llvm::Instruction*>(thread_id_y),
-+    //                           b_->GetInsertBlock()->getModule());
-     thread_id_y = b_->CreateZExtOrTrunc(thread_id_y, index_type, "thread_id_y");
-     linear_index_base = b_->CreateAdd(
-         linear_index_base,
 diff --git a/xla/service/gpu/runtime/BUILD b/xla/service/gpu/runtime/BUILD
 index 4f298bbe0..464ee909a 100644
 --- a/xla/service/gpu/runtime/BUILD
@@ -4821,10 +4659,10 @@ index 13190ae69..574a4120d 100644
  }
  }  // namespace spir
 diff --git a/xla/service/hlo_verifier.cc b/xla/service/hlo_verifier.cc
-index e182a6e19..7d2bf80f1 100644
+index e182a6e19..c8331a080 100644
 --- a/xla/service/hlo_verifier.cc
 +++ b/xla/service/hlo_verifier.cc
-@@ -1235,15 +1235,15 @@ Status ShapeVerifier::HandleFusion(HloInstruction* fusion) {
+@@ -1235,15 +1235,19 @@ Status ShapeVerifier::HandleFusion(HloInstruction* fusion) {
          ShapeUtil::GetSubshape(casted_fusion->shape(), pair.first);
      const Shape& operand_subshape = ShapeUtil::GetSubshape(
          casted_fusion->operand(pair.second.first)->shape(), pair.second.second);
@@ -4837,6 +4675,10 @@ index e182a6e19..7d2bf80f1 100644
 -          << "Different aliasing shapes: " << operand_subshape.ToString()
 -          << " vs " << output_subshape.ToString();
 -    }
++    /*
++      SYCL: Below check can raise RET_CHECK failures by lax.conv_general_dilated.
++      Different aliasing shapes: f32[1,1,4,4] vs (f32[1,1,4,4], u8[0])
++    */
 +    // if (opts_.layout_sensitive) {
 +    //   TF_RET_CHECK(operand_subshape == output_subshape)
 +    //       << "Different aliasing shapes: " << operand_subshape.ToString()
@@ -4849,7 +4691,7 @@ index e182a6e19..7d2bf80f1 100644
    }
    return OkStatus();
  }
-@@ -1291,15 +1291,15 @@ Status ShapeVerifier::HandleCustomCall(HloInstruction* instruction) {
+@@ -1291,15 +1295,15 @@ Status ShapeVerifier::HandleCustomCall(HloInstruction* instruction) {
          ShapeUtil::GetSubshape(custom_call->shape(), pair.first);
      const Shape& operand_subshape = ShapeUtil::GetSubshape(
          custom_call->operand(pair.second.first)->shape(), pair.second.second);
@@ -4875,42 +4717,24 @@ index e182a6e19..7d2bf80f1 100644
    return OkStatus();
  }
 diff --git a/xla/service/llvm_ir/llvm_util.cc b/xla/service/llvm_ir/llvm_util.cc
-index 3a9ab3bb6..01da4b12c 100644
+index 3a9ab3bb6..e818a7f5f 100644
 --- a/xla/service/llvm_ir/llvm_util.cc
 +++ b/xla/service/llvm_ir/llvm_util.cc
-@@ -542,6 +542,8 @@ void SetDereferenceableMetadataForLoad(llvm::LoadInst* load,
- }
- 
+@@ -544,6 +544,7 @@ void SetDereferenceableMetadataForLoad(llvm::LoadInst* load,
  llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
-+                                    llvm::Instruction* inst) {
-+  /* SYCL: This range is for NVPTX target only.
                                      llvm::Instruction* inst,
                                      llvm::Module* module) {
++  /* SYCL: This range is for NVPTX target only.
    if (llvm::Triple(module->getTargetTriple()).isSPIR()) {
-@@ -555,6 +557,7 @@ llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
+     return inst;
+   }
+@@ -555,6 +556,7 @@ llvm::Instruction* AddRangeMetadata(int32_t lower, int32_t upper,
            context,
            {llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i32, lower)),
             llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(i32, upper))}));
 +  */
    return inst;
  }
- 
-diff --git a/xla/service/llvm_ir/sort_util.cc b/xla/service/llvm_ir/sort_util.cc
-index 22ed179ae..6b6eab9b1 100644
---- a/xla/service/llvm_ir/sort_util.cc
-+++ b/xla/service/llvm_ir/sort_util.cc
-@@ -164,9 +164,9 @@ Status EmitTiledCompareLoop(
-   KernelSupportLibrary ksl(b);
-   llvm::Value* thread_id = gpu::EmitCallToTargetIntrinsic(
-       gpu::TargetIntrinsicID::kThreadIdx, {}, {}, b);
--  llvm_ir::AddRangeMetadata(0, tile_size / 2,
--                            llvm::cast<llvm::Instruction>(thread_id),
--                            b->GetInsertBlock()->getModule());
-+  // llvm_ir::AddRangeMetadata(0, tile_size / 2,
-+  //                           llvm::cast<llvm::Instruction>(thread_id),
-+  //                           b->GetInsertBlock()->getModule());
-   thread_id = b->CreateIntCast(thread_id, tiled_keys_index.GetType(),
-                                /*isSigned=*/true, "thread.id.x");
  
 diff --git a/xla/service/spmd/BUILD b/xla/service/spmd/BUILD
 index 843bdce9b..aab03ce67 100644
