@@ -25,13 +25,13 @@ jobs:
         run: |
           set +e
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-          source /opt/miniconda/bin/activate ${CONDA_ENV}
+          source /opt/conda/bin/activate ${CONDA_ENV}
           if [ $? -ne 0 ]; then
               echo 'conda env does not exist'
               conda create -n ${CONDA_ENV} python=3.10 -y
               conda activate ${CONDA_ENV}
           fi
-          pip install jax==0.4.20 jaxlib==0.4.20
+          pip install jax==0.4.25 jaxlib==0.4.25
           conda install libstdcxx-ng==12.2.0 -c conda-forge
           pip install absl-py
           pip list | grep numpy
@@ -40,7 +40,7 @@ jobs:
         run: |
           set +e
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-          source /opt/miniconda/bin/activate ${CONDA_ENV}
+          source /opt/conda/bin/activate ${CONDA_ENV}
           which bazel
           if [ $? -eq 1 ]; then
             wget https://github.com/bazelbuild/bazel/releases/download/5.3.0/bazel-5.3.0-installer-linux-x86_64.sh
@@ -79,13 +79,13 @@ jobs:
         run: |
           set +e
           CONDA_ENV=openxla_preCI_${{ github.event.pull_request.number }}_${{ runner.name }}
-          source /opt/miniconda/bin/activate ${CONDA_ENV}
+          source /opt/conda/bin/activate ${CONDA_ENV}
           basekit_path=/home/sdp
           source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
           source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
-          export ZE_AFFINITY_MASK=0,1
+          export ZE_AFFINITY_MASK=5,6
           git clone https://github.com/google/jax.git
-          cd jax && git checkout jaxlib-v0.4.20
+          cd jax && git checkout jaxlib-v0.4.25
           patch -p1 -i ../test/jax_ut.patch
           pip install hypothesis
           pip install -e .
