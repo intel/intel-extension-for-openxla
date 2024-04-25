@@ -94,7 +94,7 @@ jobs:
             exit
         fi
     - name: Upload CI Data
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: JAX-CI-Data
         path: ~/actions-runner/_work/intel-extension-for-openxla/intel-extension-for-openxla/jax/logs
