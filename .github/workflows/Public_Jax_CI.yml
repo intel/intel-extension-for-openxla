@@ -70,7 +70,7 @@ jobs:
         source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
         source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
         export ZE_AFFINITY_MASK=5,6
-        cd ~/actions-runner/_work/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax
+        cd ~/actions-runner/_work/workspace_openxla/_work/workspace_openxla/jax
         commit_hash=$(git rev-parse --short HEAD)
         mkdir -p ./logs/ut
         echo "$commit_hash" |& tee ./logs/ut/$commit_hash.txt
@@ -97,10 +97,10 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: JAX-CI-Data
-        path: ~/actions-runner/_work/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax/logs
+        path: ~/actions-runner/_work/workspace_openxla/_work/workspace_openxla/jax/logs
     - name: Test Results Check
       run: |
-        cd ~/actions-runner/_work/workspace_openxla/intel-extension-for-openxla/intel-extension-for-openxla/jax
+        cd ~/actions-runner/_work/workspace_openxla/_work/workspace_openxla/jax
         #UT results check
         if [ -f "./logs/ut/err.log" ]; then
           echo "exist fail cases"
