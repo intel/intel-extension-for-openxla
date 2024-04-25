@@ -31,7 +31,7 @@ jobs:
               conda create -n ${CONDA_ENV} python=3.10 -y
               conda activate ${CONDA_ENV}
           fi
-          pip install jax==0.4.25 jaxlib==0.4.25
+          pip install jax==0.4.24 jaxlib==0.4.24
           conda install libstdcxx-ng==12.2.0 -c conda-forge
           pip install absl-py
           pip list | grep numpy
@@ -85,7 +85,7 @@ jobs:
           source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
           export ZE_AFFINITY_MASK=5,6
           git clone https://github.com/google/jax.git
-          cd jax && git checkout jaxlib-v0.4.25
+          cd jax && git checkout jaxlib-v0.4.24
           patch -p1 -i ../test/jax_ut.patch
           pip install hypothesis
           pip install -e .
