@@ -1421,10 +1421,46 @@ index dca7a07a8..58b2cbf7a 100644
                          MakeGetTupleElementHlo(new_conv, 0));
      TF_RETURN_IF_ERROR(comp->ReplaceInstruction(instr, new_instr));
 diff --git a/xla/service/gpu/cudnn_fused_mha_rewriter.cc b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
-index 04fe02e37..cf4390d60 100644
+index 04fe02e37..ab3c19514 100644
 --- a/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 +++ b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
-@@ -326,16 +326,24 @@ bool IsSupportedPrimitiveType(const HloInstruction* bmm) {
+@@ -235,12 +235,14 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
+   auto unfused_softmax_max_subpattern = m::SharedSubpattern(
+       m::Subtract(
+           m::Op(),
+-          m::Broadcast(OptionalConvert(
+-              m::Op()
+-                  .WithPredicate(IsReduceMax)
+-                  .WithOneUse()
+-                  .WithOperand(0, OptionalBitcast(OptionalConvert(
+-                                      m::Op(softmax_input).WithNumUser(2)))))))
++          m::Broadcast(
++              OptionalBitcast(OptionalConvert(OptionalBitcast(OptionalConvert(
++                  m::Op()
++                      .WithPredicate(IsReduceMax)
++                      .WithOneUse()
++                      .WithOperand(
++                          0, OptionalBitcast(OptionalConvert(
++                                 m::Op(softmax_input).WithNumUser(2))))))))))
+           .WithOneUse());
+   // The reduce-add part of the softmax
+   // reduce_sum and reduce_sum_broadcast should have 2 users in training
+@@ -249,12 +251,12 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
+       OptionalBitcast(m::Exp(unfused_softmax_max_subpattern)),
+       m::Broadcast(
+           softmax_reduce_sum_bcast,
+-          OptionalConvert(
++          OptionalBitcast(OptionalConvert(
+               m::Op(softmax_reduce_sum)
+                   .WithOperand(0, OptionalBitcast(OptionalConvert(
+                                       m::Exp(unfused_softmax_max_subpattern))))
+                   .WithPredicate(IsReduceSum)
+-                  .WithAtMostNumUser(2)))
++                  .WithAtMostNumUser(2))))
+           .WithAtMostNumUser(2)));
+   return unfused_softmax_sum_subpattern;
+ }
+@@ -326,16 +328,24 @@ bool IsSupportedPrimitiveType(const HloInstruction* bmm) {
  }
  
  bool IsContractingDimSupported(absl::Span<const int64_t> contracting_dims) {
@@ -1449,7 +1485,7 @@ index 04fe02e37..cf4390d60 100644
  }
  
  std::vector<int64_t> GetDimensionVector(absl::Span<const int64_t> dimensions,
-@@ -424,6 +432,7 @@ absl::StatusOr<bool> IsSupportedBMM2(const HloInstruction* bmm_2,
+@@ -424,6 +434,7 @@ absl::StatusOr<bool> IsSupportedBMM2(const HloInstruction* bmm_2,
    std::vector<int64_t> non_contracting_dims_bmm2 =
        GetDimensionVector(bmm_2->operand(operand_index)->shape().dimensions(),
                           non_contracting_dim_nums_bmm2);
@@ -1457,7 +1493,7 @@ index 04fe02e37..cf4390d60 100644
    // The non contracting dimension for BMM2 needs to be 64 for the input matrix.
    // The input matrix is the second argument to BMM2 i.e, rhs.
    if (!absl::c_all_of(non_contracting_dims_bmm2,
-@@ -435,6 +444,7 @@ absl::StatusOr<bool> IsSupportedBMM2(const HloInstruction* bmm_2,
+@@ -435,6 +446,7 @@ absl::StatusOr<bool> IsSupportedBMM2(const HloInstruction* bmm_2,
      }
      return false;
    }
@@ -1465,7 +1501,7 @@ index 04fe02e37..cf4390d60 100644
    return true;
  }
  
-@@ -1239,16 +1249,6 @@ absl::StatusOr<bool> IsMHABlockSupported(
+@@ -1239,16 +1251,6 @@ absl::StatusOr<bool> IsMHABlockSupported(
      return false;
    }
  
@@ -1482,7 +1518,7 @@ index 04fe02e37..cf4390d60 100644
    // check if matched attention block is supported by cuDNN flash attention.
    TF_ASSIGN_OR_RETURN(is_flash_attention,
                        IsFlashAttention(bmm_1, is_causal_mask, custom_call_name,
-@@ -1856,15 +1856,15 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1856,15 +1858,15 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
          comp->parent()->config().debug_options();
      const auto cudnn_version =
          GetRealCuDNNVersion(cudnn_version_, stream_executor_);
@@ -1501,7 +1537,7 @@ index 04fe02e37..cf4390d60 100644
      for (HloInstruction* instr : comp->MakeInstructionPostOrder()) {
        bool v_transposed = false;
        bool changed = false;
-@@ -1935,6 +1935,8 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1935,6 +1937,8 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
                matched_result.is_causal_mask,
                matched_result.is_flash_attention));
        any_changed |= changed;
@@ -1510,7 +1546,7 @@ index 04fe02e37..cf4390d60 100644
        if (matched_result.is_training) {
          MatchBwdResult matched_bwd_result =
              MatchBwdMHAPatternsForCanonicalization(
-@@ -2018,6 +2020,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -2018,6 +2022,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
                  matched_bwd_result.matched_custom_call_name));
          any_changed |= changed;
        }
@@ -2817,7 +2853,7 @@ index c888aff30..0fd7254d9 100644
    // Extract the memory value returned from atomicCAS and store it as
    // cas_old_output.
 diff --git a/xla/service/gpu/ir_emitter_unnested.cc b/xla/service/gpu/ir_emitter_unnested.cc
-index 86426953a..5ccd694c1 100644
+index 86426953a..3df630e1c 100644
 --- a/xla/service/gpu/ir_emitter_unnested.cc
 +++ b/xla/service/gpu/ir_emitter_unnested.cc
 @@ -1,4 +1,6 @@
@@ -2989,15 +3025,420 @@ index 86426953a..5ccd694c1 100644
  
  absl::Status IrEmitterUnnested::EmitCublasLtMatmulThunk(
      const HloCustomCallInstruction* instr) {
-@@ -716,7 +737,7 @@ absl::Status IrEmitterUnnested::EmitCublasLtMatmulThunk(
+@@ -716,206 +737,7 @@ absl::Status IrEmitterUnnested::EmitCublasLtMatmulThunk(
    return absl::OkStatus();
  }
  
 -#endif  // GOOGLE_CUDA || TF_HIPBLASLT
+-
+-#if GOOGLE_CUDA
+-
+-absl::Status IrEmitterUnnested::EmitCublasLtMatmulThunkF8(
+-    const HloCustomCallInstruction* instr) {
+-  TF_RET_CHECK(instr->operand_count() == 6 || instr->operand_count() == 7 ||
+-               instr->operand_count() == 8);
+-  TF_ASSIGN_OR_RETURN(const auto gpu_config,
+-                      instr->backend_config<xla::gpu::GpuBackendConfig>());
+-  xla::gpu::GemmBackendConfig config = gpu_config.gemm_backend_config();
+-  xla::gpu::GemmBackendConfig_Epilogue epilogue = config.epilogue();
+-
+-  TF_ASSIGN_OR_RETURN(bool has_vector_bias,
+-                      xla::gpu::gpublas_lt::EpilogueAddsVectorBias(epilogue));
+-  bool has_damax = instr->shape().IsTuple();
+-  xla::ShapeIndex output_index =
+-      has_damax ? xla::ShapeIndex{0} : xla::ShapeIndex{};
+-
+-  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice a,
+-                      GetAllocationSliceForHlo(instr->operand(0)));
+-  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice b,
+-                      GetAllocationSliceForHlo(instr->operand(1)));
+-  BufferAllocation::Slice c;
+-  bool has_matrix_bias = config.beta() != 0;
+-  if (has_matrix_bias) {
+-    TF_ASSIGN_OR_RETURN(c, GetAllocationSliceForHlo(instr->operand(2)));
+-  } else {
+-    TF_ASSIGN_OR_RETURN(c, GetAllocationSliceForHlo(instr, output_index));
+-  }
+-  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice d,
+-                      GetAllocationSliceForHlo(instr, output_index));
+-
+-  int a_scale_index = has_matrix_bias ? 3 : 2;
+-  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice a_scale,
+-                      GetAllocationSliceForHlo(instr->operand(a_scale_index)));
+-  TF_ASSIGN_OR_RETURN(
+-      BufferAllocation::Slice b_scale,
+-      GetAllocationSliceForHlo(instr->operand(a_scale_index + 1)));
+-  TF_ASSIGN_OR_RETURN(
+-      BufferAllocation::Slice c_scale,
+-      GetAllocationSliceForHlo(instr->operand(a_scale_index + 2)));
+-  TF_ASSIGN_OR_RETURN(
+-      BufferAllocation::Slice d_scale,
+-      GetAllocationSliceForHlo(instr->operand(a_scale_index + 3)));
+-
+-  BufferAllocation::Slice bias;
+-  if (has_vector_bias) {
+-    TF_ASSIGN_OR_RETURN(
+-        bias, GetAllocationSliceForHlo(instr->operand(a_scale_index + 4)));
+-  }
+-
+-  BufferAllocation::Slice d_amax;
+-  if (has_damax) {
+-    TF_ASSIGN_OR_RETURN(d_amax, GetAllocationSliceForHlo(instr, {1}));
+-  }
+-
+-  TF_ASSIGN_OR_RETURN(
+-      auto gemm_config,
+-      GemmConfig::For(static_cast<const HloInstruction*>(instr)));
+-
+-  // Use the first algorithm by default (i.e. fastest according to heuristics).
+-  int64_t algorithm =
+-      config.algorithm_case() == GemmBackendConfig::kSelectedAlgorithm
+-          ? config.selected_algorithm()
+-          : 0;
+-
+-  BufferAllocation::Slice aux;  // Not used.
+-
+-  TF_ASSIGN_OR_RETURN(se::gpu::BlasLt::Epilogue blas_lt_epilogue,
+-                      gpublas_lt::AsBlasLtEpilogue(epilogue));
+-  auto thunk = std::make_unique<CublasLtMatmulThunk>(
+-      Thunk::ThunkInfo::WithProfileAnnotation(instr), std::move(gemm_config),
+-      blas_lt_epilogue, algorithm, a, b, c, d, bias, aux, a_scale, b_scale,
+-      c_scale, d_scale, d_amax);
+-  AddThunkToThunkSequence(std::move(thunk));
+-  return absl::OkStatus();
+-}
+-
+-absl::Status IrEmitterUnnested::EmitConvolutionReorderThunk(
+-    const HloCustomCallInstruction* instr) {
+-  bool has_bias = instr->operand_count() > 1;
+-  Shape shape = has_bias ? instr->shape().tuple_shapes(0) : instr->shape();
+-  if (shape.rank() != 5 || shape.dimensions(4) != 32) {
+-    return Internal("Unexpected shape for convolution reorder: %s",
+-                    instr->ToString());
+-  }
+-  absl::InlinedVector<int64_t, 4> filter_dims = {
+-      shape.dimensions(0), shape.dimensions(1) * 32, shape.dimensions(2),
+-      shape.dimensions(3)};
+-
+-  absl::InlinedVector<BufferAllocation::Slice, 2> operand_slices;
+-  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice filter_input,
+-                      GetAllocationSliceForHlo(instr->operand(0)));
+-  operand_slices.push_back(filter_input);
+-  if (has_bias) {
+-    TF_ASSIGN_OR_RETURN(BufferAllocation::Slice bias_input,
+-                        GetAllocationSliceForHlo(instr->operand(1)));
+-    operand_slices.push_back(bias_input);
+-  }
+-
+-  absl::InlinedVector<BufferAllocation::Slice, 2> result_slices;
+-  if (has_bias) {
+-    TF_ASSIGN_OR_RETURN(BufferAllocation::Slice filter_output,
+-                        GetAllocationSliceForHlo(instr, {0}));
+-    result_slices.push_back(filter_output);
+-    TF_ASSIGN_OR_RETURN(BufferAllocation::Slice bias_output,
+-                        GetAllocationSliceForHlo(instr, {1}));
+-    result_slices.push_back(bias_output);
+-  } else {
+-    TF_ASSIGN_OR_RETURN(BufferAllocation::Slice filter_output,
+-                        GetAllocationSliceForHlo(instr));
+-    result_slices.push_back(filter_output);
+-  }
+-
+-  auto thunk = std::make_unique<ConvolutionReorderThunk>(
+-      Thunk::ThunkInfo::WithProfileAnnotation(instr),
+-      absl::MakeSpan(filter_dims), operand_slices, result_slices);
+-  AddThunkToThunkSequence(std::move(thunk));
+-  return absl::OkStatus();
+-}
+-
+-absl::Status IrEmitterUnnested::EmitNormThunk(
+-    const HloCustomCallInstruction* instr) {
+-  TF_ASSIGN_OR_RETURN(auto const gpu_backend_config,
+-                      instr->backend_config<xla::gpu::GpuBackendConfig>());
+-  const xla::gpu::CudnnNormBackendConfig& backend_config =
+-      gpu_backend_config.cudnn_norm_backend_config();
+-
+-  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice x_slice,
+-                      GetAllocationSliceForHlo(instr->operand(0)));
+-  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice scale_slice,
+-                      GetAllocationSliceForHlo(instr->operand(1)));
+-  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice y_or_dx_slice,
+-                      GetAllocationSliceForHlo(instr, {0}));
+-
+-  std::optional<BufferAllocation::Slice> bias_slice, expectation_slice,
+-      norm_factor_slice, dy_slice, dscale_slice, dbias_slice;
+-
+-  if (backend_config.kind() ==
+-          xla::gpu::CudnnNormBackendConfig::LAYER_FWD_INFER ||
+-      backend_config.kind() ==
+-          xla::gpu::CudnnNormBackendConfig::LAYER_FWD_TRAIN) {
+-    TF_ASSIGN_OR_RETURN(bias_slice,
+-                        GetAllocationSliceForHlo(instr->operand(2)));
+-  }
+-  if (backend_config.kind() ==
+-      xla::gpu::CudnnNormBackendConfig::LAYER_FWD_TRAIN) {
+-    TF_ASSIGN_OR_RETURN(expectation_slice,
+-                        GetAllocationSliceForHlo(instr, {1}));
+-    TF_ASSIGN_OR_RETURN(norm_factor_slice,
+-                        GetAllocationSliceForHlo(instr, {2}));
+-  }
+-  if (backend_config.kind() == xla::gpu::CudnnNormBackendConfig::LAYER_BWD) {
+-    TF_ASSIGN_OR_RETURN(dy_slice, GetAllocationSliceForHlo(instr->operand(2)));
+-    TF_ASSIGN_OR_RETURN(expectation_slice,
+-                        GetAllocationSliceForHlo(instr->operand(3)));
+-    TF_ASSIGN_OR_RETURN(norm_factor_slice,
+-                        GetAllocationSliceForHlo(instr->operand(4)));
+-    TF_ASSIGN_OR_RETURN(dscale_slice, GetAllocationSliceForHlo(instr, {1}));
+-    TF_ASSIGN_OR_RETURN(dbias_slice, GetAllocationSliceForHlo(instr, {2}));
+-  }
+-  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice scratch_slice,
+-                      GetAllocationSliceForHlo(
+-                          instr, {instr->shape().tuple_shapes_size() - 1}));
+-
+-  GpuNormDescriptor descriptor;
+-  descriptor.backend_config = backend_config;
+-
+-  descriptor.x_shape = instr->operand(0)->shape();
+-  descriptor.scale_shape = instr->operand(1)->shape();
+-  descriptor.y_or_dx_shape = ShapeUtil::GetSubshape(instr->shape(), {0});
+-  if (backend_config.kind() ==
+-          xla::gpu::CudnnNormBackendConfig::LAYER_FWD_INFER ||
+-      backend_config.kind() ==
+-          xla::gpu::CudnnNormBackendConfig::LAYER_FWD_TRAIN) {
+-    descriptor.bias_shape = instr->operand(2)->shape();
+-  }
+-  if (backend_config.kind() ==
+-      xla::gpu::CudnnNormBackendConfig::LAYER_FWD_TRAIN) {
+-    descriptor.expectation_shape = ShapeUtil::GetSubshape(instr->shape(), {1});
+-    descriptor.norm_factor_shape = ShapeUtil::GetSubshape(instr->shape(), {2});
+-  }
+-  if (backend_config.kind() == xla::gpu::CudnnNormBackendConfig::LAYER_BWD) {
+-    descriptor.dy_shape = instr->operand(2)->shape();
+-    descriptor.expectation_shape = instr->operand(3)->shape();
+-    descriptor.norm_factor_shape = instr->operand(4)->shape();
+-    descriptor.dscale_shape = ShapeUtil::GetSubshape(instr->shape(), {1});
+-    descriptor.dbias_shape = ShapeUtil::GetSubshape(instr->shape(), {2});
+-  }
+-
+-  TF_ASSIGN_OR_RETURN(GpuNormConfig config, GpuNormConfig::For(descriptor));
+-
+-  auto thunk = std::make_unique<NormThunk>(
+-      Thunk::ThunkInfo::WithProfileAnnotation(instr), std::move(config),
+-      x_slice, scale_slice, y_or_dx_slice, bias_slice, expectation_slice,
+-      norm_factor_slice, dy_slice, dscale_slice, dbias_slice, scratch_slice);
+-  AddThunkToThunkSequence(std::move(thunk));
+-  return absl::OkStatus();
+-}
 +#endif  // GOOGLE_CUDA || TF_HIPBLASLT || TENSORFLOW_USE_SYCL
  
- #if GOOGLE_CUDA
+ absl::Status IrEmitterUnnested::EmitFusedMHAThunk(
+     const HloCustomCallInstruction* instr) {
+@@ -1163,6 +985,205 @@ absl::Status IrEmitterUnnested::EmitFusedMHABackwardThunk(
+   return absl::OkStatus();
+ }
  
++#if GOOGLE_CUDA
++
++absl::Status IrEmitterUnnested::EmitCublasLtMatmulThunkF8(
++    const HloCustomCallInstruction* instr) {
++  TF_RET_CHECK(instr->operand_count() == 6 || instr->operand_count() == 7 ||
++               instr->operand_count() == 8);
++  TF_ASSIGN_OR_RETURN(const auto gpu_config,
++                      instr->backend_config<xla::gpu::GpuBackendConfig>());
++  xla::gpu::GemmBackendConfig config = gpu_config.gemm_backend_config();
++  xla::gpu::GemmBackendConfig_Epilogue epilogue = config.epilogue();
++
++  TF_ASSIGN_OR_RETURN(bool has_vector_bias,
++                      xla::gpu::gpublas_lt::EpilogueAddsVectorBias(epilogue));
++  bool has_damax = instr->shape().IsTuple();
++  xla::ShapeIndex output_index =
++      has_damax ? xla::ShapeIndex{0} : xla::ShapeIndex{};
++
++  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice a,
++                      GetAllocationSliceForHlo(instr->operand(0)));
++  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice b,
++                      GetAllocationSliceForHlo(instr->operand(1)));
++  BufferAllocation::Slice c;
++  bool has_matrix_bias = config.beta() != 0;
++  if (has_matrix_bias) {
++    TF_ASSIGN_OR_RETURN(c, GetAllocationSliceForHlo(instr->operand(2)));
++  } else {
++    TF_ASSIGN_OR_RETURN(c, GetAllocationSliceForHlo(instr, output_index));
++  }
++  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice d,
++                      GetAllocationSliceForHlo(instr, output_index));
++
++  int a_scale_index = has_matrix_bias ? 3 : 2;
++  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice a_scale,
++                      GetAllocationSliceForHlo(instr->operand(a_scale_index)));
++  TF_ASSIGN_OR_RETURN(
++      BufferAllocation::Slice b_scale,
++      GetAllocationSliceForHlo(instr->operand(a_scale_index + 1)));
++  TF_ASSIGN_OR_RETURN(
++      BufferAllocation::Slice c_scale,
++      GetAllocationSliceForHlo(instr->operand(a_scale_index + 2)));
++  TF_ASSIGN_OR_RETURN(
++      BufferAllocation::Slice d_scale,
++      GetAllocationSliceForHlo(instr->operand(a_scale_index + 3)));
++
++  BufferAllocation::Slice bias;
++  if (has_vector_bias) {
++    TF_ASSIGN_OR_RETURN(
++        bias, GetAllocationSliceForHlo(instr->operand(a_scale_index + 4)));
++  }
++
++  BufferAllocation::Slice d_amax;
++  if (has_damax) {
++    TF_ASSIGN_OR_RETURN(d_amax, GetAllocationSliceForHlo(instr, {1}));
++  }
++
++  TF_ASSIGN_OR_RETURN(
++      auto gemm_config,
++      GemmConfig::For(static_cast<const HloInstruction*>(instr)));
++
++  // Use the first algorithm by default (i.e. fastest according to heuristics).
++  int64_t algorithm =
++      config.algorithm_case() == GemmBackendConfig::kSelectedAlgorithm
++          ? config.selected_algorithm()
++          : 0;
++
++  BufferAllocation::Slice aux;  // Not used.
++
++  TF_ASSIGN_OR_RETURN(se::gpu::BlasLt::Epilogue blas_lt_epilogue,
++                      gpublas_lt::AsBlasLtEpilogue(epilogue));
++  auto thunk = std::make_unique<CublasLtMatmulThunk>(
++      Thunk::ThunkInfo::WithProfileAnnotation(instr), std::move(gemm_config),
++      blas_lt_epilogue, algorithm, a, b, c, d, bias, aux, a_scale, b_scale,
++      c_scale, d_scale, d_amax);
++  AddThunkToThunkSequence(std::move(thunk));
++  return absl::OkStatus();
++}
++
++absl::Status IrEmitterUnnested::EmitConvolutionReorderThunk(
++    const HloCustomCallInstruction* instr) {
++  bool has_bias = instr->operand_count() > 1;
++  Shape shape = has_bias ? instr->shape().tuple_shapes(0) : instr->shape();
++  if (shape.rank() != 5 || shape.dimensions(4) != 32) {
++    return Internal("Unexpected shape for convolution reorder: %s",
++                    instr->ToString());
++  }
++  absl::InlinedVector<int64_t, 4> filter_dims = {
++      shape.dimensions(0), shape.dimensions(1) * 32, shape.dimensions(2),
++      shape.dimensions(3)};
++
++  absl::InlinedVector<BufferAllocation::Slice, 2> operand_slices;
++  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice filter_input,
++                      GetAllocationSliceForHlo(instr->operand(0)));
++  operand_slices.push_back(filter_input);
++  if (has_bias) {
++    TF_ASSIGN_OR_RETURN(BufferAllocation::Slice bias_input,
++                        GetAllocationSliceForHlo(instr->operand(1)));
++    operand_slices.push_back(bias_input);
++  }
++
++  absl::InlinedVector<BufferAllocation::Slice, 2> result_slices;
++  if (has_bias) {
++    TF_ASSIGN_OR_RETURN(BufferAllocation::Slice filter_output,
++                        GetAllocationSliceForHlo(instr, {0}));
++    result_slices.push_back(filter_output);
++    TF_ASSIGN_OR_RETURN(BufferAllocation::Slice bias_output,
++                        GetAllocationSliceForHlo(instr, {1}));
++    result_slices.push_back(bias_output);
++  } else {
++    TF_ASSIGN_OR_RETURN(BufferAllocation::Slice filter_output,
++                        GetAllocationSliceForHlo(instr));
++    result_slices.push_back(filter_output);
++  }
++
++  auto thunk = std::make_unique<ConvolutionReorderThunk>(
++      Thunk::ThunkInfo::WithProfileAnnotation(instr),
++      absl::MakeSpan(filter_dims), operand_slices, result_slices);
++  AddThunkToThunkSequence(std::move(thunk));
++  return absl::OkStatus();
++}
++
++absl::Status IrEmitterUnnested::EmitNormThunk(
++    const HloCustomCallInstruction* instr) {
++  TF_ASSIGN_OR_RETURN(auto const gpu_backend_config,
++                      instr->backend_config<xla::gpu::GpuBackendConfig>());
++  const xla::gpu::CudnnNormBackendConfig& backend_config =
++      gpu_backend_config.cudnn_norm_backend_config();
++
++  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice x_slice,
++                      GetAllocationSliceForHlo(instr->operand(0)));
++  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice scale_slice,
++                      GetAllocationSliceForHlo(instr->operand(1)));
++  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice y_or_dx_slice,
++                      GetAllocationSliceForHlo(instr, {0}));
++
++  std::optional<BufferAllocation::Slice> bias_slice, expectation_slice,
++      norm_factor_slice, dy_slice, dscale_slice, dbias_slice;
++
++  if (backend_config.kind() ==
++          xla::gpu::CudnnNormBackendConfig::LAYER_FWD_INFER ||
++      backend_config.kind() ==
++          xla::gpu::CudnnNormBackendConfig::LAYER_FWD_TRAIN) {
++    TF_ASSIGN_OR_RETURN(bias_slice,
++                        GetAllocationSliceForHlo(instr->operand(2)));
++  }
++  if (backend_config.kind() ==
++      xla::gpu::CudnnNormBackendConfig::LAYER_FWD_TRAIN) {
++    TF_ASSIGN_OR_RETURN(expectation_slice,
++                        GetAllocationSliceForHlo(instr, {1}));
++    TF_ASSIGN_OR_RETURN(norm_factor_slice,
++                        GetAllocationSliceForHlo(instr, {2}));
++  }
++  if (backend_config.kind() == xla::gpu::CudnnNormBackendConfig::LAYER_BWD) {
++    TF_ASSIGN_OR_RETURN(dy_slice, GetAllocationSliceForHlo(instr->operand(2)));
++    TF_ASSIGN_OR_RETURN(expectation_slice,
++                        GetAllocationSliceForHlo(instr->operand(3)));
++    TF_ASSIGN_OR_RETURN(norm_factor_slice,
++                        GetAllocationSliceForHlo(instr->operand(4)));
++    TF_ASSIGN_OR_RETURN(dscale_slice, GetAllocationSliceForHlo(instr, {1}));
++    TF_ASSIGN_OR_RETURN(dbias_slice, GetAllocationSliceForHlo(instr, {2}));
++  }
++  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice scratch_slice,
++                      GetAllocationSliceForHlo(
++                          instr, {instr->shape().tuple_shapes_size() - 1}));
++
++  GpuNormDescriptor descriptor;
++  descriptor.backend_config = backend_config;
++
++  descriptor.x_shape = instr->operand(0)->shape();
++  descriptor.scale_shape = instr->operand(1)->shape();
++  descriptor.y_or_dx_shape = ShapeUtil::GetSubshape(instr->shape(), {0});
++  if (backend_config.kind() ==
++          xla::gpu::CudnnNormBackendConfig::LAYER_FWD_INFER ||
++      backend_config.kind() ==
++          xla::gpu::CudnnNormBackendConfig::LAYER_FWD_TRAIN) {
++    descriptor.bias_shape = instr->operand(2)->shape();
++  }
++  if (backend_config.kind() ==
++      xla::gpu::CudnnNormBackendConfig::LAYER_FWD_TRAIN) {
++    descriptor.expectation_shape = ShapeUtil::GetSubshape(instr->shape(), {1});
++    descriptor.norm_factor_shape = ShapeUtil::GetSubshape(instr->shape(), {2});
++  }
++  if (backend_config.kind() == xla::gpu::CudnnNormBackendConfig::LAYER_BWD) {
++    descriptor.dy_shape = instr->operand(2)->shape();
++    descriptor.expectation_shape = instr->operand(3)->shape();
++    descriptor.norm_factor_shape = instr->operand(4)->shape();
++    descriptor.dscale_shape = ShapeUtil::GetSubshape(instr->shape(), {1});
++    descriptor.dbias_shape = ShapeUtil::GetSubshape(instr->shape(), {2});
++  }
++
++  TF_ASSIGN_OR_RETURN(GpuNormConfig config, GpuNormConfig::For(descriptor));
++
++  auto thunk = std::make_unique<NormThunk>(
++      Thunk::ThunkInfo::WithProfileAnnotation(instr), std::move(config),
++      x_slice, scale_slice, y_or_dx_slice, bias_slice, expectation_slice,
++      norm_factor_slice, dy_slice, dscale_slice, dbias_slice, scratch_slice);
++  AddThunkToThunkSequence(std::move(thunk));
++  return absl::OkStatus();
++}
++
+ #endif  // GOOGLE_CUDA
+ 
+ absl::StatusOr<BufferAllocation::Slice>
 @@ -1172,8 +1193,8 @@ IrEmitterUnnested::GetAllocationSliceForHlo(const HloInstruction* instr,
                                        instr, index);
  }
@@ -3165,11 +3606,17 @@ index 86426953a..5ccd694c1 100644
  
    return absl::OkStatus();
  }
-@@ -2800,11 +2821,11 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
+@@ -2800,11 +2821,17 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
        if (IsLegacyCublasMatmul(*instr)) {
          return EmitGemmThunk(custom_call);
        }
 -#if GOOGLE_CUDA || TF_HIPBLASLT
++      if (IsFwdCustomCallTofMHA(*instr)) {
++        return EmitFusedMHAThunk(custom_call);
++      }
++      if (IsBwdCustomCallTofMHA(*instr)) {
++        return EmitFusedMHABackwardThunk(custom_call);
++      }
 +#if GOOGLE_CUDA || TF_HIPBLASLT || TENSORFLOW_USE_SYCL
        if (IsCublasLtMatmul(*instr)) {
          return EmitCublasLtMatmulThunk(custom_call);
@@ -3179,6 +3626,19 @@ index 86426953a..5ccd694c1 100644
  #if GOOGLE_CUDA
        if (IsCublasLtMatmulF8(*instr)) {
          return EmitCublasLtMatmulThunkF8(custom_call);
+@@ -2815,12 +2842,6 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
+       if (IsCustomCallToDnnNorm(*instr)) {
+         return EmitNormThunk(custom_call);
+       }
+-      if (IsFwdCustomCallTofMHA(*instr)) {
+-        return EmitFusedMHAThunk(custom_call);
+-      }
+-      if (IsBwdCustomCallTofMHA(*instr)) {
+-        return EmitFusedMHABackwardThunk(custom_call);
+-      }
+ #endif  // GOOGLE_CUDA
+       if (IsCustomCallToTopK(*instr)) {
+         return EmitTopKCustomCall(custom_call);
 @@ -2828,17 +2849,19 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
        if (IsCustomCallToDnnConvolution(*instr)) {
          return EmitConvolutionThunk(custom_call);
@@ -3202,7 +3662,7 @@ index 86426953a..5ccd694c1 100644
          return EmitPadToStatic(custom_call);
        }
 diff --git a/xla/service/gpu/ir_emitter_unnested.h b/xla/service/gpu/ir_emitter_unnested.h
-index 0650f8374..633b0f09c 100644
+index 0650f8374..b3279f4d9 100644
 --- a/xla/service/gpu/ir_emitter_unnested.h
 +++ b/xla/service/gpu/ir_emitter_unnested.h
 @@ -1,4 +1,6 @@
@@ -3223,11 +3683,13 @@ index 0650f8374..633b0f09c 100644
  #include "xla/service/gpu/runtime/send_recv_thunk.h"
  #include "xla/service/gpu/thunk.h"
  #include "xla/service/llvm_ir/ir_array.h"
-@@ -133,9 +136,9 @@ class IrEmitterUnnested : public IrEmitter {
+@@ -133,21 +136,22 @@ class IrEmitterUnnested : public IrEmitter {
    absl::Status EmitConditional(const HloInstruction* instr);
    absl::Status EmitConvolutionThunk(const HloCustomCallInstruction* instr);
    absl::Status EmitGemmThunk(const HloCustomCallInstruction* instr);
 -#if GOOGLE_CUDA || TF_HIPBLASLT
++  absl::Status EmitFusedMHAThunk(const HloCustomCallInstruction* instr);
++  absl::Status EmitFusedMHABackwardThunk(const HloCustomCallInstruction* instr);
 +#if GOOGLE_CUDA || TF_HIPBLASLT || TENSORFLOW_USE_SYCL
    absl::Status EmitCublasLtMatmulThunk(const HloCustomCallInstruction* instr);
 -#endif  // GOOGLE_CUDA || TF_HIPBLASLT
@@ -3235,9 +3697,10 @@ index 0650f8374..633b0f09c 100644
  #if GOOGLE_CUDA
    absl::Status EmitCublasLtMatmulThunkF8(const HloCustomCallInstruction* instr);
    absl::Status EmitConvolutionReorderThunk(
-@@ -144,10 +147,11 @@ class IrEmitterUnnested : public IrEmitter {
-   absl::Status EmitFusedMHAThunk(const HloCustomCallInstruction* instr);
-   absl::Status EmitFusedMHABackwardThunk(const HloCustomCallInstruction* instr);
+       const HloCustomCallInstruction* instr);
+   absl::Status EmitNormThunk(const HloCustomCallInstruction* instr);
+-  absl::Status EmitFusedMHAThunk(const HloCustomCallInstruction* instr);
+-  absl::Status EmitFusedMHABackwardThunk(const HloCustomCallInstruction* instr);
  #endif  // GOOGLE_CUDA
 -#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 +  absl::Status EmitFusedMHAThunk(mlir::Operation* op);
