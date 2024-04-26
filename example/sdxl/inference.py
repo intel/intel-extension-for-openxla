@@ -7,6 +7,7 @@ import numpy as np
 from flax.jax_utils import replicate
 
 from diffusers import FlaxStableDiffusionXLPipeline
+from diffusers.models import FlaxAutoencoderKL
 
 NUM_DEVICES = jax.device_count()
 
@@ -33,11 +34,18 @@ pipeline, params = FlaxStableDiffusionXLPipeline.from_pretrained(
     split_head_dim=True
 )
 
+if args.dtype == "float16":
+    vae, vae_state = FlaxAutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", dtype=dtype, from_pt=True)
+    pipeline.vae = vae
+
 # We cast all parameters to bfloat16 EXCEPT the scheduler which we leave in
 # float32 to keep maximal precision
 scheduler_state = params.pop("scheduler")
 params = jax.tree_util.tree_map(lambda x: x.astype(args.dtype), params)
 params["scheduler"] = scheduler_state
+
+if args.dtype == "float16":
+    params["vae"] = vae_state
 
 default_prompt = "a colorful photo of a castle in the middle of a forest with trees and bushes, by Ismail Inceoglu, shadows, high contrast, dynamic shading, hdr, detailed vegetation, digital painting, digital drawing, detailed painting, a detailed digital painting, gothic art, featured on deviantart"
 default_neg_prompt = "fog, grainy, purple"
