@@ -1,3 +1,16 @@
+diff --git a/t5x/config_utils.py b/t5x/config_utils.py
+index abd3f8f..e6e1bd9 100644
+--- a/t5x/config_utils.py
++++ b/t5x/config_utils.py
+@@ -207,7 +207,7 @@ def run(main):
+     args = gin_utils.rewrite_gin_args(args)
+     return fdl_flags.flags_parser(args)
+ 
+-  jax.config.parse_flags_with_absl()
++  jax._src.config.parse_flags_with_absl()
+   if using_fdl():
+     app.run(main, flags_parser=flags_parser)
+   else:
 diff --git a/t5x/partitioning.py b/t5x/partitioning.py
 index 20b0abb..b19ecc1 100644
 --- a/t5x/partitioning.py
@@ -18,7 +31,6 @@ index 20b0abb..b19ecc1 100644
      # to take advantage of faster within-host interconnect.
 -    return jax.host_count(), jax.local_device_count()
 +  return jax.host_count(), jax.local_device_count()
-
-
+ 
+ 
  def get_coords(device: jax.Device) -> HardwareMesh:
-

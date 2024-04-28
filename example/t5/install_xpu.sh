@@ -6,7 +6,7 @@ git checkout 6699ad54480a0691c491fa2aa28d8b46daf1a377
 git apply ../patch/not_exit_before_max_step.patch
 git apply ../patch/version_time_dlpath.patch
 git apply ../patch/adjust_flax.patch
-git apply ../patch/correct_device_attr.patch
+git apply ../patch/adjust_jax.patch
 
 ln -s /usr/local/bin/pip /usr/bin/pip
 pip uninstall tensorflow-metadata numba cudf -y
