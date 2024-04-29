@@ -30,7 +30,8 @@ namespace py = pybind11;
 namespace xla {
 namespace {
 Status RegisterCustomCallTarget(const PJRT_Api* c_api,
-                                const std::string& fn_name, py::capsule fn) {
+                                const std::string& fn_name, py::capsule fn,
+                                int api_version) {
   static const char* const kName = "xla._CUSTOM_CALL_TARGET";
   if (std::string_view(fn.name()) != kName) {
     return InvalidArgument(
@@ -59,6 +60,7 @@ Status RegisterCustomCallTarget(const PJRT_Api* c_api,
   args.function_name = fn_name.c_str();
   args.function_name_size = fn_name.size();
   args.custom_call_function = static_cast<void*>(fn);
+  args.api_version = api_version;
 
   RETURN_STATUS_IF_PJRT_ERROR(
       reinterpret_cast<const PJRT_Gpu_Custom_Call*>(next)->custom_call(&args),
@@ -71,9 +73,12 @@ Status RegisterCustomCallTarget(const PJRT_Api* c_api,
 PYBIND11_MODULE(xpu_plugin_extension, m) {
   m.def("register_custom_call_target",
         [](py::capsule c_api, const std::string& fn_name, py::capsule fn,
-           const std::string& xla_platform_name) {
+           const std::string& xla_platform_name, const int api_version) {
           xla::ThrowIfError(RegisterCustomCallTarget(
-              static_cast<const PJRT_Api*>(c_api), fn_name, std::move(fn)));
-        });
+              static_cast<const PJRT_Api*>(c_api), fn_name, std::move(fn),
+              api_version));
+        },
+        py::arg("c_api"), py::arg("fn_name"), py::arg("fn"),
+        py::arg("xla_platform_name"), py::arg("api_version") = 0);
 }
 }  // namespace xla
