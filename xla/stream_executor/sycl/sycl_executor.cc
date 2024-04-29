@@ -563,7 +563,8 @@ bool GpuExecutor::CreateStreamDependency(Stream* dependent, Stream* other) {
 #endif
 
   if (IsMultipleStreamEnabled()) {
-    AsGpuStreamValue(dependent)->ext_oneapi_submit_barrier(std::move(event));
+    auto event = AsGpuStreamValue(other)->ext_oneapi_submit_barrier();
+    AsGpuStreamValue(dependent)->ext_oneapi_submit_barrier({std::move(event)});
   } else {
     AsGpuStreamValue(dependent)->wait();
   }

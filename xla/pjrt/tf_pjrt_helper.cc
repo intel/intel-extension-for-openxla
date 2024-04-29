@@ -260,7 +260,7 @@ PJRT_Buffer* SameDevicePjRtBufferCopy(PJRT_Buffer* src_buffer,
       transfer_manager
           ->AllocateScopedShapedBuffer(se_src_buffer->on_device_shape(),
                                        se_client->allocator(),
-                                       transfer_local_device->device_ordinal())
+                                       transfer_local_device->local_device_id())
           .value();
   transfer_stream->ThenWaitFor(transfer_local_device->compute_stream());
 
@@ -327,7 +327,7 @@ PJRT_Buffer* SameDeviceITEXBufferCopy(PJRT_Buffer* src_buffer,
       transfer_local_device->GetDeviceToDeviceStream();
   std::unique_ptr<ITEXPjRtBuffer> dst_buffer =
       AllocateITEXDestinationBuffer(
-          transfer_local_device->device_ordinal(), pjrt_device, se_client,
+          transfer_local_device->local_device_id(), pjrt_device, se_client,
           itex_src_buffer->dimensions(), itex_src_buffer->element_type(),
           itex_src_buffer->buffer_size())
           .value();
