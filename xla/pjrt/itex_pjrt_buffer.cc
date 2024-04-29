@@ -92,7 +92,7 @@ StatusOr<std::unique_ptr<PjRtBuffer>> ITEXPjRtBuffer::CopyToDevice(
   transfer_stream->ThenMemcpyD2D(&dst_buffer->buffer(), buffer(),
                                  dst_buffer->buffer_size());
   if (!transfer_stream->ok()) {
-    return InternalError("Device->Device Memcpy failed.");
+    return absl::InternalError("Device->Device Memcpy failed.");
   }
 
   return std::move(dst_buffer);
@@ -118,10 +118,11 @@ PjRtFuture<Status> ITEXPjRtBuffer::ToLiteral(MutableLiteralBase* literal) {
 
   auto promise = PjRtFuture<Status>::CreatePromise();
   se::DeviceMemoryBase base = buffer();
+  se::DeviceMemoryBase dst(literal->untyped_data(), buffer_size());
 
   auto* executor = stream->parent()->implementation();
-  tsl::Status status =
-      executor->SynchronousMemcpy(literal->untyped_data(), base, buffer_size());
+  absl::Status status =
+      executor->SynchronousMemcpy(dst, base, buffer_size());
 
   promise.Set(status);
   return PjRtFuture<Status>(std::move(promise));
