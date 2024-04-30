@@ -39,8 +39,6 @@ template <typename fmha_policy, typename scalar_t, bool kUseBias,
           bool kIsCausal, bool kIsTraining>
 class fmha_forward_t {
  public:
-  static_assert((!kIsTraining), "training is not supported yet");
-
   using accum_t = float;
   static constexpr accum_t kNegInfinity = INFINITY * -1;
 
@@ -56,6 +54,7 @@ class fmha_forward_t {
     accum_t dp_scale;
     // Output tensor
     scalar_t* O_ptr;  // raw: [B, N, F, H]; permute: [B, F, N, H] - output
+    accum_t* activation_ptr;
     // Dimension size
     uint32_t uB;
     uint32_t uN;
@@ -68,7 +67,8 @@ class fmha_forward_t {
     inline arguments_t() = default;
     inline arguments_t(scalar_t* query, scalar_t* key, scalar_t* value,
                        scalar_t* bias, uint8_t* dropout, accum_t dropout_prob,
-                       scalar_t* out, uint32_t num_batches, uint32_t num_heads,
+                       scalar_t* out, accum_t* activation_ptr,
+                       uint32_t num_batches, uint32_t num_heads,
                        uint32_t head_size, uint32_t num_queries,
                        uint32_t num_keys, accum_t sm_scale)
         : Q_ptr(query),
@@ -79,6 +79,7 @@ class fmha_forward_t {
           dp_prob(dropout_prob),
           dp_scale(1.f / (1.f - dropout_prob)),
           O_ptr(out),
+          activation_ptr(activation_ptr),
           uB(num_batches),
           uN(num_heads),
           uH(head_size),
@@ -136,6 +137,8 @@ class fmha_forward_t {
       mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>;
   using mem_desc_Oi_t =
       mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>;
+  using mem_desc_Li_t =
+      mem_desc_t<accum_t, mem_layout::row_major, mem_space::global>;
 
   // ------------------- // Slm and nbarrier // ------------------- //
   static constexpr uint32_t slm_size_Qi = kBr * kHm * sizeof(scalar_t);
@@ -170,6 +173,7 @@ class fmha_forward_t {
     mem_desc_Vj_t mem_desc_Vj;
     mem_desc_Bij_t mem_desc_Bij;
     mem_desc_Oi_t mem_desc_Oi;
+    mem_desc_Li_t mem_desc_Li;
 
     inline context_t() = default;
 
@@ -196,6 +200,14 @@ class fmha_forward_t {
       mem_desc_Qi.init(args.Q_ptr, {args.uH, end_y, args.uH}, {0, start_y});
       mem_desc_Oi.init(args.O_ptr, {args.uH, end_y, args.uH}, {0, start_y});
 
+      if constexpr (kIsTraining) {
+        int32_t start_x_ml = ei.get_group(1) * kBr + sg_idy * kSgBr;
+        int32_t start_y_ml = gid;
+        mem_desc_Li.init(args.activation_ptr,
+                         {args.uF, args.uB * args.uN, args.uF},
+                         {start_x_ml, start_y_ml});
+      }
+
       mem_desc_Qi_L.init(Qi_slm, {kHm, kBr, kHm}, {0, 0});
       mem_desc_Pij_L.init(Pij_slm, {kBc, kBr, kBc}, {0, 0});
     }
@@ -218,10 +230,9 @@ class fmha_forward_t {
         boundary_x = args.uT;
         end_x = end_x > boundary_x ? boundary_x : end_x;
 
-        uint32_t batch_id = gid / args.uN;
-        int32_t start_y = batch_id * args.uF + ei.get_group(1) * kBr;
+        int32_t start_y = gid * args.uF + ei.get_group(1) * kBr;
         uint32_t end_y = start_y + kBr;
-        uint32_t boundary_y = (batch_id + 1) * args.uF;
+        uint32_t boundary_y = (gid + 1) * args.uF;
         end_y = end_y > boundary_y ? boundary_y : end_y;
 
         mem_desc_Bij.init(args.B_ptr, {end_x, end_y, args.uT},
@@ -328,7 +339,7 @@ class fmha_forward_t {
 
     // compute new m
     wg_row_max_t wg_row_max(ctx.sg_idx, ctx.sg_idy, reducer_slm);
-    xetla_vector<accum_t, kSgBr> m_new = wg_row_max(matAccSij);
+    xetla_vector<accum_t, kSgBr> m_new = wg_row_max(&matAccSij);
     m_new = xetla_max<accum_t, kSgBr>(m_new, ctx.softmax_m);
 
     if constexpr (wg_size_x > 1) ctx.nbarrier.arrive();
@@ -344,7 +355,7 @@ class fmha_forward_t {
 
     // compute new l
     wg_row_sum_t wg_row_sum(ctx.sg_idx, ctx.sg_idy, reducer_slm);
-    xetla_vector<accum_t, kSgBr> l_new = wg_row_sum(matAccSij);
+    xetla_vector<accum_t, kSgBr> l_new = wg_row_sum(&matAccSij);
     l_new += ctx.softmax_l;
 
     // rescale operands of matmuls
@@ -414,6 +425,25 @@ class fmha_forward_t {
                           cache_hint::write_back>(transpose_tdecs, v_out);
       xetla_update_tdesc_offsety(transpose_tdecs.xetla_format<uint32_t>(),
                                  args.uN);
+    }
+  }
+
+  inline void store_Mi_Li(const arguments_t& args) {
+    // save m and l to global
+    if constexpr (!kIsTraining) {
+      return;
+    }
+    using store_ml_desc =
+        subgroup::tile_desc_t<kSgBr, 1, kSgBr, 1, reg_layout::tiled>;
+    using store_tile_t = subgroup::tile_t<accum_t, store_ml_desc>;
+    using store_payload_t =
+        subgroup::mem_payload_t<mem_desc_Li_t, store_ml_desc,
+                                msg_type::block_2d, gpu_arch::Xe>;
+    store_tile_t ml_store;
+    store_payload_t ml_store_payload(ctx.mem_desc_Li);
+    ml_store.reg = ctx.softmax_m + sycl::ext::intel::esimd::log(ctx.softmax_l);
+    if (ctx.sg_idx == 0) {
+      subgroup::tile_store(ml_store, ml_store_payload);
     }
   }
 
@@ -528,24 +558,27 @@ class fmha_forward_t {
     // Store output to global
 #if _RAW_OUTPUT
     raw_store_Oi(matAccOi, args);
+    store_Mi_Li(args);
 #else
     permute_store_Oi(ei, matAccOi, args);
+    store_Mi_Li(args);
 #endif
   }
 };  // fmha_forward_t
 
 template <typename fmha_policy, typename T, bool kUseBias, bool kIsCausal,
-          bool kIsTraining>
+          bool kIsDropout, bool kIsTraining>
 class FmhaForwardKernel;
 
 // The launcher of fmha forward kernel
 template <typename fmha_policy, typename T, bool kUseBias, bool kIsCausal,
-          bool kIsTraining>
+          bool kIsDropout, bool kIsTraining>
 void fmha_forward_impl(sycl::queue& q, T* query, T* key, T* value, T* bias,
                        uint8_t* dropout, float dropout_prob, T* out,
-                       uint32_t num_batches, uint32_t num_heads,
-                       uint32_t head_size, uint32_t num_queries,
-                       uint32_t num_keys, float head_scale) {
+                       float* activation_ptr, uint32_t num_batches,
+                       uint32_t num_heads, uint32_t head_size,
+                       uint32_t num_queries, uint32_t num_keys,
+                       float head_scale) {
   // fmha forward kernel
   using fmha_forward_op_t =
       fmha_forward_t<fmha_policy, T, kUseBias, kIsCausal, kIsTraining>;
@@ -554,8 +587,8 @@ void fmha_forward_impl(sycl::queue& q, T* query, T* key, T* value, T* bias,
       fmha_forward_op_t::get_nd_range(num_batches * num_heads, num_queries);
 
   auto event = q.submit([&](sycl::handler& cgh) {
-    cgh.parallel_for<class FmhaForwardKernel<fmha_policy, T, kUseBias,
-                                             kIsCausal, kIsTraining>>(
+    cgh.parallel_for<class FmhaForwardKernel<
+        fmha_policy, T, kUseBias, kIsCausal, kIsDropout, kIsTraining>>(
         NdRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
           // exec item
           sycl::nd_item<3> ei(item);
@@ -563,8 +596,9 @@ void fmha_forward_impl(sycl::queue& q, T* query, T* key, T* value, T* bias,
           // init fmha forward op and arguments
           fmha_forward_op_t fmha_fwd_op;
           typename fmha_forward_op_t::arguments_t args(
-              query, key, value, bias, dropout, dropout_prob, out, num_batches,
-              num_heads, head_size, num_queries, num_keys, head_scale);
+              query, key, value, bias, dropout, dropout_prob, out,
+              activation_ptr, num_batches, num_heads, head_size, num_queries,
+              num_keys, head_scale);
 
           // call the functor
           fmha_fwd_op(ei, args);
@@ -574,18 +608,19 @@ void fmha_forward_impl(sycl::queue& q, T* query, T* key, T* value, T* bias,
 
 }  // namespace fmha
 
-#define CALL_IMPL_FUNC(P)                                                  \
-  fmha::fmha_forward_impl<P, T, kUseBias, kIsCausal, kIsTraining>(         \
-      q, query, key, value, bias, dropout, dropout_prob, out, num_batches, \
-      num_heads, head_size, num_queries, num_keys, head_scale)
+#define CALL_IMPL_FUNC(P)                                                      \
+  fmha::fmha_forward_impl<P, T, kUseBias, kIsCausal, kIsDropout, kIsTraining>( \
+      q, query, key, value, bias, dropout, dropout_prob, out, activation_ptr,  \
+      num_batches, num_heads, head_size, num_queries, num_keys, head_scale)
 
 /// @brief Main execution function for flash mha forward.
 template <typename T, bool kUseBias = false, bool kIsCausal = false,
-          bool kIsTraining = false>
+          bool kIsDropout = false, bool kIsTraining = false>
 void fmha_forward(sycl::queue& q, T* query, T* key, T* value, T* bias,
                   uint8_t* dropout, float dropout_prob, T* out,
-                  uint32_t num_batches, uint32_t num_heads, uint32_t head_size,
-                  uint32_t num_queries, uint32_t num_keys, float head_scale) {
+                  float* activation_ptr, uint32_t num_batches,
+                  uint32_t num_heads, uint32_t head_size, uint32_t num_queries,
+                  uint32_t num_keys, float head_scale) {
   if (head_size <= 64) {
     CALL_IMPL_FUNC(fmha_policy_64x128x64);
   } else if (head_size <= 128) {
@@ -599,8 +634,8 @@ void fmha_forward(sycl::queue& q, T* query, T* key, T* value, T* bias,
       CALL_IMPL_FUNC(fmha_policy_64x256x256);
     }
   } else {
-    std::cout << "No policy available for current head_size " << head_size
-              << "\n";
+    CHECK(false) << "No policy available for current head_size " << head_size
+                 << "\n";
     return;
   }
 }

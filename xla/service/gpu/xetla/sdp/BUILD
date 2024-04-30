@@ -8,6 +8,7 @@ xetla_library(
     ],
     hdrs = [
         "fmha_forward.h",
+        "fmha_backward.h",
         "fmha_policy.h",
         "fmha_utils.h",
         "sdp.h",
@@ -15,5 +16,6 @@ xetla_library(
     visibility = ["//visibility:public"],
     deps = [
         "@xetla//:xetla_header",
+        "@tsl//tsl/platform:logging",
     ],
 )

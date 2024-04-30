@@ -18,24 +18,35 @@ limitations under the License.
 #include <sycl/sycl.hpp>
 
 namespace gpu::xetla {
-void fmha_forward_bf16(sycl::queue& q, void* query, void* key, void* value,
-                       void* bias, uint8_t* dropout, float dropout_prob,
-                       void* out, uint32_t num_batches, uint32_t num_heads,
-                       uint32_t head_size, uint32_t num_queries,
-                       uint32_t num_keys, float head_scale);
-void fmha_forward_bf16_bias(sycl::queue& q, void* query, void* key, void* value,
-                            void* bias, uint8_t* dropout, float dropout_prob,
-                            void* out, uint32_t num_batches, uint32_t num_heads,
-                            uint32_t head_size, uint32_t num_queries,
-                            uint32_t num_keys, float head_scale);
-void fmha_forward_fp16(sycl::queue& q, void* query, void* key, void* value,
-                       void* bias, uint8_t* dropout, float dropout_prob,
-                       void* out, uint32_t num_batches, uint32_t num_heads,
-                       uint32_t head_size, uint32_t num_queries,
-                       uint32_t num_keys, float head_scale);
-void fmha_forward_fp16_bias(sycl::queue& q, void* query, void* key, void* value,
-                            void* bias, uint8_t* dropout, float dropout_prob,
-                            void* out, uint32_t num_batches, uint32_t num_heads,
-                            uint32_t head_size, uint32_t num_queries,
-                            uint32_t num_keys, float head_scale);
+
+void fmha_forward_kernel_fp16(sycl::queue& q, void* query, void* key,
+                              void* value, void* bias, uint8_t* dropout,
+                              float dropout_prob, void* out,
+                              void* activation_ptr, uint32_t num_batches,
+                              uint32_t num_heads, uint32_t head_size,
+                              uint32_t num_queries, uint32_t num_keys,
+                              float head_scale, bool is_training);
+
+void fmha_forward_kernel_bf16(sycl::queue& q, void* query, void* key,
+                              void* value, void* bias, uint8_t* dropout,
+                              float dropout_prob, void* out,
+                              void* activation_ptr, uint32_t num_batches,
+                              uint32_t num_heads, uint32_t head_size,
+                              uint32_t num_queries, uint32_t num_keys,
+                              float head_scale, bool is_training);
+
+void fmha_backward_kernel_fp16(
+    sycl::queue& q, void* query, void* key, void* value, void* out, void* bias,
+    void* grad_out, void* dp_sum, void* activation_ptr, void* grad_query,
+    void* grad_query_accum, void* grad_key, void* grad_value,
+    uint32_t num_batches, uint32_t num_heads, uint32_t head_size,
+    uint32_t num_queries, uint32_t num_keys, float head_scale);
+
+void fmha_backward_kernel_bf16(
+    sycl::queue& q, void* query, void* key, void* value, void* out, void* bias,
+    void* grad_out, void* dp_sum, void* activation_ptr, void* grad_query,
+    void* grad_query_accum, void* grad_key, void* grad_value,
+    uint32_t num_batches, uint32_t num_heads, uint32_t head_size,
+    uint32_t num_queries, uint32_t num_keys, float head_scale);
+
 }  // namespace gpu::xetla
