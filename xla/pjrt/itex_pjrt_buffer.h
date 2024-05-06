@@ -24,7 +24,9 @@ limitations under the License.
 
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/stream_executor/device_memory_allocator.h"
-#include "xla/stream_executor/tf_allocator_adapter.h"
+#include "xla/stream_executor/gpu/gpu_executor.h"
+#include "xla/stream_executor/sycl/sycl_executor.h"
+#include "xla/stream_executor/integrations/tf_allocator_adapter.h"
 
 namespace xla {
 

@@ -145,8 +145,9 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":itex_pjrt_buffer",
-        ":se_xpu_pjrt_client",
+        #":se_xpu_pjrt_client",
         "//xla/stream_executor/sycl:sycl_platform",
+        "@xla//xla/pjrt/gpu:se_gpu_pjrt_client",
         "@xla//xla:literal",
         "@xla//xla:shape_util",
         "@xla//xla:status",
@@ -172,6 +173,7 @@ cc_library(
     linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
+        "//xla/stream_executor/sycl:sycl_platform",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",

@@ -25,7 +25,7 @@ limitations under the License.
 #include "tsl/profiler/lib/traceme.h"
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/stream_executor/device_memory_allocator.h"
-#include "xla/stream_executor/tf_allocator_adapter.h"
+#include "xla/stream_executor/integrations/tf_allocator_adapter.h"
 
 namespace xla {
 
@@ -118,11 +118,11 @@ PjRtFuture<Status> ITEXPjRtBuffer::ToLiteral(MutableLiteralBase* literal) {
 
   auto promise = PjRtFuture<Status>::CreatePromise();
   se::DeviceMemoryBase base = buffer();
-  se::DeviceMemoryBase dst(literal->untyped_data(), buffer_size());
+  // se::DeviceMemoryBase dst(literal->untyped_data(), buffer_size());
 
-  auto* executor = stream->parent()->implementation();
+  auto* executor = tensorflow::down_cast<stream_executor::gpu::GpuExecutor*>(stream->parent()->implementation());
   absl::Status status =
-      executor->SynchronousMemcpy(dst, base, buffer_size());
+      executor->SynchronousMemcpy(literal->untyped_data(), base, buffer_size());
 
   promise.Set(status);
   return PjRtFuture<Status>(std::move(promise));

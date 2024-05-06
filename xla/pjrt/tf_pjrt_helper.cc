@@ -6,8 +6,8 @@
 #include "xla/stream_executor/device_memory_allocator.h"
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
-#include "xla/stream_executor/tf_allocator_adapter.h"
 #include "xla/stream_executor/tpu/c_api_conversions.h"
+#include "xla/stream_executor/integrations/tf_allocator_adapter.h"
 
 xla::PrimitiveType XlaDataTypeFromString(std::string data_type) {
   if (data_type == "bool")
@@ -260,7 +260,7 @@ PJRT_Buffer* SameDevicePjRtBufferCopy(PJRT_Buffer* src_buffer,
       transfer_manager
           ->AllocateScopedShapedBuffer(se_src_buffer->on_device_shape(),
                                        se_client->allocator(),
-                                       transfer_local_device->local_device_id())
+                                       transfer_local_device->local_device_id().value())
           .value();
   transfer_stream->ThenWaitFor(transfer_local_device->compute_stream());
 
@@ -327,7 +327,7 @@ PJRT_Buffer* SameDeviceITEXBufferCopy(PJRT_Buffer* src_buffer,
       transfer_local_device->GetDeviceToDeviceStream();
   std::unique_ptr<ITEXPjRtBuffer> dst_buffer =
       AllocateITEXDestinationBuffer(
-          transfer_local_device->local_device_id(), pjrt_device, se_client,
+          transfer_local_device->local_device_id().value(), pjrt_device, se_client,
           itex_src_buffer->dimensions(), itex_src_buffer->element_type(),
           itex_src_buffer->buffer_size())
           .value();
