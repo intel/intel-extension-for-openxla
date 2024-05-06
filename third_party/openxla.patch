@@ -644,6 +644,43 @@ index fa10334d50..5820c94aed 100644
  
  PJRT_Error* PJRT_Client_Create(PJRT_Client_Create_Args* args) {
    PJRT_RETURN_IF_ERROR(ActualStructSizeIsGreaterOrEqual(
+diff --git a/xla/pjrt/c/pjrt_c_api_helpers.cc b/xla/pjrt/c/pjrt_c_api_helpers.cc
+index c655dec9df..f591be7a4b 100644
+--- a/xla/pjrt/c/pjrt_c_api_helpers.cc
++++ b/xla/pjrt/c/pjrt_c_api_helpers.cc
+@@ -580,6 +580,15 @@ static std::string StructSizeErrorMsg(absl::string_view struct_name,
+   return error_msg;
+ }
+ 
++xla::Status CheckMatchingStructSizes(absl::string_view struct_name,
++                                     size_t expected_size, size_t actual_size) {
++  if (expected_size != actual_size) {
++    return tsl::errors::InvalidArgument(
++        StructSizeErrorMsg(struct_name, expected_size, actual_size));
++  }
++  return tsl::OkStatus();
++}
++
+ xla::Status ActualStructSizeIsGreaterOrEqual(absl::string_view struct_name,
+                                              size_t expected_size,
+                                              size_t actual_size) {
+diff --git a/xla/pjrt/c/pjrt_c_api_helpers.h b/xla/pjrt/c/pjrt_c_api_helpers.h
+index 720ef577d5..36142466e7 100644
+--- a/xla/pjrt/c/pjrt_c_api_helpers.h
++++ b/xla/pjrt/c/pjrt_c_api_helpers.h
+@@ -154,6 +154,12 @@ xla::Status ValidateCreateOptions(
+     const absl::flat_hash_map<std::string, PJRT_NamedValue_Type>&
+         expected_name_and_types);
+ 
++// Helper function for checking C API argument struct sizes. Returns a non-OK
++// status if the expected and actual sizes aren't equal (i.e. no ABI
++// compatibility guarantees).
++xla::Status CheckMatchingStructSizes(absl::string_view struct_name,
++                                     size_t expected_size, size_t actual_size);
++
+ // Helper function for checking the actual C API argument struct size is greater
+ // than or equal to the expected size. The actual struct size can be larger if
+ // it comes from a forwards-compatible caller built at a later version than this
 diff --git a/xla/pjrt/event_pool.cc b/xla/pjrt/event_pool.cc
 index 1db130633c..d1accf7fa7 100644
 --- a/xla/pjrt/event_pool.cc
@@ -1307,10 +1344,10 @@ index abfcefdd3f..4041bdd1ca 100644
          return user_index.size() == 1 && user_index[0] == 0;
 diff --git a/xla/service/gpu/ccl_api.cc b/xla/service/gpu/ccl_api.cc
 new file mode 100644
-index 0000000000..1dd230648a
+index 0000000000..f978e9b740
 --- /dev/null
 +++ b/xla/service/gpu/ccl_api.cc
-@@ -0,0 +1,299 @@
+@@ -0,0 +1,281 @@
 +/* Copyright (c) 2024 Intel Corporation
 +
 +Copyright 2019 The TensorFlow Authors. All Rights Reserved.
@@ -1390,7 +1427,7 @@ index 0000000000..1dd230648a
 +  return absl::UnimplementedError("XLA compiled without CCL support: " + mes);
 +}
 +
-+CclApi::CclApi() : current_call_(0), max_call_(0) {}
++CclApi::CclApi() {}
 +
 +absl::StatusOr<NcclCliqueId> CclApi::GetUniqueId() { return NcclCliqueId(); }
 +
@@ -1414,7 +1451,8 @@ index 0000000000..1dd230648a
 +    return absl::InvalidArgumentError(absl::StrFormat(
 +        "Invalid rank %d, it must be in [0, %d) range", rank, nranks));
 +
-+  NcclCommHandle comm = reinterpret_cast<NcclCommHandle>(new ccl::communicator(nranks, rank, clique_id.ToString()));
++  NcclCommHandle comm = reinterpret_cast<NcclCommHandle>(
++      new ccl::communicator(nranks, rank, clique_id.ToString()));
 +
 +  return CclApi::OwnedNcclComm(comm, NcclCommDeleter{this});
 +}
@@ -1462,16 +1500,12 @@ index 0000000000..1dd230648a
 +
 +  const void* send_buffer_ = send_buffer.opaque();
 +  void* recv_buffer_ = recv_buffer.opaque();
-+
 +  int element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
-+
-+  int current_call = GetCurrentCall();
-+  int max_call = GetMaxCall();
 +
 +  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
 +
 +  sycl_allreduce(send_buffer_, recv_buffer_, element_count, dtype,
-+                 reduction_kind, gpu_stream, comm_, current_call, max_call);
++                 reduction_kind, gpu_stream, comm_);
 +  return absl::OkStatus();
 +}
 +
@@ -1484,11 +1518,7 @@ index 0000000000..1dd230648a
 +
 +  const void* send_buffer_ = send_buffer.opaque();
 +  void* recv_buffer_ = recv_buffer.opaque();
-+
 +  int element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
-+
-+  int current_call = GetCurrentCall();
-+  int max_call = GetMaxCall();
 +
 +  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
 +
@@ -1505,8 +1535,7 @@ index 0000000000..1dd230648a
 +      gpu_stream);
 +
 +  sycl_reduce_scatter(send_buffer_, recv_buffer_, recv_count, dtype,
-+                      reduction_kind, gpu_stream, comm_, current_call,
-+                      max_call);
++                      reduction_kind, gpu_stream, comm_);
 +  return absl::OkStatus();
 +}
 +
@@ -1518,16 +1547,12 @@ index 0000000000..1dd230648a
 +
 +  const void* send_buffer_ = send_buffer.opaque();
 +  void* recv_buffer_ = recv_buffer.opaque();
-+
 +  int element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
-+
-+  int current_call = GetCurrentCall();
-+  int max_call = GetMaxCall();
 +
 +  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
 +
 +  sycl_allgather(send_buffer_, recv_buffer_, element_count, dtype, gpu_stream,
-+                 comm_, current_call, max_call);
++                 comm_);
 +  return absl::OkStatus();
 +}
 +
@@ -1593,14 +1618,8 @@ index 0000000000..1dd230648a
 +  // Don't need now
 +  return UnimplementedError("DeregisterBuffer");
 +}
-+int CclApi::GetCurrentCall() { return current_call_; }
-+int CclApi::GetMaxCall() { return max_call_; }
-+void CclApi::ChangCurrentCall(int current_call) {
-+  current_call_ = current_call;
-+}
-+void CclApi::ChangeMaxCall(int max_call) { max_call_ = max_call; }
 +
-+ncclComm_t CastCCLComm(CclApi::NcclCommHandle comm){
++ncclComm_t CastCCLComm(CclApi::NcclCommHandle comm) {
 +  return reinterpret_cast<ncclComm_t>(comm);
 +}
 +
@@ -1612,10 +1631,10 @@ index 0000000000..1dd230648a
 +}  // namespace xla::gpu
 diff --git a/xla/service/gpu/ccl_api.h b/xla/service/gpu/ccl_api.h
 new file mode 100644
-index 0000000000..86c57dbfaa
+index 0000000000..ed898746f7
 --- /dev/null
 +++ b/xla/service/gpu/ccl_api.h
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,106 @@
 +/* Copyright (c) 2024 Intel Corporation
 +
 +Copyright 2019 The TensorFlow Authors. All Rights Reserved.
@@ -1716,14 +1735,6 @@ index 0000000000..86c57dbfaa
 +
 +  absl::StatusOr<NcclRegisteredBufferHandle> DeregisterBuffer(
 +      NcclCommHandle, NcclRegisteredBufferHandle) final;
-+  int GetCurrentCall();
-+  int GetMaxCall();
-+  void ChangCurrentCall(int);
-+  void ChangeMaxCall(int);
-+
-+ private:
-+  int current_call_;
-+  int max_call_;
 +};
 +
 +ncclComm_t CastCCLComm(CclApi::NcclCommHandle);
@@ -3980,10 +3991,10 @@ index 1be4994ec5..b0eeb058e7 100644
 -#endif  // XLA_SERVICE_GPU_MAKE_BATCH_POINTERS_H_
 +#endif  // XLA_SERVICE_GPU_PRECOMPILED_KERNELS_H_
 diff --git a/xla/service/gpu/matmul_utils.h b/xla/service/gpu/matmul_utils.h
-index 2efbdd386a..1124ffa5c4 100644
+index 2efbdd386a..f5d69e51fc 100644
 --- a/xla/service/gpu/matmul_utils.h
 +++ b/xla/service/gpu/matmul_utils.h
-@@ -40,6 +40,40 @@ limitations under the License.
+@@ -40,6 +40,23 @@ limitations under the License.
  #include "rocm/rocm_config.h"
  #endif
  
@@ -4004,27 +4015,10 @@ index 2efbdd386a..1124ffa5c4 100644
 +}  // namespace cuda
 +}  // namespace stream_executor
 +
-+namespace stream_executor {
-+namespace cuda {
-+namespace BlasLt {
-+enum class Epilogue {
-+  kDefault = 1,                   // No special postprocessing
-+  kReLU = 2,                      // Apply point-wise ReLU function
-+  kBias = 4,                      // Add broadcasted bias vector
-+  kBiasThenReLU = kBias | kReLU,  // Apply bias and then ReLU transform
-+  kGELU = 32,                // Apply GELU point-wise transform to the results
-+  kGELUWithAux = 32 | 1024,  // Apply GELU with auxiliary output.
-+  kBiasThenGELU = kBias | kGELU,  // Apply bias and then approximate GELU.
-+  kBiasThenGELUWithAux = kBiasThenGELU | 1024,
-+};
-+}
-+}  // namespace cuda
-+}  // namespace stream_executor
-+
  namespace xla {
  namespace gpu {
  
-@@ -165,6 +199,8 @@ struct GemmConfig : public se::gpu::GemmConfig {
+@@ -165,6 +182,8 @@ struct GemmConfig : public se::gpu::GemmConfig {
    absl::StatusOr<DescriptorsTuple> GetMatrixDescriptors(
        se::DeviceMemoryBase lhs_buf, se::DeviceMemoryBase rhs_buf,
        se::DeviceMemoryBase out_buf) const;
@@ -5550,10 +5544,10 @@ index aa1643f5d9..f7daaac8fd 100644
  std::string RedzoneCheckStatus::RedzoneFailureMsg() const {
    return absl::StrFormat(
 diff --git a/xla/stream_executor/integrations/tf_allocator_adapter.cc b/xla/stream_executor/integrations/tf_allocator_adapter.cc
-index 97a6c7c7b0..0cea1898c8 100644
+index 97a6c7c7b0..4902167f73 100644
 --- a/xla/stream_executor/integrations/tf_allocator_adapter.cc
 +++ b/xla/stream_executor/integrations/tf_allocator_adapter.cc
-@@ -59,6 +59,30 @@ absl::Status TfAllocatorAdapter::Deallocate(int device_ordinal,
+@@ -59,6 +59,24 @@ absl::Status TfAllocatorAdapter::Deallocate(int device_ordinal,
    return absl::OkStatus();
  }
  
@@ -5575,15 +5569,48 @@ index 97a6c7c7b0..0cea1898c8 100644
 +  return data;
 +}
 +
-+tsl::Status TfAllocatorAdapter::Deallocate(int device_ordinal,
-+                                           DeviceMemoryBase mem) {
-+  wrapped_->DeallocateRaw(mem.opaque());
-+  return absl::OkStatus();
-+}
-+
  absl::StatusOr<Stream *> TfAllocatorAdapter::GetStream(int device_ordinal) {
    CHECK_EQ(stream_->parent()->device_ordinal(), device_ordinal);
    return stream_;
+diff --git a/xla/stream_executor/integrations/tf_allocator_adapter.h b/xla/stream_executor/integrations/tf_allocator_adapter.h
+index 0a1b2bbf37..9e6cf06f36 100644
+--- a/xla/stream_executor/integrations/tf_allocator_adapter.h
++++ b/xla/stream_executor/integrations/tf_allocator_adapter.h
+@@ -54,6 +54,10 @@ class TfAllocatorAdapter : public DeviceMemoryAllocator {
+                                               bool retry_on_failure,
+                                               int64_t memory_space) override;
+ 
++  void* AllocateRaw(int device_ordinal, uint64_t size,
++                                             bool retry_on_failure,
++                                             int64_t memory_space);
++
+   absl::Status Deallocate(int device_ordinal, DeviceMemoryBase mem) override;
+ 
+   // The Tensorflow BFC allocator used on GPU allows host-side deallocation
+@@ -155,6 +159,23 @@ class MultiDeviceAdapter : public DeviceMemoryAllocator {
+     return it->second[device_ordinal]->Deallocate(device_ordinal, mem);
+   }
+ 
++  void* AllocateRaw(int device_ordinal, uint64_t size,
++                    bool retry_on_failure, 
++                    int64_t memory_space) {
++// memory_space is used here to select allocator. This isn't a need to pass
++    // it any lower to TfAllocatorAdapter.
++    auto it = memory_space_to_per_device_allocators_.find(memory_space);
++    CHECK(it != memory_space_to_per_device_allocators_.end());
++    CHECK_LT(device_ordinal, it->second.size());
++    return it->second[device_ordinal]->AllocateRaw(
++        device_ordinal, size, retry_on_failure, memory_space);
++  }
++
++  absl::Status DeallocateRaw(int device_ordinal, void* mem_opaque) {
++    DeviceMemoryBase device_mem(mem_opaque);
++    return this->Deallocate(device_ordinal, device_mem);
++  }
++
+   // The Tensorflow BFC allocator used on GPU allows host-side deallocation
+   // before GPU execution takes place. Tensorflow uses the ordering of the main
+   // compute stream to enforce a happens-before relationship between a memory
 diff --git a/xla/stream_executor/kernel_spec.cc b/xla/stream_executor/kernel_spec.cc
 index 0cafa82805..9b544e767e 100644
 --- a/xla/stream_executor/kernel_spec.cc
@@ -5876,105 +5903,3 @@ index 0000000000..6810585d8a
 +}  // namespace stream_executor
 +
 +#endif  // XLA_STREAM_EXECUTOR_TF_ALLOCATOR_ADAPTER_H_
-diff --git a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
-index 0e3adb005a..8047d1683b 100644
---- a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
-+++ b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.cc
-@@ -596,6 +596,10 @@ tsl::StatusOr<mlir::Operation*> LhloDialectEmitter::EmitCustomCallOp(
-     return EmitCubDeviceRadixSort(custom_call_instr);
-   }
- 
-+  if (xla::gpu::IsCustomCallTofQKV(*instr)) {
-+    return EmitDnnfQKV(custom_call_instr);
-+  }
-+
-   // For custom call, if there are any token operands or results, they will not
-   // be represented in LHLO so we need to remember the mapping. First create
-   // operands where each token is replaced with a null Value.
-@@ -768,6 +772,8 @@ tsl::StatusOr<lmhlo_gpu::FusedMhaDagSignature> AsLhloFusedMhaDagSignature(
-       return lmhlo_gpu::FusedMhaDagSignature::SoftmaxDropout;
-     case xla::gpu::CudnnfMHAKind::kSoftmax:
-       return lmhlo_gpu::FusedMhaDagSignature::Softmax;
-+    case xla::gpu::CudnnfMHAKind::kScaleSoftmax:
-+      return lmhlo_gpu::FusedMhaDagSignature::ScaleSoftmax;
-     case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmax:
-       return lmhlo_gpu::FusedMhaDagSignature::ScaleBiasSoftmax;
-     case xla::gpu::CudnnfMHAKind::kScaleBiasSoftmaxDropout:
-@@ -1318,12 +1324,18 @@ tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHA(
-       TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-       auto fmha =
-           CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAOp>(custom_call, operands);
-+
-+      fmha.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-       return set_common_fmha_attributes(fmha);
-     }
-     case xla::gpu::CudnnfMHAKind::kSoftmaxDropout: {
-       TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-       auto fmha =
-           CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAOp>(custom_call, operands);
-+      fmha.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-+
-       fmha.setDropoutRateAttr(builder_.getF64FloatAttr(config.dropout_rate()));
-       fmha.setSeedAttr(builder_.getI64IntegerAttr(config.seed()));
-       return set_common_fmha_attributes(fmha);
-@@ -1386,11 +1398,45 @@ tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHA(
-       has_bias = true;
-       return set_common_fmha_attributes(fmha);
-     }
-+    case xla::gpu::CudnnfMHAKind::kScaleSoftmax: {
-+      TF_RETURN_IF_ERROR(GetOrCreateView(custom_call, &operands));
-+      auto fmha_softmax =
-+          CreateOpWithoutAttrs<lmhlo_gpu::fusedMHAOp>(custom_call, operands);
-+      fmha_softmax.setFmhaScaleAttr(
-+          builder_.getF64FloatAttr(config.fmha_scale()));
-+      return set_common_fmha_attributes(fmha_softmax);
-+    }
-+
-     default:
-       return xla::Internal("Unknown forward fused MHA call.");
-   }
- }
- 
-+
-+tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfQKV(
-+    const HloCustomCallInstruction* custom_call) {
-+
-+  TF_ASSIGN_OR_RETURN(
-+      auto const config,
-+      custom_call->backend_config<xla::gpu::GemmBackendConfig>());
-+
-+  if (custom_call->operand_count() != 2) {
-+    return xla::InvalidArgument("GEMM custom call should have 2 operands");
-+  }
-+
-+  // QKV GEMM have two operands.
-+  TF_ASSIGN_OR_RETURN(
-+      lmhlo_gpu::fusedQKVOp op,
-+      CreateOpWithoutAttrs<lmhlo_gpu::fusedQKVOp>(custom_call,
-+                                              /*num_operands=*/2));
-+  op.setDotDimensionNumbersAttr(
-+      GetDotDimensionNumbersAttr(builder_, config.dot_dimension_numbers()));
-+
-+  return op.getOperation();
-+}
-+
-+
-+
- tsl::StatusOr<Operation*> LhloDialectEmitter::EmitDnnfMHABackward(
-     const HloCustomCallInstruction* custom_call) {
-   TF_ASSIGN_OR_RETURN(
-diff --git a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
-index e945ea2d2c..f65d723152 100644
---- a/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
-+++ b/xla/translate/mhlo_to_lhlo_with_xla/mhlo_to_lhlo_with_xla.h
-@@ -91,6 +91,8 @@ class LhloDialectEmitter : public xla::ConstDfsHloVisitorWithDefault {
-       const xla::HloCustomCallInstruction* custom_call);
-   xla::StatusOr<Operation*> EmitDnnfMHA(
-       const xla::HloCustomCallInstruction* custom_call);
-+  xla::StatusOr<Operation*> EmitDnnfQKV(
-+      const xla::HloCustomCallInstruction* custom_call);
-   xla::StatusOr<Operation*> EmitDnnfMHABackward(
-       const xla::HloCustomCallInstruction* custom_call);
-   tsl::StatusOr<Operation*> EmitDnnNorm(
