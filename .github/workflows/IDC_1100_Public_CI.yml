@@ -31,7 +31,7 @@ jobs:
               conda create -n ${CONDA_ENV} python=3.10 -y
               conda activate ${CONDA_ENV}
           fi
-          pip install -e ./test/requirements.txt
+          pip install -r ./test/requirements.txt
           #pip install jax==0.4.24 jaxlib==0.4.24
           conda install libstdcxx-ng==12.2.0 -c conda-forge
           pip install absl-py
@@ -71,7 +71,7 @@ jobs:
           echo $build_result
           if [ "$build_result" = "0" ];then
               echo "Build successful"
-              pip install *.whl
+               pip install --force-reinstall *.whl
           else
               echo "Build Failed"
               exit 1
