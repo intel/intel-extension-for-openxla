@@ -115,7 +115,7 @@ void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, size_t element_count,
   if (local_vec_count == 0) return;
 
   auto device = stream->get_device();
-  size_t group_size =
+  int group_size =
       device.template get_info<sycl::info::device::max_work_group_size>();
 
   // set max_workitems = HW_workgroup_num * max_workgroup_size
@@ -280,29 +280,46 @@ template <typename T>
 struct AllToAllKernel;
 
 template <typename T>
-void alltoall_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
-                    std::vector<AlltoAllParticipant>& participants,
+void alltoall_dpcpp(se::gpu::GpuStreamHandle stream, size_t element_count,
+                    std::vector<AlltoAllParticipant>& participants, int rank,
                     int reduction_size) {
-  const int kLimitedRankSize = MAX_RANK_SIZE / 2;
-  auto group_size =
-      (*stream)
-          .get_device()
-          .template get_info<sycl::info::device::max_work_group_size>();
-  auto num_workgroup = (tensor_size + group_size - 1) / group_size;
+  constexpr size_t VecSize = VecBytes / sizeof(T);
+  size_t slice_element_count = element_count;
+  size_t slice_vec_count = slice_element_count / VecSize;
+  size_t slice_vec_tail_element_count = slice_element_count % VecSize;
+  size_t slice_total_vec_count =
+      slice_vec_count + (slice_vec_tail_element_count > 0 ? 1 : 0);
+  size_t total_vec_count = slice_total_vec_count * reduction_size;
+
+  auto device = stream->get_device();
+  int group_size =
+      device.template get_info<sycl::info::device::max_work_group_size>();
+
+  // set max_workitems = HW_workgroup_num * max_workgroup_size
+  int num_max_concurrent_workitem =
+      stream_executor::gpu::GpuDriver::GetMultiprocessorCount(&device).value() *
+      group_size;
+  int num_workitem = total_vec_count <= num_max_concurrent_workitem
+                         ? total_vec_count
+                         : num_max_concurrent_workitem;
+  size_t num_vec_per_workitem = total_vec_count / num_workitem;
+  size_t num_tail_vec = total_vec_count % num_workitem;
+
+  int num_workgroup = (num_workitem + group_size - 1) / group_size;
 
   // Process: send vec -> rev vec
   // P0: (a0, a1) -> (a0, b0)
   // P1: (b0, b1) -> (a1, b1)
-  if (reduction_size <= kLimitedRankSize) {
+  if (reduction_size <= MAX_RANK_SIZE) {
     stream->submit([&](sycl::handler& cgh) {
-      const T* send[kLimitedRankSize][kLimitedRankSize];
-      T* recv[kLimitedRankSize][kLimitedRankSize];
+      T* send[MAX_RANK_SIZE];
+      T* recv[MAX_RANK_SIZE];
 
+      // Each rank sends its send_buffers to all other ranks.
       for (int i = 0; i < reduction_size; ++i) {
-        for (int j = 0; j < reduction_size; ++j) {
-          send[i][j] = static_cast<const T*>(participants[i].send[j]);
-          recv[i][j] = static_cast<T*>(participants[i].recv[j]);
-        }
+        send[i] =
+            const_cast<T*>(static_cast<const T*>(participants[rank].send[i]));
+        recv[i] = static_cast<T*>(participants[i].recv[rank]);
       }
 
       cgh.parallel_for<AllToAllKernel<T>>(
@@ -310,11 +327,53 @@ void alltoall_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
                             sycl::range<1>(group_size)),
           [=](sycl::nd_item<1> item) {
             const int index = item.get_global_linear_id();
-            if (index >= tensor_size) return;
+            if (index >= num_workitem) return;
 
-            for (int i = 0; i < reduction_size; ++i) {
-              for (int j = 0; j < reduction_size; ++j) {
-                recv[j][i][index] = send[i][j][index];
+            for (size_t n = 0; n < num_vec_per_workitem; ++n) {
+              size_t vec_id = n * num_workitem + index;
+              size_t slice_id = vec_id / slice_total_vec_count;
+              size_t slice_vec_offset = vec_id % slice_total_vec_count;
+
+              T* send_ptr = send[slice_id] + slice_vec_offset * VecSize;
+              T* recv_ptr = recv[slice_id] + slice_vec_offset * VecSize;
+              if (slice_vec_tail_element_count == 0 ||
+                  slice_vec_offset != slice_vec_count) {
+                AlignedVector<T, VecSize> result;
+                result.Load(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(send_ptr));
+                result.Store(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(recv_ptr));
+              } else {
+                AlignedVector<T, VecSize> result;
+                result.Load(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(send_ptr));
+                result.PartialStore(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(recv_ptr),
+                    slice_vec_tail_element_count);
+              }
+            }
+
+            if (index < num_tail_vec) {
+              size_t vec_id = num_vec_per_workitem * num_workitem + index;
+              size_t slice_id = vec_id / slice_total_vec_count;
+              size_t slice_vec_offset = vec_id % slice_total_vec_count;
+
+              T* send_ptr = send[slice_id] + slice_vec_offset * VecSize;
+              T* recv_ptr = recv[slice_id] + slice_vec_offset * VecSize;
+              if (slice_vec_tail_element_count == 0 ||
+                  slice_vec_offset != slice_vec_count) {
+                AlignedVector<T, VecSize> result;
+                result.Load(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(send_ptr));
+                result.Store(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(recv_ptr));
+              } else {
+                AlignedVector<T, VecSize> result;
+                result.Load(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(send_ptr));
+                result.PartialStore(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(recv_ptr),
+                    slice_vec_tail_element_count);
               }
             }
           });
@@ -329,32 +388,49 @@ template <typename T>
 struct AllToAllSplitKernel;
 
 template <typename T>
-void alltoall_split_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
+void alltoall_split_dpcpp(se::gpu::GpuStreamHandle stream, size_t element_count,
                           std::vector<AlltoAllParticipant>& participants,
-                          int reduction_size) {
-  const int kLimitedRankSize = MAX_RANK_SIZE / 2;
-  auto group_size =
-      (*stream)
-          .get_device()
-          .template get_info<sycl::info::device::max_work_group_size>();
-  const int sub_tensor_size = tensor_size / reduction_size;
-  auto num_workgroup = (sub_tensor_size + group_size - 1) / group_size;
+                          int rank, int reduction_size) {
+  constexpr size_t VecSize = VecBytes / sizeof(T);
+  size_t slice_element_count = element_count / reduction_size;
+  size_t slice_vec_count = slice_element_count / VecSize;
+  size_t slice_vec_tail_element_count = slice_element_count % VecSize;
+  size_t slice_total_vec_count =
+      slice_vec_count + (slice_vec_tail_element_count > 0 ? 1 : 0);
+  size_t total_vec_count = slice_total_vec_count * reduction_size;
+
+  auto device = stream->get_device();
+  int group_size =
+      device.template get_info<sycl::info::device::max_work_group_size>();
+
+  // set max_workitems = HW_workgroup_num * max_workgroup_size
+  int num_max_concurrent_workitem =
+      stream_executor::gpu::GpuDriver::GetMultiprocessorCount(&device).value() *
+      group_size;
+  int num_workitem = total_vec_count <= num_max_concurrent_workitem
+                         ? total_vec_count
+                         : num_max_concurrent_workitem;
+  size_t num_vec_per_workitem = total_vec_count / num_workitem;
+  size_t num_tail_vec = total_vec_count % num_workitem;
+
+  int num_workgroup = (num_workitem + group_size - 1) / group_size;
 
   // Process: send vec -> rev vec
   // P0: ([a0, a1, a2], [a3, a4, a5]) -> ([a0, a1, a2], [b0, b1, b2])
   // P1: ([b0, b1, b2], [b3, b4, b5]) -> ([a3, a4, a5], [b3, b4, b5])
-  //   * Switch data by group, each group has `sub_tensor_size` elements
-  //   * group_size = reduction_size;
-  //   * sub_tensor_size = tensor_size / reduction_size;
-  if (reduction_size <= kLimitedRankSize) {
+  if (reduction_size <= MAX_RANK_SIZE) {
     stream->submit([&](sycl::handler& cgh) {
-      // Buffer size is always 1 in split AllToAll.
-      const T* send[kLimitedRankSize];  // SYCL: fix size
-      T* recv[kLimitedRankSize];        // SYCL: fix size
+      T* send[MAX_RANK_SIZE];
+      T* recv[MAX_RANK_SIZE];
 
+      // Buffer size is always 1 in split AllToAll.
+      // Each rank sends its send_buffers to all other ranks.
       for (int i = 0; i < reduction_size; ++i) {
-        send[i] = static_cast<const T*>(participants[i].send[0]);
-        recv[i] = static_cast<T*>(participants[i].recv[0]);
+        send[i] =
+            const_cast<T*>(static_cast<const T*>(participants[rank].send[0])) +
+            i * slice_element_count;
+        recv[i] = static_cast<T*>(participants[i].recv[0]) +
+                  rank * slice_element_count;
       }
 
       cgh.parallel_for<AllToAllSplitKernel<T>>(
@@ -362,12 +438,53 @@ void alltoall_split_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
                             sycl::range<1>(group_size)),
           [=](sycl::nd_item<1> item) {
             const int index = item.get_global_linear_id();
-            if (index >= sub_tensor_size) return;
+            if (index >= num_workitem) return;
 
-            for (int i = 0; i < reduction_size; ++i) {
-              for (int k = 0; k < reduction_size; ++k) {
-                recv[k][i * sub_tensor_size + index] =
-                    send[i][k * sub_tensor_size + index];
+            for (size_t n = 0; n < num_vec_per_workitem; ++n) {
+              size_t vec_id = n * num_workitem + index;
+              size_t slice_id = vec_id / slice_total_vec_count;
+              size_t slice_vec_offset = vec_id % slice_total_vec_count;
+
+              T* send_ptr = send[slice_id] + slice_vec_offset * VecSize;
+              T* recv_ptr = recv[slice_id] + slice_vec_offset * VecSize;
+              if (slice_vec_tail_element_count == 0 ||
+                  slice_vec_offset != slice_vec_count) {
+                AlignedVector<T, VecSize> result;
+                result.Load(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(send_ptr));
+                result.Store(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(recv_ptr));
+              } else {
+                AlignedVector<T, VecSize> result;
+                result.Load(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(send_ptr));
+                result.PartialStore(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(recv_ptr),
+                    slice_vec_tail_element_count);
+              }
+            }
+
+            if (index < num_tail_vec) {
+              size_t vec_id = num_vec_per_workitem * num_workitem + index;
+              size_t slice_id = vec_id / slice_total_vec_count;
+              size_t slice_vec_offset = vec_id % slice_total_vec_count;
+
+              T* send_ptr = send[slice_id] + slice_vec_offset * VecSize;
+              T* recv_ptr = recv[slice_id] + slice_vec_offset * VecSize;
+              if (slice_vec_tail_element_count == 0 ||
+                  slice_vec_offset != slice_vec_count) {
+                AlignedVector<T, VecSize> result;
+                result.Load(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(send_ptr));
+                result.Store(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(recv_ptr));
+              } else {
+                AlignedVector<T, VecSize> result;
+                result.Load(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(send_ptr));
+                result.PartialStore(
+                    *reinterpret_cast<AlignedVector<T, VecSize>*>(recv_ptr),
+                    slice_vec_tail_element_count);
               }
             }
           });
@@ -492,7 +609,7 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
 
       if (collective->participants.size() == comm->nranks) {
         Manager::instance().collectives.erase(comm->id);
-        auto p = collective->participants;
+        auto& p = collective->participants;
         std::sort(p.begin(), p.end(),
                   [](const Participant& a, const Participant& b) -> bool {
                     return a.rank < b.rank;
@@ -650,11 +767,11 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
     }
   }
   // TODO(intel):uncomment this barrier once barrier bug is fixed.
-  SYCLStreamDependOnEvents(gpu_stream, collective->end_events);
+  // SYCLStreamDependOnEvents(gpu_stream, collective->end_events);
 }
 
 void sycl_allgather(const void* send_buffer, void* recv_buffer,
-                    int element_count, PrimitiveType dtype,
+                    size_t element_count, PrimitiveType dtype,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
   std::shared_ptr<Collective<Participant>> collective;
   bool rank_to_launch_kernel = false;
@@ -694,9 +811,9 @@ void sycl_allgather(const void* send_buffer, void* recv_buffer,
 
       if (dtype == PRED)
         allgather_dpcpp<bool>(stream, element_count, p, comm->nranks);
-      else if (dtype == F32)
+      else if (dtype == F32 || dtype == C64)
         allgather_dpcpp<float>(stream, element_count, p, comm->nranks);
-      else if (dtype == F64)
+      else if (dtype == F64 || dtype == C128)
         allgather_dpcpp<double>(stream, element_count, p, comm->nranks);
       else if (dtype == S32)
         allgather_dpcpp<int32_t>(stream, element_count, p, comm->nranks);
@@ -721,11 +838,12 @@ void sycl_allgather(const void* send_buffer, void* recv_buffer,
 }
 
 void sycl_alltoall(std::vector<const void*> send_buffers,
-                   std::vector<void*> recv_buffers, int element_count,
+                   std::vector<void*> recv_buffers, size_t element_count,
                    PrimitiveType dtype, se::gpu::GpuStreamHandle gpu_stream,
                    ncclComm_t comm) {
+  gpu_stream
+      ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
   std::shared_ptr<Collective<AlltoAllParticipant>> collective;
-  bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
     if (Manager::instance().alltoall_collectives.find(comm->id) ==
@@ -733,77 +851,105 @@ void sycl_alltoall(std::vector<const void*> send_buffers,
       collective = std::make_shared<Collective<AlltoAllParticipant>>();
       collective->participants.push_back(
           {gpu_stream, send_buffers, recv_buffers, comm->rank});
+      collective->begin_events.push_back(SYCLGetEventFromStream(gpu_stream));
       Manager::instance().alltoall_collectives[comm->id] = collective;
     } else {
       collective = Manager::instance().alltoall_collectives[comm->id];
       tsl::mutex_lock lock(collective->mu);
       collective->participants.push_back(
           {gpu_stream, send_buffers, recv_buffers, comm->rank});
+      collective->begin_events.push_back(SYCLGetEventFromStream(gpu_stream));
       if (collective->participants.size() == comm->nranks) {
         Manager::instance().alltoall_collectives.erase(comm->id);
-        rank_to_launch_kernel = true;
+        auto& p = collective->participants;
+        std::sort(p.begin(), p.end(),
+                  [](const AlltoAllParticipant& a, const AlltoAllParticipant& b)
+                      -> bool { return a.rank < b.rank; });
+        collective->ready_to_launch = true;
+        collective->cv.notify_all();
       }
     }
   }
 
   {
     tsl::mutex_lock lock(collective->mu);
-    if (!rank_to_launch_kernel) {
-      if (!collective->done) collective->cv.wait(lock);
-    } else {
-      auto p = collective->participants;
-      std::sort(
-          p.begin(), p.end(),
-          [](const AlltoAllParticipant& a,
-             const AlltoAllParticipant& b) -> bool { return a.rank < b.rank; });
+    if (!collective->ready_to_launch) {
+      collective->cv.wait(lock);
+    }
+  }
 
-      se::gpu::GpuStreamHandle stream = p[0].stream;
-      stream_wait_streamlist(stream, p);
+  auto& p = collective->participants;
+  // TODO(intel):uncomment this barrier once barrier bug is fixed.
+  // SYCLStreamDependOnEvents(gpu_stream, collective->begin_events);
 
-      if (dtype == PRED)
-        alltoall_dpcpp<bool>(stream, element_count, p, comm->nranks);
-      else if (dtype == BF16)
-        alltoall_dpcpp<bfloat16>(stream, element_count, p, comm->nranks);
-      else if (dtype == F16)
-        alltoall_dpcpp<float16>(stream, element_count, p, comm->nranks);
-      else if (dtype == F32)
-        alltoall_dpcpp<float>(stream, element_count, p, comm->nranks);
-      else if (dtype == F64)
-        alltoall_dpcpp<double>(stream, element_count, p, comm->nranks);
-      else if (dtype == S8)
-        alltoall_dpcpp<int8_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == S16)
-        alltoall_dpcpp<int16_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == S32)
-        alltoall_dpcpp<int32_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == S64)
-        alltoall_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == U8)
-        alltoall_dpcpp<uint8_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == U16)
-        alltoall_dpcpp<uint16_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == U32)
-        alltoall_dpcpp<uint32_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == U64)
-        alltoall_dpcpp<uint64_t>(stream, element_count, p, comm->nranks);
-      else
-        LOG(FATAL) << "PrimitiveType "
-                   << primitive_util::LowercasePrimitiveTypeName(dtype)
-                   << " is not supported in AllToAll.";
-
-      streamlist_wait_stream(stream, p);
+  if (dtype == PRED)
+    alltoall_dpcpp<bool>(gpu_stream, element_count, p, comm->rank,
+                         comm->nranks);
+  else if (dtype == BF16)
+    alltoall_dpcpp<bfloat16>(gpu_stream, element_count, p, comm->rank,
+                             comm->nranks);
+  else if (dtype == F16)
+    alltoall_dpcpp<float16>(gpu_stream, element_count, p, comm->rank,
+                            comm->nranks);
+  else if (dtype == F32 || dtype == C64)
+    alltoall_dpcpp<float>(gpu_stream, element_count, p, comm->rank,
+                          comm->nranks);
+  else if (dtype == F64 || dtype == C128)
+    alltoall_dpcpp<double>(gpu_stream, element_count, p, comm->rank,
+                           comm->nranks);
+  else if (dtype == S8)
+    alltoall_dpcpp<int8_t>(gpu_stream, element_count, p, comm->rank,
+                           comm->nranks);
+  else if (dtype == S16)
+    alltoall_dpcpp<int16_t>(gpu_stream, element_count, p, comm->rank,
+                            comm->nranks);
+  else if (dtype == S32)
+    alltoall_dpcpp<int32_t>(gpu_stream, element_count, p, comm->rank,
+                            comm->nranks);
+  else if (dtype == S64)
+    alltoall_dpcpp<int64_t>(gpu_stream, element_count, p, comm->rank,
+                            comm->nranks);
+  else if (dtype == U8)
+    alltoall_dpcpp<uint8_t>(gpu_stream, element_count, p, comm->rank,
+                            comm->nranks);
+  else if (dtype == U16)
+    alltoall_dpcpp<uint16_t>(gpu_stream, element_count, p, comm->rank,
+                             comm->nranks);
+  else if (dtype == U32)
+    alltoall_dpcpp<uint32_t>(gpu_stream, element_count, p, comm->rank,
+                             comm->nranks);
+  else if (dtype == U64)
+    alltoall_dpcpp<uint64_t>(gpu_stream, element_count, p, comm->rank,
+                             comm->nranks);
+  else
+    LOG(FATAL) << "PrimitiveType "
+               << primitive_util::LowercasePrimitiveTypeName(dtype)
+               << " is not supported in AllToAll.";
+  gpu_stream
+      ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
+  {
+    tsl::mutex_lock lock(collective->mu);
+    collective->end_events.push_back(SYCLGetEventFromStream(gpu_stream));
+    if (collective->end_events.size() == comm->nranks) {
       collective->done = true;
       collective->cv.notify_all();
     }
+
+    if (!collective->done) {
+      collective->cv.wait(lock);
+    }
   }
+  // TODO(intel):uncomment this barrier once barrier bug is fixed.
+  // SYCLStreamDependOnEvents(gpu_stream, collective->end_events);
 }
 
 void sycl_alltoall_split(std::vector<const void*> send_buffers,
-                         std::vector<void*> recv_buffers, int element_count,
+                         std::vector<void*> recv_buffers, size_t element_count,
                          PrimitiveType dtype,
                          se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+  gpu_stream
+      ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
   std::shared_ptr<Collective<AlltoAllParticipant>> collective;
-  bool rank_to_launch_kernel = false;
   {
     tsl::mutex_lock l(Manager::instance().mu);
     if (Manager::instance().alltoall_collectives.find(comm->id) ==
@@ -811,78 +957,102 @@ void sycl_alltoall_split(std::vector<const void*> send_buffers,
       collective = std::make_shared<Collective<AlltoAllParticipant>>();
       collective->participants.push_back(
           {gpu_stream, send_buffers, recv_buffers, comm->rank});
+      collective->begin_events.push_back(SYCLGetEventFromStream(gpu_stream));
       Manager::instance().alltoall_collectives[comm->id] = collective;
     } else {
       collective = Manager::instance().alltoall_collectives[comm->id];
       tsl::mutex_lock lock(collective->mu);
       collective->participants.push_back(
           {gpu_stream, send_buffers, recv_buffers, comm->rank});
+      collective->begin_events.push_back(SYCLGetEventFromStream(gpu_stream));
+
       if (collective->participants.size() == comm->nranks) {
         Manager::instance().alltoall_collectives.erase(comm->id);
-        rank_to_launch_kernel = true;
+        auto& p = collective->participants;
+        std::sort(p.begin(), p.end(),
+                  [](const AlltoAllParticipant& a, const AlltoAllParticipant& b)
+                      -> bool { return a.rank < b.rank; });
+        collective->ready_to_launch = true;
+        collective->cv.notify_all();
       }
     }
   }
 
   {
     tsl::mutex_lock lock(collective->mu);
-    if (!rank_to_launch_kernel) {
-      if (!collective->done) collective->cv.wait(lock);
-    } else {
-      auto p = collective->participants;
-      std::sort(
-          p.begin(), p.end(),
-          [](const AlltoAllParticipant& a,
-             const AlltoAllParticipant& b) -> bool { return a.rank < b.rank; });
+    if (!collective->ready_to_launch) {
+      collective->cv.wait(lock);
+    }
+  }
 
-      se::gpu::GpuStreamHandle stream = p[0].stream;
-      stream_wait_streamlist(stream, p);
+  auto& p = collective->participants;
+  // TODO(intel):uncomment this barrier once barrier bug is fixed.
+  // SYCLStreamDependOnEvents(gpu_stream, collective->begin_events);
 
-      if (dtype == PRED)
-        alltoall_split_dpcpp<bool>(stream, element_count, p, comm->nranks);
-      else if (dtype == BF16)
-        alltoall_split_dpcpp<bfloat16>(stream, element_count, p, comm->nranks);
-      else if (dtype == F16)
-        alltoall_split_dpcpp<float16>(stream, element_count, p, comm->nranks);
-      else if (dtype == F32)
-        alltoall_split_dpcpp<float>(stream, element_count, p, comm->nranks);
-      else if (dtype == F64)
-        alltoall_split_dpcpp<double>(stream, element_count, p, comm->nranks);
-      else if (dtype == S8)
-        alltoall_split_dpcpp<int8_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == S16)
-        alltoall_split_dpcpp<int16_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == S32)
-        alltoall_split_dpcpp<int32_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == S64)
-        alltoall_split_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == U8)
-        alltoall_split_dpcpp<uint8_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == U16)
-        alltoall_split_dpcpp<uint16_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == U32)
-        alltoall_split_dpcpp<uint32_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == U64)
-        alltoall_split_dpcpp<uint64_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == C64)
-        alltoall_split_dpcpp<complex64>(stream, element_count, p, comm->nranks);
-      else if (dtype == C128)
-        alltoall_split_dpcpp<complex128>(stream, element_count, p,
-                                         comm->nranks);
-      else
-        LOG(FATAL) << "PrimitiveType "
-                   << primitive_util::LowercasePrimitiveTypeName(dtype)
-                   << " is not supported in AllToAll.";
+  if (dtype == PRED)
+    alltoall_split_dpcpp<bool>(gpu_stream, element_count, p, comm->rank,
+                               comm->nranks);
+  else if (dtype == BF16)
+    alltoall_split_dpcpp<bfloat16>(gpu_stream, element_count, p, comm->rank,
+                                   comm->nranks);
+  else if (dtype == F16)
+    alltoall_split_dpcpp<float16>(gpu_stream, element_count, p, comm->rank,
+                                  comm->nranks);
+  else if (dtype == F32 || dtype == C64)
+    alltoall_split_dpcpp<float>(gpu_stream, element_count, p, comm->rank,
+                                comm->nranks);
+  else if (dtype == F64 || dtype == C128)
+    alltoall_split_dpcpp<double>(gpu_stream, element_count, p, comm->rank,
+                                 comm->nranks);
+  else if (dtype == S8)
+    alltoall_split_dpcpp<int8_t>(gpu_stream, element_count, p, comm->rank,
+                                 comm->nranks);
+  else if (dtype == S16)
+    alltoall_split_dpcpp<int16_t>(gpu_stream, element_count, p, comm->rank,
+                                  comm->nranks);
+  else if (dtype == S32)
+    alltoall_split_dpcpp<int32_t>(gpu_stream, element_count, p, comm->rank,
+                                  comm->nranks);
+  else if (dtype == S64)
+    alltoall_split_dpcpp<int64_t>(gpu_stream, element_count, p, comm->rank,
+                                  comm->nranks);
+  else if (dtype == U8)
+    alltoall_split_dpcpp<uint8_t>(gpu_stream, element_count, p, comm->rank,
+                                  comm->nranks);
+  else if (dtype == U16)
+    alltoall_split_dpcpp<uint16_t>(gpu_stream, element_count, p, comm->rank,
+                                   comm->nranks);
+  else if (dtype == U32)
+    alltoall_split_dpcpp<uint32_t>(gpu_stream, element_count, p, comm->rank,
+                                   comm->nranks);
+  else if (dtype == U64)
+    alltoall_split_dpcpp<uint64_t>(gpu_stream, element_count, p, comm->rank,
+                                   comm->nranks);
+  else
+    LOG(FATAL) << "PrimitiveType "
+               << primitive_util::LowercasePrimitiveTypeName(dtype)
+               << " is not supported in AllToAll.";
 
-      streamlist_wait_stream(stream, p);
+  gpu_stream
+      ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
+  {
+    tsl::mutex_lock lock(collective->mu);
+    collective->end_events.push_back(SYCLGetEventFromStream(gpu_stream));
+    if (collective->end_events.size() == comm->nranks) {
       collective->done = true;
       collective->cv.notify_all();
     }
+
+    if (!collective->done) {
+      collective->cv.wait(lock);
+    }
   }
+  // TODO(intel):uncomment this barrier once barrier bug is fixed.
+  // SYCLStreamDependOnEvents(gpu_stream, collective->end_events);
 }
 
 void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
-                         int element_count, PrimitiveType dtype,
+                         size_t element_count, PrimitiveType dtype,
                          ReductionKind reduction_kind,
                          se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
   std::shared_ptr<Collective<Participant>> collective;
@@ -925,10 +1095,10 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         if (dtype == PRED)
           reducescatter_dpcpp<bool, sycl::plus<bool>>(stream, element_count, p,
                                                       comm->nranks);
-        else if (dtype == F32)
+        else if (dtype == F32 || dtype == C64)
           reducescatter_dpcpp<float, sycl::plus<float>>(stream, element_count,
                                                         p, comm->nranks);
-        else if (dtype == F64)
+        else if (dtype == F64 || dtype == C128)
           reducescatter_dpcpp<double, sycl::plus<double>>(stream, element_count,
                                                           p, comm->nranks);
         else if (dtype == S32)
@@ -943,14 +1113,6 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         else if (dtype == U64)
           reducescatter_dpcpp<uint64_t, sycl::plus<uint64_t>>(
               stream, element_count, p, comm->nranks);
-        else if (dtype == C64)
-          reducescatter_dpcpp<std::complex<float>,
-                              sycl::plus<std::complex<float>>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == C128)
-          reducescatter_dpcpp<std::complex<double>,
-                              sycl::plus<std::complex<double>>>(
-              stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
           reducescatter_dpcpp<bfloat16, sycl::plus<float>, float>(
               stream, element_count, p, comm->nranks);
@@ -962,10 +1124,10 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         if (dtype == PRED)
           reducescatter_dpcpp<bool, sycl::multiplies<bool>>(
               stream, element_count, p, comm->nranks);
-        else if (dtype == F32)
+        else if (dtype == F32 || dtype == C64)
           reducescatter_dpcpp<float, sycl::multiplies<float>>(
               stream, element_count, p, comm->nranks);
-        else if (dtype == F64)
+        else if (dtype == F64 || dtype == C128)
           reducescatter_dpcpp<double, sycl::multiplies<double>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S32)
@@ -980,14 +1142,6 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         else if (dtype == U64)
           reducescatter_dpcpp<uint64_t, sycl::multiplies<uint64_t>>(
               stream, element_count, p, comm->nranks);
-        else if (dtype == C64)
-          reducescatter_dpcpp<std::complex<float>,
-                              sycl::multiplies<std::complex<float>>>(
-              stream, element_count, p, comm->nranks);
-        else if (dtype == C128)
-          reducescatter_dpcpp<std::complex<double>,
-                              sycl::multiplies<std::complex<double>>>(
-              stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
           reducescatter_dpcpp<bfloat16, sycl::multiplies<float>, float>(
               stream, element_count, p, comm->nranks);
@@ -999,10 +1153,10 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         if (dtype == PRED)
           reducescatter_dpcpp<bool, sycl::minimum<bool>>(stream, element_count,
                                                          p, comm->nranks);
-        else if (dtype == F32)
+        else if (dtype == F32 || dtype == C64)
           reducescatter_dpcpp<float, sycl::minimum<float>>(
               stream, element_count, p, comm->nranks);
-        else if (dtype == F64)
+        else if (dtype == F64 || dtype == C128)
           reducescatter_dpcpp<double, sycl::minimum<double>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S32)
@@ -1028,10 +1182,10 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
         if (dtype == PRED)
           reducescatter_dpcpp<bool, sycl::maximum<bool>>(stream, element_count,
                                                          p, comm->nranks);
-        else if (dtype == F32)
+        else if (dtype == F32 || dtype == C64)
           reducescatter_dpcpp<float, sycl::maximum<float>>(
               stream, element_count, p, comm->nranks);
-        else if (dtype == F64)
+        else if (dtype == F64 || dtype == C128)
           reducescatter_dpcpp<double, sycl::maximum<double>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S32)
@@ -1066,7 +1220,7 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
 }
 
 void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
-                             int element_count, PrimitiveType dtype,
+                             size_t element_count, PrimitiveType dtype,
                              const std::optional<int64_t>& source_id,
                              const std::optional<int64_t>& target_id,
                              se::gpu::GpuStreamHandle gpu_stream,

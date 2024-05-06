@@ -26,21 +26,21 @@ limitations under the License.
 #include "absl/status/status.h"
 #include "absl/strings/substitute.h"
 #include "mlir/IR/Value.h"  // from @llvm-project
+#include "tsl/platform/errors.h"
+#include "tsl/platform/logging.h"
+#include "tsl/platform/statusor.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/collective_ops_utils.h"
-#include "xla/service/gpu/ir_emission_utils.h"
-#include "xla/service/gpu/nccl_api.h"
 #include "xla/service/gpu/ccl_api.h"
 #include "xla/service/gpu/ccl_collective_thunk.h"
+#include "xla/service/gpu/ir_emission_utils.h"
+#include "xla/service/gpu/nccl_api.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/status_macros.h"
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/stream.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/logging.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace gpu {
@@ -160,7 +160,7 @@ absl::Status RunAllToAll(NcclApi* nccl_api, bool has_split_dimension,
 
   PrimitiveType element_type = buffers[0].element_type;
   int num_participants = CastCCLComm(comm)->nranks;
-  int element_count = buffers[0].element_count;
+  size_t element_count = buffers[0].element_count;
   std::vector<const void*> send_buffers;
   std::vector<void*> recv_buffers;
 

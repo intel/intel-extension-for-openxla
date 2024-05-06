@@ -43,26 +43,26 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
 
 void sycl_allgather(const void* send_buffer, void* recv_buffer,
-                    int element_count, PrimitiveType dtype,
+                    size_t element_count, PrimitiveType dtype,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
 
 void sycl_alltoall(std::vector<const void*> send_buffer,
-                   std::vector<void*> recv_buffer, int element_count,
+                   std::vector<void*> recv_buffer, size_t element_count,
                    PrimitiveType dtype, se::gpu::GpuStreamHandle gpu_stream,
                    ncclComm_t comm);
 
 void sycl_alltoall_split(std::vector<const void*> send_buffer,
-                         std::vector<void*> recv_buffer, int element_count,
+                         std::vector<void*> recv_buffer, size_t element_count,
                          PrimitiveType dtype,
                          se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
 
 void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
-                         int element_count, PrimitiveType dtype,
+                         size_t element_count, PrimitiveType dtype,
                          ReductionKind reduction_kind,
                          se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
 
 void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
-                             int element_count, PrimitiveType dtype,
+                             size_t element_count, PrimitiveType dtype,
                              const std::optional<int64_t>& source_id,
                              const std::optional<int64_t>& target_id,
                              se::gpu::GpuStreamHandle gpu_stream,

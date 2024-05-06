@@ -983,10 +983,10 @@ index abfcefdd3..4041bdd1c 100644
          return user_index.size() == 1 && user_index[0] == 0;
 diff --git a/xla/service/gpu/ccl_api.cc b/xla/service/gpu/ccl_api.cc
 new file mode 100644
-index 000000000..926e4b1f1
+index 000000000..e2d72235c
 --- /dev/null
 +++ b/xla/service/gpu/ccl_api.cc
-@@ -0,0 +1,295 @@
+@@ -0,0 +1,299 @@
 +/* Copyright (c) 2024 Intel Corporation
 +
 +Copyright 2019 The TensorFlow Authors. All Rights Reserved.
@@ -1094,11 +1094,11 @@ index 000000000..926e4b1f1
 +    VLOG(1) << "Initialize NCCL communicator for rank #" << ranks[i].rank
 +            << " of " << nranks << "; hash(id)=" << absl::HashOf(clique_id);
 +
-+    NcclCommHandle comm = reinterpret_cast<NcclCommHandle>(
++  NcclCommHandle comm = reinterpret_cast<NcclCommHandle>(
 +      new ccl::communicator(nranks, ranks[i].rank, clique_id.ToString()));
-+      
-+    comms.emplace_back(comm, NcclCommDeleter{this});
-+  }
++
++  comms.emplace_back(comm, NcclCommDeleter{this});
++}
 +
 +  return comms;
 +}
@@ -1153,7 +1153,7 @@ index 000000000..926e4b1f1
 +
 +  const void* send_buffer_ = send_buffer.opaque();
 +  void* recv_buffer_ = recv_buffer.opaque();
-+  int element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
++  size_t element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
 +
 +  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
 +
@@ -1171,7 +1171,7 @@ index 000000000..926e4b1f1
 +
 +  const void* send_buffer_ = send_buffer.opaque();
 +  void* recv_buffer_ = recv_buffer.opaque();
-+  int element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
++  size_t element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
 +
 +  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
 +
@@ -1200,7 +1200,7 @@ index 000000000..926e4b1f1
 +
 +  const void* send_buffer_ = send_buffer.opaque();
 +  void* recv_buffer_ = recv_buffer.opaque();
-+  int element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
++  size_t element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
 +
 +  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
 +
@@ -1212,11 +1212,13 @@ index 000000000..926e4b1f1
 +absl::Status CclApi::AllToAll(bool has_split_dimension,
 +                              std::vector<const void*>& send_buffers,
 +                              std::vector<void*>& recv_buffers,
-+                              int element_count, PrimitiveType element_type,
++                              size_t element_count, PrimitiveType element_type,
 +                              NcclCommHandle comm, se::Stream* stream) {
 +  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
 +
 +  se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(stream);
++
++  element_count = element_count * (primitive_util::IsComplexType(element_type) ? 2 : 1);
 +
 +  if (has_split_dimension) {
 +    sycl_alltoall_split(send_buffers, recv_buffers, element_count, element_type,
@@ -1231,7 +1233,7 @@ index 000000000..926e4b1f1
 +
 +absl::Status CclApi::CollectivePermute(se::DeviceMemoryBase src_addr,
 +                                       se::DeviceMemoryBase dest_addr,
-+                                       int element_count,
++                                       size_t element_count,
 +                                       PrimitiveType element_type,
 +                                       const std::optional<int64_t> source_id,
 +                                       const std::optional<int64_t> target_id,
@@ -1240,6 +1242,8 @@ index 000000000..926e4b1f1
 +  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
 +
 +  se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(stream);
++
++  element_count = element_count * (primitive_util::IsComplexType(element_type) ? 2 : 1);
 +
 +  sycl_collective_permute(src_addr.opaque(), dest_addr.opaque(), element_count,
 +                          element_type, source_id, target_id, gpu_stream,
@@ -1284,7 +1288,7 @@ index 000000000..926e4b1f1
 +}  // namespace xla::gpu
 diff --git a/xla/service/gpu/ccl_api.h b/xla/service/gpu/ccl_api.h
 new file mode 100644
-index 000000000..06d18cd06
+index 000000000..40b5596e8
 --- /dev/null
 +++ b/xla/service/gpu/ccl_api.h
 @@ -0,0 +1,114 @@
@@ -1375,13 +1379,13 @@ index 000000000..06d18cd06
 +
 +  absl::Status AllToAll(bool has_split_dimension,
 +                        std::vector<const void*>& send_buffers,
-+                        std::vector<void*>& recv_buffers, int element_count,
++                        std::vector<void*>& recv_buffers, size_t element_count,
 +                        PrimitiveType element_type, NcclCommHandle comm,
 +                        se::Stream* stream);
 +
 +  absl::Status CollectivePermute(se::DeviceMemoryBase src_addr,
 +                                 se::DeviceMemoryBase dest_addr,
-+                                 int element_count, PrimitiveType element_type,
++                                 size_t element_count, PrimitiveType element_type,
 +                                 const std::optional<int64_t> source_id,
 +                                 const std::optional<int64_t> target_id,
 +                                 NcclCommHandle comm, se::Stream* stream);
