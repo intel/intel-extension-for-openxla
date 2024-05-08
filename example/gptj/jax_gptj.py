@@ -108,6 +108,7 @@ if not args.accuracy_only:
     print("\n", "-" * 10, "Summary:", "-" * 10, flush=True)
     latency = total_time / (num_iter - num_warmup)
     print("Inference latency: %.3f sec." % (latency), flush=True)
+    print("Inference throughput: %.3f samples/sec.\n" % (args.batch_size / latency), flush=True)
 else:
     accuracy_check_combination = [[1, '32', 32], [4, '32', 32], [1, '1024', 128], [4, '1024', 128]]
     if [num_beams, input_tokens, max_new_tokens] not in accuracy_check_combination:

@@ -65,3 +65,7 @@ bash quick_start.sh xl /username/datasets/ThePile /username/t5x_models 32 32 XPU
 ```
 bash quick_start.sh xl /username/datasets/ThePile /username/t5x_models 1024 128 XPU
 ```
+#### Performance Output
+```
+avg time:xxx s,avg throughput:xxx sentences/sencond
+```

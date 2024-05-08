@@ -39,14 +39,14 @@ pip install jax==0.4.25 jaxlib==0.4.25 keras-nlp==0.10.0 keras==3.3.2
 ### Example
 
 ```bash
-numactl -N 0 -m 0 python inference.py --model gemma_7b --dtype bfloat16 --input-tokens 32 --max-new-tokens 32
-numactl -N 0 -m 0 python inference.py --model gemma_7b --dtype bfloat16 --input-tokens 1024 --max-new-tokens 128
-numactl -N 0 -m 0 python inference.py --model gemma_2b --dtype bfloat16 --input-tokens 32 --max-new-tokens 32
-numactl -N 0 -m 0 python inference.py --model gemma_2b --dtype bfloat16 --input-tokens 1024 --max-new-tokens 128
-numactl -N 0 -m 0 python inference.py --model gemma_7b --dtype bfloat16 --input-tokens 32 --max-new-tokens 32 --num-beams 4
-numactl -N 0 -m 0 python inference.py --model gemma_7b --dtype bfloat16 --input-tokens 1024 --max-new-tokens 128 --num-beams 4
-numactl -N 0 -m 0 python inference.py --model gemma_2b --dtype bfloat16 --input-tokens 32 --max-new-tokens 32 --num-beams 4
-numactl -N 0 -m 0 python inference.py --model gemma_2b --dtype bfloat16 --input-tokens 1024 --max-new-tokens 128 --num-beams 4
+python inference.py --model gemma_7b --dtype bfloat16 --input-tokens 32 --max-new-tokens 32
+python inference.py --model gemma_7b --dtype bfloat16 --input-tokens 1024 --max-new-tokens 128
+python inference.py --model gemma_2b --dtype bfloat16 --input-tokens 32 --max-new-tokens 32
+python inference.py --model gemma_2b --dtype bfloat16 --input-tokens 1024 --max-new-tokens 128
+python inference.py --model gemma_7b --dtype bfloat16 --input-tokens 32 --max-new-tokens 32 --num-beams 4
+python inference.py --model gemma_7b --dtype bfloat16 --input-tokens 1024 --max-new-tokens 128 --num-beams 4
+python inference.py --model gemma_2b --dtype bfloat16 --input-tokens 32 --max-new-tokens 32 --num-beams 4
+python inference.py --model gemma_2b --dtype bfloat16 --input-tokens 1024 --max-new-tokens 128 --num-beams 4
 ```
 
 ### Output

@@ -15,7 +15,7 @@ pip install jax==0.4.25 jaxlib==0.4.25 flax==0.8.2
 ### 3. Install huggingface transformers
 
 ```bash
-pip install transformers==4.37 diffusers==0.26.3 datasets==2.12.0 msgpack==1.0.7
+pip install transformers==4.38 diffusers==0.26.3 datasets==2.12.0 msgpack==1.0.7
 ```
 ## Run
 
@@ -37,5 +37,6 @@ pip install transformers==4.37 diffusers==0.26.3 datasets==2.12.0 msgpack==1.0.7
 ## Expected Output
 
 ```
-Average Latency per image is: x.xxxs
+Average Latency per image is: x.xxx s
+Average Throughput per second is: x.xxx steps
 ```

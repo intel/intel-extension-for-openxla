@@ -98,7 +98,8 @@ def elapsed_time(num_iter=10, num_inference_steps=20):
 num_inference_steps = args.num_inference_steps
 num_iter = args.num_iter
 latency, images = elapsed_time(num_iter, num_inference_steps)
-print("Average Latency per image is: {:.3f}s".format(latency), file=sys.stderr)
+print("Average Latency per image is: {:.3f} s".format(latency), file=sys.stderr)
+print("Average Throughput per second is: {:.3f} steps".format(1 / latency * num_inference_steps), file=sys.stderr)
 images = images.reshape((images.shape[0],) + images.shape[-3:])
 images = pipeline.numpy_to_pil(images)
 images[0].save("img.png")

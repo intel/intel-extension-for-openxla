@@ -5,7 +5,7 @@ Script jax_gptj.py for [EleutherAI/gpt-j-6B](https://huggingface.co/EleutherAI/g
 ## Prerequisites
 
 ```bash
-pip install jax==0.4.25 jaxlib==0.4.25 flax==0.8.2 transformers==4.37 datasets==2.12.0
+pip install jax==0.4.25 jaxlib==0.4.25 flax==0.8.2 transformers==4.38 datasets==2.12.0
 ```
 
 ## Options
@@ -26,7 +26,7 @@ pip install jax==0.4.25 jaxlib==0.4.25 flax==0.8.2 transformers==4.37 datasets==
 
 ```bash
 export ZE_AFFINITY_MASK=0
-numactl -N 0 -m 0 python jax_gptj.py --accuracy-only --dtype "float16"
+python jax_gptj.py --accuracy-only --dtype "float16"
 ```
 
 ## Performance Example
@@ -49,5 +49,11 @@ python jax_gptj.py --greedy
 
 ```bash
 export ZE_AFFINITY_MASK=0
-python jax_gptj.py --input-tokens 1024 --max-new-tokens 128 --num-iter 100 --num-warmup 10
+python jax_gptj.py --input-tokens 1024 --max-new-tokens 128
+```
+
+### Performance Output
+```
+Inference latency: x.xxx sec.
+Inference throughput: x.xxx samples/sec.
 ```

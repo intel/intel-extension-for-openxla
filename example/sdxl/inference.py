@@ -110,7 +110,8 @@ def generate(
     return (end - start) / num_iters, images
 
 latency, images = generate(default_prompt, default_neg_prompt)
-print("Average Latency per image is: {:.3f}s".format(latency), file=sys.stderr)
+print("Average Latency per image is: {:.3f} s".format(latency), file=sys.stderr)
+print("Average Throughput per second is: {:.3f} steps".format(1 / latency * num_steps), file=sys.stderr)
 images = images.reshape((images.shape[0] * images.shape[1],) + images.shape[-3:])
 images = pipeline.numpy_to_pil(np.array(images))
 
