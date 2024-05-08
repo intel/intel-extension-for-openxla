@@ -171,6 +171,22 @@ struct PJRT_CopyToDeviceStream {
   std::unique_ptr<xla::CopyToDeviceStream> stream;
 };
 
+// expose C api for third party libraries like Horovod which needs to get stream
+// and pjrt_buffer.
+extern "C" {
+typedef struct PjRtBuffer_Info PjRtBuffer_Info;
+void* C_ITEXOpaqueDataPointerFromPjRtBuffer(PJRT_Buffer* pjrt_c_buffer);
+PJRT_Buffer* C_ITEXCreatePjRtBuffer(int device_id,
+                                    PjRtBuffer_Info* pjrt_buffer_info,
+                                    PJRT_Client* pjrt_c_client);
+PJRT_Buffer* C_ITEXCreateSEPjRtBuffer(int device_id,
+                                      PjRtBuffer_Info* pjrt_buffer_info,
+                                      PJRT_Client* pjrt_c_client);
+void* C_ITEXGetStreamFromPjRtDevice(int device_id, PJRT_Client* pjrt_c_client);
+void C_RegisterCustomCallTarget(const char* symbol, void* address,
+                                const char* platform);
+}
+
 namespace pjrt {
 // C API definitions
 
@@ -281,6 +297,13 @@ PJRT_Error* PJRT_TopologyDescription_GetDeviceDescriptions(
     PJRT_TopologyDescription_GetDeviceDescriptions_Args* args);
 
 PJRT_Error* PJRT_Compile(PJRT_Compile_Args* args);
+
+PJRT_Error* PJRT_Executable_Fingerprint(
+    PJRT_Executable_Fingerprint_Args* args);
+PJRT_Error* PJRT_Client_TopologyDescription(
+    PJRT_Client_TopologyDescription_Args* args);
+PJRT_Error* PJRT_Executable_GetCompiledMemoryStats(
+    PJRT_Executable_GetCompiledMemoryStats_Args* args);
 
 // Helper macros and functions
 

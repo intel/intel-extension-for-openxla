@@ -38,9 +38,8 @@ limitations under the License.
 #include "xla/pjrt/pjrt_client.h"
 #include "xla/pjrt/pjrt_executable.h"
 #include "xla/pjrt/pjrt_future.h"
-// #include "xla/pjrt/se_xpu_pjrt_client.h"
 #include "xla/pjrt/gpu/se_gpu_pjrt_client.h"
-#include "xla/pjrt/xpu_pjrt_client.h"
+#include "xla/pjrt/tf_xpu_pjrt_client.h"
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/service/hlo.pb.h"
 #include "xla/shape.h"
@@ -363,6 +362,16 @@ PJRT_Error* PJRT_Client_PlatformVersion(
   return nullptr;
 }
 
+PJRT_Error* PJRT_Client_TopologyDescription(
+    PJRT_Client_TopologyDescription_Args* args) {
+  PJRT_RETURN_IF_ERROR(ActualStructSizeIsGreaterOrEqual(
+      "PJRT_Client_TopologyDescription_Args",
+      PJRT_Client_TopologyDescription_Args_STRUCT_SIZE, args->struct_size));
+
+  PJRT_RETURN_IF_ERROR(args->client->topology.status());
+  args->topology = args->client->topology->get();
+  return nullptr;
+}
 PJRT_Error* PJRT_Client_Devices(PJRT_Client_Devices_Args* args) {
   PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
       "PJRT_Client_Devices_Args", PJRT_Client_Devices_Args_STRUCT_SIZE,
@@ -404,25 +413,14 @@ PJRT_Error* PJRT_Client_LookupAddressableDevice(
   return nullptr;
 }
 
+
+// TODO: b/306669267 - this method is deprecated. Return unimplemented error,
+// until the next major version upgrade.
 PJRT_Error* PJRT_LoadedExecutable_Fingerprint(
     PJRT_LoadedExecutable_Fingerprint_Args* args) {
-  PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
-      "PJRT_LoadedExecutable_Fingerprint_Args",
-      PJRT_LoadedExecutable_Fingerprint_Args_STRUCT_SIZE, args->struct_size));
-  const xla::Status& status = args->executable->fingerprint.status();
-  if (!status.ok()) {
-    return new PJRT_Error{status};
-  }
-  if (args->executable->fingerprint.value().has_value()) {
-    args->executable_fingerprint =
-        args->executable->fingerprint.value()->c_str();
-    args->executable_fingerprint_size =
-        args->executable->fingerprint.value()->size();
-  } else {
-    args->executable_fingerprint = nullptr;
-    args->executable_fingerprint_size = 0;
-  }
-  return nullptr;
+  return new PJRT_Error{
+      xla::Unimplemented("PJRT_LoadedExecutable_Fingerprint is deprecated, use "
+                         "PJRT_Executable_Fingerprint instead.")};
 }
 
 PJRT_Error* PJRT_Client_AddressableMemories(
@@ -1152,6 +1150,17 @@ PJRT_Error* PJRT_Executable_OptimizedProgram(
   }
 }
 
+PJRT_Error* PJRT_Executable_Fingerprint(
+    PJRT_Executable_Fingerprint_Args* args) {
+  PJRT_RETURN_IF_ERROR(ActualStructSizeIsGreaterOrEqual(
+      "PJRT_Executable_Fingerprint_Args",
+      PJRT_Executable_Fingerprint_Args_STRUCT_SIZE, args->struct_size));
+  PJRT_RETURN_IF_ERROR(args->executable->fingerprint.status());
+  args->executable_fingerprint = args->executable->fingerprint.value().c_str();
+  args->executable_fingerprint_size =
+      args->executable->fingerprint.value().size();
+  return nullptr;
+}
 PJRT_Error* PJRT_Executable_GetCostAnalysis(
     PJRT_Executable_GetCostAnalysis_Args* args) {
   PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
@@ -1505,6 +1514,22 @@ PJRT_Error* PJRT_Executable_Serialize(PJRT_Executable_Serialize_Args* args) {
   return nullptr;
 }
 
+PJRT_Error* PJRT_Executable_GetCompiledMemoryStats(
+    PJRT_Executable_GetCompiledMemoryStats_Args* args) {
+  PJRT_RETURN_IF_ERROR(ActualStructSizeIsGreaterOrEqual(
+      "PJRT_Executable_Serialize_Args",
+      PJRT_Executable_Serialize_Args_STRUCT_SIZE, args->struct_size));
+  PJRT_ASSIGN_OR_RETURN(auto memory_stats,
+                        args->executable->executable->GetCompiledMemoryStats());
+  args->generated_code_size_in_bytes =
+      memory_stats.generated_code_size_in_bytes;
+  args->argument_size_in_bytes = memory_stats.argument_size_in_bytes;
+  args->output_size_in_bytes = memory_stats.output_size_in_bytes;
+  args->alias_size_in_bytes = memory_stats.alias_size_in_bytes;
+  args->temp_size_in_bytes = memory_stats.temp_size_in_bytes;
+  return nullptr;
+}
+
 PJRT_Error* PJRT_Executable_DeserializeAndLoad(
     PJRT_Executable_DeserializeAndLoad_Args* args) {
   PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
@@ -1534,6 +1559,14 @@ PJRT_Error* PJRT_LoadedExecutable_GetExecutable(
 // ---------------------------------- Buffers ----------------------------------
 
 PJRT_Error* PJRT_Buffer_Destroy(PJRT_Buffer_Destroy_Args* args) {
+  PJRT_RETURN_IF_ERROR(ActualStructSizeIsGreaterOrEqual(
+      "PJRT_Buffer_Destroy_Args", PJRT_Buffer_Destroy_Args_STRUCT_SIZE,
+      args->struct_size));
+  delete args->buffer;
+  return nullptr;
+}
+
+PJRT_Error* ITEX_PJRT_Buffer_Destroy(PJRT_Buffer_Destroy_Args* args) {
   PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
       "PJRT_Buffer_Destroy_Args", PJRT_Buffer_Destroy_Args_STRUCT_SIZE,
       args->struct_size));
@@ -2218,8 +2251,19 @@ static void AttachDevicesAndMemories(PJRT_Client* c_client) {
   }
 }
 
+static xla::StatusOr<std::unique_ptr<PJRT_TopologyDescription>>
+GetStatusOrTopologyDescription(const xla::PjRtClient& cpp_client) {
+  xla::StatusOr<const xla::PjRtTopologyDescription*> status_or_cpp_topo =
+      cpp_client.GetTopologyDescription();
+  if (!status_or_cpp_topo.ok()) {
+    return status_or_cpp_topo.status();
+  }
+  return std::unique_ptr<PJRT_TopologyDescription>(
+      CreateWrapperDeviceTopology(*status_or_cpp_topo));
+}
+
 PJRT_Client* CreateWrapperClient(std::unique_ptr<xla::PjRtClient> cpp_client) {
-  PJRT_Client* c_client = new PJRT_Client{std::move(cpp_client)};
+  PJRT_Client* c_client = new PJRT_Client(std::move(cpp_client));
   PopulatePjrtClientDevices(c_client);
   PopulatePjrtClientMemories(c_client);
   AttachDevicesAndMemories(c_client);
@@ -2227,9 +2271,9 @@ PJRT_Client* CreateWrapperClient(std::unique_ptr<xla::PjRtClient> cpp_client) {
 }
 
 PJRT_TopologyDescription* CreateWrapperDeviceTopology(
-    std::unique_ptr<xla::PjRtTopologyDescription> cpp_topology) {
+    const xla::PjRtTopologyDescription* cpp_topology) {
   PJRT_TopologyDescription* c_topology =
-      new PJRT_TopologyDescription{std::move(cpp_topology)};
+      new PJRT_TopologyDescription{/*owned_topology=*/nullptr, cpp_topology};
   c_topology->cpp_descriptions = c_topology->topology->DeviceDescriptions();
   c_topology->descriptions.reserve(c_topology->cpp_descriptions.size());
   c_topology->description_pointers.reserve(c_topology->cpp_descriptions.size());
@@ -2246,11 +2290,24 @@ PJRT_TopologyDescription* CreateWrapperDeviceTopology(
   return c_topology;
 }
 
+PJRT_TopologyDescription* CreateWrapperDeviceTopology(
+    std::unique_ptr<xla::PjRtTopologyDescription> cpp_topology) {
+  PJRT_TopologyDescription* topo_desc =
+      CreateWrapperDeviceTopology(cpp_topology.get());
+  topo_desc->owned_topology = std::move(cpp_topology);
+  return topo_desc;
+}
+
 }  // namespace pjrt
+
+PJRT_Client::PJRT_Client(std::unique_ptr<xla::PjRtClient> cpp_client)
+    : client(std::move(cpp_client)),
+      topology(pjrt::GetStatusOrTopologyDescription(*client)) {}
 
 PJRT_Executable::PJRT_Executable(
     std::shared_ptr<xla::PjRtExecutable> executable)
-    : executable(std::move(executable)) {}
+    : executable(std::move(executable)),
+      fingerprint(this->executable->FingerprintExecutable()) {}
 
 PJRT_LoadedExecutable::PJRT_LoadedExecutable(
     std::shared_ptr<xla::PjRtLoadedExecutable> executable, PJRT_Client* client)
@@ -2447,7 +2504,11 @@ constexpr PJRT_Api CreatePjrtApi() {
       pjrt::PJRT_Buffer_CopyToMemory,
       /*PJRT_Client_CreateViewOfDeviceBuffer=*/
       pjrt::PJRT_Client_CreateViewOfDeviceBuffer,
-
+      /*PJRT_Executable_Fingerprint=*/pjrt::PJRT_Executable_Fingerprint,
+      /*PJRT_Client_TopologyDescription= */
+      pjrt::PJRT_Client_TopologyDescription,
+      /*PJRT_Executable_GetCompiledMemoryStats= */
+      pjrt::PJRT_Executable_GetCompiledMemoryStats,
   };
 }
 
@@ -2456,6 +2517,7 @@ constexpr PJRT_Api CreateITEXPjrtApi() {
   api.PJRT_Client_BufferFromHostBuffer =
       pjrt::ITEX_PJRT_Client_BufferFromHostBuffer;
   api.PJRT_Buffer_ToHostBuffer = pjrt::ITEX_PJRT_Buffer_ToHostBuffer;
+  api.PJRT_Buffer_Destroy = pjrt::ITEX_PJRT_Buffer_Destroy;
   return api;
 }
 

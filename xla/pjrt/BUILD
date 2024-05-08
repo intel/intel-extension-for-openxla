@@ -129,17 +129,11 @@ cc_library(
 )
 
 cc_library(
-    name = "tf_pjrt_helper_hdrs",
-    hdrs = ["tf_pjrt_helper.h"],
-    visibility = ["//visibility:public"],
-)
-
-cc_library(
     name = "tf_xpu_pjrt_client",
     srcs = ["tf_xpu_pjrt_client.cc"],
     hdrs = [
         "tf_xpu_pjrt_client.h",
-        "xpu_pjrt_client.h",
+        "tf_pjrt_helper.h",
     ],
     linkstatic = 1,
     visibility = ["//visibility:public"],
