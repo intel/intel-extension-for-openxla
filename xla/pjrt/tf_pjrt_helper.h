@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_COMPILER_XLA_PJRT_XPU_PJRT_CLIENT_H_
-#define ITEX_CORE_COMPILER_XLA_PJRT_XPU_PJRT_CLIENT_H_
+#ifndef XLA_PJRT_TF_PJRT_HELPER_H_
+#define XLA_PJRT_TF_PJRT_HELPER_H_
 
 #include <functional>
 #include <memory>
@@ -23,6 +23,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "xla/pjrt/tf_xpu_pjrt_client.h"
 #include "xla/pjrt/c/pjrt_c_api.h"
 #include "xla/pjrt/c/pjrt_c_api_helpers.h"
 #include "xla/pjrt/pjrt_client.h"
@@ -31,7 +32,7 @@ limitations under the License.
 #include "xla/pjrt/pjrt_executable.h"
 #include "xla/pjrt/pjrt_future.h"
 #include "xla/service/custom_call_target_registry.h"
-#include "xla/pjrt/tf_xpu_pjrt_client.h"
+
 
 // expose C api for third party libraries like Horovod which needs to get stream
 // and pjrt_buffer.
@@ -53,4 +54,15 @@ xla::PrimitiveType XlaDataTypeFromString(std::string data_type);
 
 void* ITEXOpaqueDataPointerFromPjRtBuffer(PJRT_Buffer* pjrt_c_buffer);
 
-#endif  // ITEX_CORE_COMPILER_XLA_PJRT_XPU_PJRT_CLIENT_H_
+PJRT_Buffer* ITEXCreateSEPjRtBuffer(int device_id, std::string data_type,
+                                  std::vector<int64_t>* dimentions, size_t size,
+                                  PJRT_Client* pjrt_c_client);
+
+PJRT_Buffer* ITEXCreateSEPjRtBuffer(int device_id, std::string data_type,
+                                    std::vector<int64_t> dimentions,
+                                    std::vector<int64_t> layout,
+                                    PJRT_Client* pjrt_c_client);
+
+
+
+#endif  // XLA_PJRT_TF_PJRT_HELPER_H_

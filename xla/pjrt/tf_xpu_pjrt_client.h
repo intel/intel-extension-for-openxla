@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ITEX_CORE_COMPILER_XLA_PJRT_XPU_PJRT_CLIENT_H_
-#define ITEX_CORE_COMPILER_XLA_PJRT_XPU_PJRT_CLIENT_H_
+#ifndef XLA_PJRT_TF_XPU_PJRT_CLIENT_H_
+#define XLA_PJRT_TF_XPU_PJRT_CLIENT_H_
 
 #include <functional>
 #include <memory>
@@ -35,6 +35,20 @@ struct PJRT_Error {
   xla::Status status;
 };
 
+struct PJRT_TopologyDescription {
+  // nullptr iff the PjRtTopologyDescription isn't owned by the caller. The PJRT
+  // C API sometimes returns a topo desc that's owned by the caller and must be
+  // freed using PJRT_TopologyDescription_Destroy
+  // (e.g. PJRT_TopologyDescription_Create), and sometimes returns a topo desc
+  // that's owned by something else (e.g. PJRT_Client_TopologyDescription).
+  std::unique_ptr<xla::PjRtTopologyDescription> owned_topology;
+  const xla::PjRtTopologyDescription* topology;
+  std::vector<std::unique_ptr<const xla::PjRtDeviceDescription>>
+      cpp_descriptions;
+  std::vector<PJRT_DeviceDescription> descriptions;
+  std::vector<PJRT_DeviceDescription*> description_pointers;
+  std::vector<PJRT_NamedValue> attributes;
+};
 struct PJRT_Client {
   std::unique_ptr<xla::PjRtClient> client;
   std::vector<PJRT_Device> owned_devices;
@@ -56,6 +70,9 @@ struct PJRT_Client {
   // `owned_memories`.
   absl::flat_hash_map<xla::PjRtMemorySpace*, PJRT_Memory*>
       c_memory_from_cpp_memory;
+  xla::StatusOr<std::unique_ptr<PJRT_TopologyDescription>> topology;
+
+  explicit PJRT_Client(std::unique_ptr<xla::PjRtClient> cpp_client);
 };
 
 // PJRT_DeviceDescriptions are owned by their corresponding PJRT_Device.
@@ -87,6 +104,9 @@ struct PJRT_Executable {
   // Must be shared_ptr so that we can share with PJRT_LoadedExecutable.
   std::shared_ptr<xla::PjRtExecutable> executable;
 
+  xla::StatusOr<std::string> fingerprint;
+
+  // Used to synchronize concurrent setting of cached values.
   mutable absl::Mutex mutex;
   // Cost analysis properties and name strings are populated after cost analysis
   // has been run. These are returned from cost analysis calls, and do not
@@ -95,10 +115,16 @@ struct PJRT_Executable {
   std::vector<std::string> cost_analysis_names;
   std::vector<PJRT_NamedValue> cost_analysis_properties;
 
-  mutable absl::Mutex memory_kind_mutex;
-  bool memory_kind_ran ABSL_GUARDED_BY(memory_kind_mutex) = false;
+  bool memory_kind_ran ABSL_GUARDED_BY(mutex) = false;
   std::vector<const char*> memory_kinds;
   std::vector<size_t> memory_kind_sizes;
+
+  bool out_type_ran ABSL_GUARDED_BY(mutex) = false;
+  std::vector<PJRT_Buffer_Type> out_types;
+
+  bool out_dimension_ran ABSL_GUARDED_BY(mutex) = false;
+  std::vector<int64_t> out_dimensions;
+  std::vector<size_t> out_dimension_sizes;
 
   explicit PJRT_Executable(std::shared_ptr<xla::PjRtExecutable> executable);
 
@@ -152,12 +178,8 @@ struct PJRT_SerializedExecutable {
   std::string serialized;
 };
 
-struct PJRT_TopologyDescription {
-  std::unique_ptr<xla::PjRtTopologyDescription> topology;
-  std::vector<std::unique_ptr<const xla::PjRtDeviceDescription>>
-      cpp_descriptions;
-  std::vector<PJRT_DeviceDescription> descriptions;
-  std::vector<PJRT_DeviceDescription*> description_pointers;
+struct PJRT_SerializedTopology {
+  std::string serialized;
 };
 
 struct PJRT_TransferMetadata {
@@ -194,6 +216,8 @@ void PJRT_Error_Destroy(PJRT_Error_Destroy_Args* args);
 void PJRT_Error_Message(PJRT_Error_Message_Args* args);
 PJRT_Error* PJRT_Error_GetCode(PJRT_Error_GetCode_Args* args);
 
+PJRT_Error* PJRT_Plugin_Attributes(PJRT_Plugin_Attributes_Args* args);
+
 PJRT_Error* PJRT_Event_Destroy(PJRT_Event_Destroy_Args* args);
 PJRT_Error* PJRT_Event_IsReady(PJRT_Event_IsReady_Args* args);
 PJRT_Error* PJRT_Event_Error(PJRT_Event_Error_Args* args);
@@ -204,12 +228,16 @@ PJRT_Error* PJRT_Client_Destroy(PJRT_Client_Destroy_Args* args);
 PJRT_Error* PJRT_Client_PlatformName(PJRT_Client_PlatformName_Args* args);
 PJRT_Error* PJRT_Client_ProcessIndex(PJRT_Client_ProcessIndex_Args* args);
 PJRT_Error* PJRT_Client_PlatformVersion(PJRT_Client_PlatformVersion_Args* args);
+PJRT_Error* PJRT_Client_TopologyDescription(
+    PJRT_Client_TopologyDescription_Args* args);
 PJRT_Error* PJRT_Client_Devices(PJRT_Client_Devices_Args* args);
 PJRT_Error* PJRT_Client_AddressableDevices(
     PJRT_Client_AddressableDevices_Args* args);
 PJRT_Error* PJRT_Client_LookupDevice(PJRT_Client_LookupDevice_Args* args);
 PJRT_Error* PJRT_Client_LookupAddressableDevice(
     PJRT_Client_LookupAddressableDevice_Args* args);
+PJRT_Error* PJRT_Client_AddressableMemories(
+    PJRT_Client_AddressableMemories_Args* args);
 PJRT_Error* PJRT_Client_Compile(PJRT_Client_Compile_Args* args);
 PJRT_Error* PJRT_Client_DefaultDeviceAssignment(
     PJRT_Client_DefaultDeviceAssignment_Args* args);
@@ -217,6 +245,9 @@ PJRT_Error* PJRT_Client_BufferFromHostBuffer(
     PJRT_Client_BufferFromHostBuffer_Args* args);
 PJRT_Error* ITEX_PJRT_Client_BufferFromHostBuffer(
     PJRT_Client_BufferFromHostBuffer_Args* args);
+PJRT_Error* PJRT_Client_CreateViewOfDeviceBuffer(
+    PJRT_Client_CreateViewOfDeviceBuffer_Args* args);
+
 PJRT_Error* PJRT_DeviceDescription_Id(PJRT_DeviceDescription_Id_Args* args);
 PJRT_Error* PJRT_DeviceDescription_ProcessIndex(
     PJRT_DeviceDescription_ProcessIndex_Args* args);
@@ -231,7 +262,17 @@ PJRT_Error* PJRT_Device_GetDescription(PJRT_Device_GetDescription_Args* args);
 
 PJRT_Error* PJRT_Device_IsAddressable(PJRT_Device_IsAddressable_Args* args);
 PJRT_Error* PJRT_Device_LocalHardwareId(PJRT_Device_LocalHardwareId_Args* args);
+PJRT_Error* PJRT_Device_AddressableMemories(
+    PJRT_Device_AddressableMemories_Args* args);
+PJRT_Error* PJRT_Device_DefaultMemory(PJRT_Device_DefaultMemory_Args* args);
 PJRT_Error* PJRT_Device_MemoryStats(PJRT_Device_MemoryStats_Args* args);
+
+PJRT_Error* PJRT_Memory_Id(PJRT_Memory_Id_Args* args);
+PJRT_Error* PJRT_Memory_Kind(PJRT_Memory_Kind_Args* args);
+PJRT_Error* PJRT_Memory_DebugString(PJRT_Memory_DebugString_Args* args);
+PJRT_Error* PJRT_Memory_ToString(PJRT_Memory_ToString_Args* args);
+PJRT_Error* PJRT_Memory_AddressableByDevices(
+    PJRT_Memory_AddressableByDevices_Args* args);
 
 PJRT_Error* PJRT_Executable_Destroy(PJRT_Executable_Destroy_Args* args);
 PJRT_Error* PJRT_Executable_Name(PJRT_Executable_Name_Args* args);
@@ -243,15 +284,23 @@ PJRT_Error* PJRT_LoadedExecutable_AddressableDevices(
 PJRT_Error* PJRT_Executable_NumOutputs(PJRT_Executable_NumOutputs_Args* args);
 PJRT_Error* PJRT_Executable_SizeOfGeneratedCodeInBytes(
     PJRT_Executable_SizeOfGeneratedCodeInBytes_Args* args);
+PJRT_Error* PJRT_Executable_Fingerprint(PJRT_Executable_Fingerprint_Args* args);
+PJRT_Error* PJRT_Executable_GetCostAnalysis(
+    PJRT_Executable_GetCostAnalysis_Args* args);
+PJRT_Error* PJRT_Executable_OutputElementTypes(
+    PJRT_Executable_OutputElementTypes_Args* args);
+PJRT_Error* PJRT_Executable_OutputDimensions(
+    PJRT_Executable_OutputDimensions_Args* args);
+PJRT_Error* PJRT_Executable_OutputMemoryKinds(
+    PJRT_Executable_OutputMemoryKinds_Args* args);
 PJRT_Error* PJRT_Executable_OptimizedProgram(
     PJRT_Executable_OptimizedProgram_Args* args);
 PJRT_Error* PJRT_Executable_Serialize(PJRT_Executable_Serialize_Args* args);
+PJRT_Error* PJRT_Executable_GetCompiledMemoryStats(
+    PJRT_Executable_GetCompiledMemoryStats_Args* args);
 
 PJRT_Error* PJRT_LoadedExecutable_Destroy(
     PJRT_LoadedExecutable_Destroy_Args* args);
-
-PJRT_Error* PJRT_Executable_GetCostAnalysis(
-    PJRT_Executable_GetCostAnalysis_Args* args);
 PJRT_Error* PJRT_LoadedExecutable_Delete(
     PJRT_LoadedExecutable_Delete_Args* args);
 PJRT_Error* PJRT_LoadedExecutable_IsDeleted(
@@ -262,22 +311,41 @@ PJRT_Error* PJRT_Executable_DeserializeAndLoad(
     PJRT_Executable_DeserializeAndLoad_Args* args);
 PJRT_Error* PJRT_LoadedExecutable_GetExecutable(
     PJRT_LoadedExecutable_GetExecutable_Args* args);
+// TODO: b/306669267 - this method is deprecated. Return unimplemented error,
+// until the next major version upgrade.
+PJRT_Error* PJRT_LoadedExecutable_Fingerprint(
+    PJRT_LoadedExecutable_Fingerprint_Args* args);
 
 PJRT_Error* PJRT_Buffer_Destroy(PJRT_Buffer_Destroy_Args* args);
-PJRT_Error* PJRT_Buffer_OnDeviceTrimmedShape(
-    PJRT_Buffer_OnDeviceTrimmedShape_Args* args);
+PJRT_Error* PJRT_Buffer_ElementType(PJRT_Buffer_ElementType_Args* args);
+PJRT_Error* PJRT_Buffer_Dimensions(PJRT_Buffer_Dimensions_Args* args);
+PJRT_Error* PJRT_Buffer_UnpaddedDimensions(
+    PJRT_Buffer_UnpaddedDimensions_Args* args);
+PJRT_Error* PJRT_Buffer_DynamicDimensionIndices(
+    PJRT_Buffer_DynamicDimensionIndices_Args* args);
+PJRT_Error* PJRT_Buffer_GetMemoryLayout(PJRT_Buffer_GetMemoryLayout_Args* args);
 PJRT_Error* PJRT_Buffer_OnDeviceSizeInBytes(
     PJRT_Buffer_OnDeviceSizeInBytes_Args* args);
 PJRT_Error* PJRT_Buffer_Device(PJRT_Buffer_Device_Args* args);
+PJRT_Error* PJRT_Buffer_Memory(PJRT_Buffer_Memory_Args* args);
 PJRT_Error* PJRT_Buffer_Delete(PJRT_Buffer_Delete_Args* args);
 PJRT_Error* PJRT_Buffer_IsDeleted(PJRT_Buffer_IsDeleted_Args* args);
 PJRT_Error* PJRT_Buffer_CopyToDevice(PJRT_Buffer_CopyToDevice_Args* args);
+PJRT_Error* PJRT_Buffer_CopyToMemory(PJRT_Buffer_CopyToMemory_Args* args);
 PJRT_Error* PJRT_Buffer_ToHostBuffer(PJRT_Buffer_ToHostBuffer_Args* args);
 PJRT_Error* ITEX_PJRT_Buffer_ToHostBuffer(PJRT_Buffer_ToHostBuffer_Args* args);
 PJRT_Error* PJRT_Buffer_IsOnCpu(PJRT_Buffer_IsOnCpu_Args* args);
 PJRT_Error* PJRT_Buffer_ReadyEvent(PJRT_Buffer_ReadyEvent_Args* args);
 PJRT_Error* PJRT_Buffer_UnsafePointer(PJRT_Buffer_UnsafePointer_Args* args);
+PJRT_Error* PJRT_Buffer_IncreaseExternalReferenceCount(
+    PJRT_Buffer_IncreaseExternalReferenceCount_Args* args);
+PJRT_Error* PJRT_Buffer_DecreaseExternalReferenceCount(
+    PJRT_Buffer_DecreaseExternalReferenceCount_Args* args);
+PJRT_Error* PJRT_Buffer_OpaqueDeviceMemoryDataPointer(
+    PJRT_Buffer_OpaqueDeviceMemoryDataPointer_Args* args);
 
+PJRT_Error* PJRT_CopyToDeviceStream_Destroy(
+    PJRT_CopyToDeviceStream_Destroy_Args* args);
 PJRT_Error* PJRT_CopyToDeviceStream_AddChunk(
     PJRT_CopyToDeviceStream_AddChunk_Args* args);
 PJRT_Error* PJRT_CopyToDeviceStream_TotalBytes(
@@ -295,15 +363,12 @@ PJRT_Error* PJRT_TopologyDescription_PlatformVersion(
     PJRT_TopologyDescription_PlatformVersion_Args* args);
 PJRT_Error* PJRT_TopologyDescription_GetDeviceDescriptions(
     PJRT_TopologyDescription_GetDeviceDescriptions_Args* args);
+PJRT_Error* PJRT_TopologyDescription_Serialize(
+    PJRT_TopologyDescription_Serialize_Args* args);
+PJRT_Error* PJRT_TopologyDescription_Attributes(
+    PJRT_TopologyDescription_Attributes_Args* args);
 
 PJRT_Error* PJRT_Compile(PJRT_Compile_Args* args);
-
-PJRT_Error* PJRT_Executable_Fingerprint(
-    PJRT_Executable_Fingerprint_Args* args);
-PJRT_Error* PJRT_Client_TopologyDescription(
-    PJRT_Client_TopologyDescription_Args* args);
-PJRT_Error* PJRT_Executable_GetCompiledMemoryStats(
-    PJRT_Executable_GetCompiledMemoryStats_Args* args);
 
 // Helper macros and functions
 
@@ -338,15 +403,36 @@ PJRT_Error* PJRT_Executable_GetCompiledMemoryStats(
 std::string ProgramFormatErrorMsg(absl::string_view program_format);
 
 // Creates a C PJRT topology from a C++ PJRT topology.
-// The returned topology is owned by the caller and
-// should be destroyed with PJRT_TopologyDescription_Destroy.
+//
+// The returned topology is owned by the caller and should be destroyed with
+// PJRT_TopologyDescription_Destroy. This can be used to implement functions
+// like PJRT_TopologyDescription_Create that return an owned topo desc.
 PJRT_TopologyDescription* CreateWrapperDeviceTopology(
     std::unique_ptr<xla::PjRtTopologyDescription> cpp_topology);
+
+// Creates a C PJRT topology from a C++ PJRT topology.
+//
+// The returned topology is *not* owned by the caller and should *not* be
+// destroyed with PJRT_TopologyDescription_Destroy. This can be used to
+// implement functions like PJRT_Client_TopologyDescription that return a topo
+// desc owned by something else.
+PJRT_TopologyDescription* CreateWrapperDeviceTopology(
+    const xla::PjRtTopologyDescription* cpp_topology);
 
 // Creates a C PJRT client from a C++ PJRT client and creates C PJRT devices
 // from cpp_client's devices. The returned client is owned by the caller and
 // should be destroyed with PJRT_Client_Destroy.
 PJRT_Client* CreateWrapperClient(std::unique_ptr<xla::PjRtClient> cpp_client);
+
+// Helper functions for converting C key-value store callbacks to C++ callbacks.
+std::shared_ptr<xla::KeyValueStoreInterface> ToCppKeyValueStore(
+    PJRT_KeyValueGetCallback c_get_callback, void* get_user_arg,
+    PJRT_KeyValuePutCallback c_put_callback, void* put_user_arg);
+
+// A method that does not nothing other than returning a nullptr. Can be used as
+// the implementation of PJRT_Plugin_Initialize for plugins that do not require
+// specific initialization.
+PJRT_Error* PJRT_Plugin_Initialize_NoOp(PJRT_Plugin_Initialize_Args* args);
 
 extern "C" {
 const PJRT_Api* GetITEXPjrtApi();
@@ -354,4 +440,4 @@ const PJRT_Api* GetITEXPjrtApi();
 
 }  // namespace pjrt
 
-#endif  // ITEX_CORE_COMPILER_XLA_PJRT_XPU_PJRT_CLIENT_H_
+#endif  // XLA_PJRT_TF_XPU_PJRT_CLIENT_H_

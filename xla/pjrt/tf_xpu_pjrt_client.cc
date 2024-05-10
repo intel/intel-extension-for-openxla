@@ -2042,6 +2042,7 @@ PJRT_Error* PJRT_TopologyDescription_Create(
       "Topology not supported for GPU compilation.")};
 }
 
+
 PJRT_Error* PJRT_TopologyDescription_Destroy(
     PJRT_TopologyDescription_Destroy_Args* args) {
   PJRT_RETURN_IF_ERROR(CheckMatchingStructSizes(
@@ -2331,6 +2332,7 @@ PJRT_Error* PJRT_Client_Create(PJRT_Client_Create_Args* args) {
       "PJRT_Client_Create_Args", PJRT_Client_Create_Args_STRUCT_SIZE,
       args->struct_size));
 
+  xla::GpuClientOptions gpu_client_options = {allocator_config};
   PJRT_ASSIGN_OR_RETURN(
       // std::unique_ptr<xla::PjRtClient> client,
       // xla::GetStreamExecutorXpuClient(
@@ -2338,7 +2340,7 @@ PJRT_Error* PJRT_Client_Create(PJRT_Client_Create_Args* args) {
       //     /*node_id=*/0, /*num_nodes*/ 1,
       //     /*allowed_devices*/ std::nullopt, /*platform_name*/ "SYCL"));
       std::unique_ptr<xla::PjRtClient> client, 
-      GetStreamExecutorGpuClient(xla::GpuClientOptions()));
+      GetStreamExecutorGpuClient(gpu_client_options));
   args->client = pjrt::CreateWrapperClient(std::move(client));
   return nullptr;
 }
