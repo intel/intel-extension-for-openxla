@@ -15,6 +15,8 @@ limitations under the License.
 
 #pragma once
 
+#include <cmath>
+
 #include "xetla.hpp"
 
 namespace gpu::xetla {
