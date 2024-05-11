@@ -22,6 +22,7 @@ This is an implementation of the Flash Attention algorithm
 
 #pragma once
 
+#include <cmath>
 #include <limits>
 
 #include "fmha_policy.h"
