@@ -1425,7 +1425,7 @@ index dca7a07a8..58b2cbf7a 100644
                          MakeGetTupleElementHlo(new_conv, 0));
      TF_RETURN_IF_ERROR(comp->ReplaceInstruction(instr, new_instr));
 diff --git a/xla/service/gpu/cudnn_fused_mha_rewriter.cc b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
-index 04fe02e37..6474bb40a 100644
+index 04fe02e37..83d8c9f94 100644
 --- a/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 +++ b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 @@ -235,12 +235,14 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
@@ -1538,21 +1538,7 @@ index 04fe02e37..6474bb40a 100644
      match_result = MatchBmm1UnfusedBiasSoftmaxBmm2(
          match_result, match_result.matched_softmax_input, has_dropout);
      if (match_result.has_match) {
-@@ -1239,6 +1263,7 @@ absl::StatusOr<bool> IsMHABlockSupported(
-     return false;
-   }
- 
-+#if !TENSORFLOW_USE_SYCL
-   if (bmm_1->shape().rank() != 4 || bmm_2->shape().rank() != 4) {
-     if (VLOG_IS_ON(2)) {
-       VLOG(2) << "Unsupported bmm rank for cuDNN MHA fusion:\n"
-@@ -1248,11 +1273,13 @@ absl::StatusOr<bool> IsMHABlockSupported(
-     }
-     return false;
-   }
-+#endif
- 
-   // check if matched attention block is supported by cuDNN flash attention.
+@@ -1253,6 +1277,7 @@ absl::StatusOr<bool> IsMHABlockSupported(
    TF_ASSIGN_OR_RETURN(is_flash_attention,
                        IsFlashAttention(bmm_1, is_causal_mask, custom_call_name,
                                         cc, cudnn_version));
@@ -1560,7 +1546,7 @@ index 04fe02e37..6474bb40a 100644
    if (is_flash_attention) {
      if (is_causal_mask) {
        // if bias is causal mask, needs to remove bias from name
-@@ -1269,6 +1296,11 @@ absl::StatusOr<bool> IsMHABlockSupported(
+@@ -1269,6 +1294,11 @@ absl::StatusOr<bool> IsMHABlockSupported(
      }
      return true;
    }
@@ -1572,7 +1558,7 @@ index 04fe02e37..6474bb40a 100644
    // otherwise check if it is supported by regular attention
    TF_ASSIGN_OR_RETURN(bool is_bmm1_supported,
                        IsSupportedBMM1(bmm_1, is_training));
-@@ -1856,6 +1888,8 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1856,6 +1886,8 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
          comp->parent()->config().debug_options();
      const auto cudnn_version =
          GetRealCuDNNVersion(cudnn_version_, stream_executor_);
@@ -1581,7 +1567,7 @@ index 04fe02e37..6474bb40a 100644
  #if CUDA_VERSION < 12000
      return false;
  #endif
-@@ -1865,6 +1899,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1865,6 +1897,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
              stream_executor::dnn::VersionInfo(8, 8, 0))) {
        return false;
      }
@@ -1589,7 +1575,7 @@ index 04fe02e37..6474bb40a 100644
      for (HloInstruction* instr : comp->MakeInstructionPostOrder()) {
        bool v_transposed = false;
        bool changed = false;
-@@ -1950,6 +1985,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1950,6 +1983,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
                                matched_result.need_canonicalization));
            continue;
          }
@@ -1597,7 +1583,7 @@ index 04fe02e37..6474bb40a 100644
          // if fwd uses mask input, then bwd needs cudnn 8.9.1 to take in a mask
          // input if cudnn version < 8.9.1 we won't lower the bwd pass
          if (matched_result.matched_mask != nullptr &&
-@@ -1979,6 +2015,26 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1979,6 +2013,26 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
                                matched_result.need_canonicalization));
            continue;
          }

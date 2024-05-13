@@ -41,9 +41,9 @@ print(args, file=sys.stderr)
 model_id = args.model_id
 scheduler, scheduler_state = FlaxDPMSolverMultistepScheduler.from_pretrained(model_id, subfolder="scheduler")
 if args.pipeline_mode == "img2img":
-    pipeline, params = FlaxStableDiffusionImg2ImgPipeline.from_pretrained(model_id, scheduler=scheduler, revision="bf16", safety_checker=None, feature_extractor=None, dtype=jax.numpy.bfloat16)
+    pipeline, params = FlaxStableDiffusionImg2ImgPipeline.from_pretrained(model_id, scheduler=scheduler, revision="bf16", safety_checker=None, feature_extractor=None, dtype=jax.numpy.bfloat16, split_head_dim=True)
 else:
-    pipeline, params = FlaxStableDiffusionPipeline.from_pretrained(model_id, scheduler=scheduler, revision="bf16", safety_checker=None, feature_extractor=None, dtype=jax.numpy.bfloat16)
+    pipeline, params = FlaxStableDiffusionPipeline.from_pretrained(model_id, scheduler=scheduler, revision="bf16", safety_checker=None, feature_extractor=None, dtype=jax.numpy.bfloat16, split_head_dim=True)
 params["scheduler"] = scheduler_state
 
 prompt = "a photo of an astronaut riding a horse on mars"
