@@ -77,7 +77,7 @@ template <typename T, typename Func, int size>
 struct AllReduceKernel;
 
 template <typename T, typename Func, typename AccT = T>
-void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
+void allreduce_sycl(se::gpu::GpuStreamHandle stream, int tensor_size,
                      std::vector<Participant>& participants,
                      int reduction_size) {
   auto group_size =
@@ -162,7 +162,7 @@ template <typename T, int size>
 struct AllGatherKernel;
 
 template <typename T>
-void allgather_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
+void allgather_sycl(se::gpu::GpuStreamHandle stream, int tensor_size,
                      std::vector<Participant>& participants,
                      int reduction_size) {
   auto group_size =
@@ -200,7 +200,7 @@ template <typename T, int size>
 struct AllToAllKernel;
 
 template <typename T>
-void alltoall_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
+void alltoall_sycl(se::gpu::GpuStreamHandle stream, int tensor_size,
                     std::vector<AlltoAllParticipant>& participants,
                     int reduction_size) {
   auto group_size =
@@ -245,7 +245,7 @@ template <typename T, typename Func, int size>
 struct ReduceScatterKernel;
 
 template <typename T, typename Func>
-void reducescatter_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
+void reducescatter_sycl(se::gpu::GpuStreamHandle stream, int tensor_size,
                          std::vector<Participant>& participants,
                          int reduction_size) {
   auto group_size =
@@ -345,7 +345,7 @@ template <typename T, int size>
 struct CollectivePermuteKernel;
 
 template <typename T>
-void permute_dpcpp(se::gpu::GpuStreamHandle stream, int tensor_size,
+void permute_sycl(se::gpu::GpuStreamHandle stream, int tensor_size,
                    std::vector<PermuteParticipant>& participants,
                    int reduction_size) {
   auto group_size =
@@ -424,29 +424,29 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
 
       if (reduction_kind == ReductionKind::SUM) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::plus<bool>>(stream, element_count, p,
+          allreduce_sycl<bool, sycl::plus<bool>>(stream, element_count, p,
                                                   comm->nranks);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::plus<float>>(stream, element_count, p,
+          allreduce_sycl<float, sycl::plus<float>>(stream, element_count, p,
                                                     comm->nranks);
         else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::plus<double>>(stream, element_count, p,
+          allreduce_sycl<double, sycl::plus<double>>(stream, element_count, p,
                                                       comm->nranks);
         else if (dtype == S32)
-          allreduce_dpcpp<int32_t, sycl::plus<int32_t>>(stream, element_count,
+          allreduce_sycl<int32_t, sycl::plus<int32_t>>(stream, element_count,
                                                         p, comm->nranks);
         else if (dtype == S64)
-          allreduce_dpcpp<int64_t, sycl::plus<int64_t>>(stream, element_count,
+          allreduce_sycl<int64_t, sycl::plus<int64_t>>(stream, element_count,
                                                         p, comm->nranks);
         else if (dtype == C64)
-          allreduce_dpcpp<std::complex<float>, sycl::plus<std::complex<float>>>(
+          allreduce_sycl<std::complex<float>, sycl::plus<std::complex<float>>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == C128)
-          allreduce_dpcpp<std::complex<double>,
+          allreduce_sycl<std::complex<double>,
                           sycl::plus<std::complex<double>>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
-          allreduce_dpcpp<bfloat16, sycl::plus<float>, float>(
+          allreduce_sycl<bfloat16, sycl::plus<float>, float>(
               stream, element_count, p, comm->nranks);
 
         else
@@ -455,30 +455,30 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::PRODUCT) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::multiplies<bool>>(stream, element_count,
+          allreduce_sycl<bool, sycl::multiplies<bool>>(stream, element_count,
                                                         p, comm->nranks);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::multiplies<float>>(stream, element_count,
+          allreduce_sycl<float, sycl::multiplies<float>>(stream, element_count,
                                                           p, comm->nranks);
         else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::multiplies<double>>(
+          allreduce_sycl<double, sycl::multiplies<double>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S32)
-          allreduce_dpcpp<int32_t, sycl::multiplies<int32_t>>(
+          allreduce_sycl<int32_t, sycl::multiplies<int32_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S64)
-          allreduce_dpcpp<int64_t, sycl::multiplies<int64_t>>(
+          allreduce_sycl<int64_t, sycl::multiplies<int64_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == C64)
-          allreduce_dpcpp<std::complex<float>,
+          allreduce_sycl<std::complex<float>,
                           sycl::multiplies<std::complex<float>>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == C128)
-          allreduce_dpcpp<std::complex<double>,
+          allreduce_sycl<std::complex<double>,
                           sycl::multiplies<std::complex<double>>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
-          allreduce_dpcpp<bfloat16, sycl::multiplies<float>, float>(
+          allreduce_sycl<bfloat16, sycl::multiplies<float>, float>(
               stream, element_count, p, comm->nranks);
 
         else
@@ -487,22 +487,22 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::MIN) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::minimum<bool>>(stream, element_count, p,
+          allreduce_sycl<bool, sycl::minimum<bool>>(stream, element_count, p,
                                                      comm->nranks);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::minimum<float>>(stream, element_count, p,
+          allreduce_sycl<float, sycl::minimum<float>>(stream, element_count, p,
                                                        comm->nranks);
         else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::minimum<double>>(stream, element_count,
+          allreduce_sycl<double, sycl::minimum<double>>(stream, element_count,
                                                          p, comm->nranks);
         else if (dtype == S32)
-          allreduce_dpcpp<int32_t, sycl::minimum<int32_t>>(
+          allreduce_sycl<int32_t, sycl::minimum<int32_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S64)
-          allreduce_dpcpp<int64_t, sycl::minimum<int64_t>>(
+          allreduce_sycl<int64_t, sycl::minimum<int64_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
-          allreduce_dpcpp<bfloat16, sycl::minimum<float>, float>(
+          allreduce_sycl<bfloat16, sycl::minimum<float>, float>(
               stream, element_count, p, comm->nranks);
 
         else
@@ -511,22 +511,22 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::MAX) {
         if (dtype == PRED)
-          allreduce_dpcpp<bool, sycl::maximum<bool>>(stream, element_count, p,
+          allreduce_sycl<bool, sycl::maximum<bool>>(stream, element_count, p,
                                                      comm->nranks);
         else if (dtype == F32)
-          allreduce_dpcpp<float, sycl::maximum<float>>(stream, element_count, p,
+          allreduce_sycl<float, sycl::maximum<float>>(stream, element_count, p,
                                                        comm->nranks);
         else if (dtype == F64)
-          allreduce_dpcpp<double, sycl::maximum<double>>(stream, element_count,
+          allreduce_sycl<double, sycl::maximum<double>>(stream, element_count,
                                                          p, comm->nranks);
         else if (dtype == S32)
-          allreduce_dpcpp<int32_t, sycl::maximum<int32_t>>(
+          allreduce_sycl<int32_t, sycl::maximum<int32_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S64)
-          allreduce_dpcpp<int64_t, sycl::maximum<int64_t>>(
+          allreduce_sycl<int64_t, sycl::maximum<int64_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == BF16)
-          allreduce_dpcpp<bfloat16, sycl::maximum<float>, float>(
+          allreduce_sycl<bfloat16, sycl::maximum<float>, float>(
               stream, element_count, p, comm->nranks);
 
         else
@@ -575,15 +575,15 @@ void sycl_allgather(const void* send_buffer, void* recv_buffer,
       se::gpu::GpuStreamHandle stream = p[0].stream;
       stream_wait_streamlist(stream, p);
       if (dtype == PRED)
-        allgather_dpcpp<bool>(stream, element_count, p, comm->nranks);
+        allgather_sycl<bool>(stream, element_count, p, comm->nranks);
       else if (dtype == F32)
-        allgather_dpcpp<float>(stream, element_count, p, comm->nranks);
+        allgather_sycl<float>(stream, element_count, p, comm->nranks);
       else if (dtype == F64)
-        allgather_dpcpp<double>(stream, element_count, p, comm->nranks);
+        allgather_sycl<double>(stream, element_count, p, comm->nranks);
       else if (dtype == S32)
-        allgather_dpcpp<int32_t>(stream, element_count, p, comm->nranks);
+        allgather_sycl<int32_t>(stream, element_count, p, comm->nranks);
       else if (dtype == S64)
-        allgather_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
+        allgather_sycl<int64_t>(stream, element_count, p, comm->nranks);
       else
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)
@@ -627,15 +627,15 @@ void sycl_alltoall(std::vector<const void*> send_buffers,
       se::gpu::GpuStreamHandle stream = p[0].stream;
       stream_wait_streamlist(stream, p);
       if (dtype == PRED)
-        alltoall_dpcpp<bool>(stream, element_count, p, comm->nranks);
+        alltoall_sycl<bool>(stream, element_count, p, comm->nranks);
       else if (dtype == F32)
-        alltoall_dpcpp<float>(stream, element_count, p, comm->nranks);
+        alltoall_sycl<float>(stream, element_count, p, comm->nranks);
       else if (dtype == F64)
-        alltoall_dpcpp<double>(stream, element_count, p, comm->nranks);
+        alltoall_sycl<double>(stream, element_count, p, comm->nranks);
       else if (dtype == S32)
-        alltoall_dpcpp<int32_t>(stream, element_count, p, comm->nranks);
+        alltoall_sycl<int32_t>(stream, element_count, p, comm->nranks);
       else if (dtype == S64)
-        alltoall_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
+        alltoall_sycl<int64_t>(stream, element_count, p, comm->nranks);
       else
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)
@@ -681,26 +681,26 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
 
       if (reduction_kind == ReductionKind::SUM) {
         if (dtype == PRED)
-          reducescatter_dpcpp<bool, sycl::plus<bool>>(stream, element_count, p,
+          reducescatter_sycl<bool, sycl::plus<bool>>(stream, element_count, p,
                                                       comm->nranks);
         else if (dtype == F32)
-          reducescatter_dpcpp<float, sycl::plus<float>>(stream, element_count,
+          reducescatter_sycl<float, sycl::plus<float>>(stream, element_count,
                                                         p, comm->nranks);
         else if (dtype == F64)
-          reducescatter_dpcpp<double, sycl::plus<double>>(stream, element_count,
+          reducescatter_sycl<double, sycl::plus<double>>(stream, element_count,
                                                           p, comm->nranks);
         else if (dtype == S32)
-          reducescatter_dpcpp<int32_t, sycl::plus<int32_t>>(
+          reducescatter_sycl<int32_t, sycl::plus<int32_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S64)
-          reducescatter_dpcpp<int64_t, sycl::plus<int64_t>>(
+          reducescatter_sycl<int64_t, sycl::plus<int64_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == C64)
-          reducescatter_dpcpp<std::complex<float>,
+          reducescatter_sycl<std::complex<float>,
                               sycl::plus<std::complex<float>>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == C128)
-          reducescatter_dpcpp<std::complex<double>,
+          reducescatter_sycl<std::complex<double>,
                               sycl::plus<std::complex<double>>>(
               stream, element_count, p, comm->nranks);
         else
@@ -709,26 +709,26 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::PRODUCT) {
         if (dtype == PRED)
-          reducescatter_dpcpp<bool, sycl::multiplies<bool>>(
+          reducescatter_sycl<bool, sycl::multiplies<bool>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == F32)
-          reducescatter_dpcpp<float, sycl::multiplies<float>>(
+          reducescatter_sycl<float, sycl::multiplies<float>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == F64)
-          reducescatter_dpcpp<double, sycl::multiplies<double>>(
+          reducescatter_sycl<double, sycl::multiplies<double>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S32)
-          reducescatter_dpcpp<int32_t, sycl::multiplies<int32_t>>(
+          reducescatter_sycl<int32_t, sycl::multiplies<int32_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S64)
-          reducescatter_dpcpp<int64_t, sycl::multiplies<int64_t>>(
+          reducescatter_sycl<int64_t, sycl::multiplies<int64_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == C64)
-          reducescatter_dpcpp<std::complex<float>,
+          reducescatter_sycl<std::complex<float>,
                               sycl::multiplies<std::complex<float>>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == C128)
-          reducescatter_dpcpp<std::complex<double>,
+          reducescatter_sycl<std::complex<double>,
                               sycl::multiplies<std::complex<double>>>(
               stream, element_count, p, comm->nranks);
         else
@@ -737,19 +737,19 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::MIN) {
         if (dtype == PRED)
-          reducescatter_dpcpp<bool, sycl::minimum<bool>>(stream, element_count,
+          reducescatter_sycl<bool, sycl::minimum<bool>>(stream, element_count,
                                                          p, comm->nranks);
         else if (dtype == F32)
-          reducescatter_dpcpp<float, sycl::minimum<float>>(
+          reducescatter_sycl<float, sycl::minimum<float>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == F64)
-          reducescatter_dpcpp<double, sycl::minimum<double>>(
+          reducescatter_sycl<double, sycl::minimum<double>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S32)
-          reducescatter_dpcpp<int32_t, sycl::minimum<int32_t>>(
+          reducescatter_sycl<int32_t, sycl::minimum<int32_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S64)
-          reducescatter_dpcpp<int64_t, sycl::minimum<int64_t>>(
+          reducescatter_sycl<int64_t, sycl::minimum<int64_t>>(
               stream, element_count, p, comm->nranks);
         else
           LOG(FATAL) << "PrimitiveType "
@@ -757,19 +757,19 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                      << " is not supported in AllReduce.";
       } else if (reduction_kind == ReductionKind::MAX) {
         if (dtype == PRED)
-          reducescatter_dpcpp<bool, sycl::maximum<bool>>(stream, element_count,
+          reducescatter_sycl<bool, sycl::maximum<bool>>(stream, element_count,
                                                          p, comm->nranks);
         else if (dtype == F32)
-          reducescatter_dpcpp<float, sycl::maximum<float>>(
+          reducescatter_sycl<float, sycl::maximum<float>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == F64)
-          reducescatter_dpcpp<double, sycl::maximum<double>>(
+          reducescatter_sycl<double, sycl::maximum<double>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S32)
-          reducescatter_dpcpp<int32_t, sycl::maximum<int32_t>>(
+          reducescatter_sycl<int32_t, sycl::maximum<int32_t>>(
               stream, element_count, p, comm->nranks);
         else if (dtype == S64)
-          reducescatter_dpcpp<int64_t, sycl::maximum<int64_t>>(
+          reducescatter_sycl<int64_t, sycl::maximum<int64_t>>(
               stream, element_count, p, comm->nranks);
         else
           LOG(FATAL) << "PrimitiveType "
@@ -822,15 +822,15 @@ void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
       se::gpu::GpuStreamHandle stream = p[0].stream;
       stream_wait_streamlist(stream, p);
       if (dtype == PRED)
-        permute_dpcpp<bool>(stream, element_count, p, comm->nranks);
+        permute_sycl<bool>(stream, element_count, p, comm->nranks);
       else if (dtype == F32)
-        permute_dpcpp<float>(stream, element_count, p, comm->nranks);
+        permute_sycl<float>(stream, element_count, p, comm->nranks);
       else if (dtype == F64)
-        permute_dpcpp<double>(stream, element_count, p, comm->nranks);
+        permute_sycl<double>(stream, element_count, p, comm->nranks);
       else if (dtype == S32)
-        permute_dpcpp<int32_t>(stream, element_count, p, comm->nranks);
+        permute_sycl<int32_t>(stream, element_count, p, comm->nranks);
       else if (dtype == S64)
-        permute_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
+        permute_sycl<int64_t>(stream, element_count, p, comm->nranks);
       else
         LOG(FATAL) << "PrimitiveType "
                    << primitive_util::LowercasePrimitiveTypeName(dtype)

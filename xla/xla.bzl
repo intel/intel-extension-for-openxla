@@ -1,6 +1,6 @@
 # Return the options to use for a C++ library or binary build.
 # Uses the ":optmode" config_setting to pick the options.
-load("@local_config_dpcpp//dpcpp:build_defs.bzl", "if_dpcpp", "if_xetla")
+load("@local_config_sycl//sycl:build_defs.bzl", "if_sycl", "if_xetla")
 
 def if_linux_x86_64(a, otherwise = []):
     return select({
@@ -16,7 +16,7 @@ def tf_copts(android_optimization_level_override = "-O2", is_external = False):
         [
             "-Wno-sign-compare",
             "-Wno-unknown-pragmas",
-            # "-fno-exceptions", # TODO(itex): disable it first as we need expection in SE's dpcpp backend
+            # "-fno-exceptions", # TODO(itex): disable it first as we need expection in SE's sycl backend
             "-ftemplate-depth=900",
             "-msse3",
             "-pthread",
@@ -24,8 +24,8 @@ def tf_copts(android_optimization_level_override = "-O2", is_external = False):
     )
 
 def xetla_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
-    kwargs["copts"] = kwargs.get("copts", []) + if_dpcpp(["-dpcpp_compile"]) + if_xetla(["--xetla"])
-    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_dpcpp(["-link_stage"]) + if_xetla(["--xetla"])
+    kwargs["copts"] = kwargs.get("copts", []) + if_sycl(["-sycl_compile"]) + if_xetla(["--xetla"])
+    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_sycl(["-link_stage"]) + if_xetla(["--xetla"])
     native.cc_library(
         name = name,
         srcs = srcs,
@@ -35,8 +35,8 @@ def xetla_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
     )
 
 def xpu_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
-    kwargs["copts"] = kwargs.get("copts", []) + if_dpcpp(["-dpcpp_compile"])
-    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_dpcpp(["-link_stage"])
+    kwargs["copts"] = kwargs.get("copts", []) + if_sycl(["-sycl_compile"])
+    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_sycl(["-link_stage"])
     native.cc_library(
         name = name,
         srcs = srcs,
@@ -46,8 +46,8 @@ def xpu_library(name, srcs = [], hdrs = [], deps = [], *argc, **kwargs):
     )
 
 def xpu_binary(name, srcs = [], deps = [], *argc, **kwargs):
-    kwargs["copts"] = kwargs.get("copts", []) + if_dpcpp(["-dpcpp_compile"])
-    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_dpcpp(["-link_stage"])
+    kwargs["copts"] = kwargs.get("copts", []) + if_sycl(["-sycl_compile"])
+    kwargs["linkopts"] = kwargs.get("linkopts", []) + if_sycl(["-link_stage"])
     native.cc_binary(
         name = name,
         srcs = srcs,

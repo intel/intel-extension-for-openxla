@@ -83,11 +83,11 @@ Status CreateOneDnnPrimitive(
     absl::Span<const se::DeviceMemoryBase> operand_buffers,
     se::DeviceMemoryBase result_buffer, const Thunk::ExecuteParams& params,
     se::ScratchAllocator* scratch_allocator) {
-  sycl::queue* dpcpp_stream = se::gpu::AsGpuStreamValue(params.stream);
+  sycl::queue* sycl_stream = se::gpu::AsGpuStreamValue(params.stream);
   auto& buffer_allocations = *params.buffer_allocations;
-  onednn_primitive->engine = FindOrCreateEngine(dpcpp_stream);
+  onednn_primitive->engine = FindOrCreateEngine(sycl_stream);
   onednn_primitive->stream =
-      dnnl::sycl_interop::make_stream(onednn_primitive->engine, *dpcpp_stream);
+      dnnl::sycl_interop::make_stream(onednn_primitive->engine, *sycl_stream);
   DataLayout input_dl;
   FilterLayout filter_dl;
   DataLayout output_dl;

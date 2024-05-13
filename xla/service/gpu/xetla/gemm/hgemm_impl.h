@@ -21,9 +21,9 @@ limitations under the License.
 #include "epilogue_impl.h"
 
 // Command group function implementation
-#define DPCPP_Q_CGF(h) [&](sycl::handler & h)
+#define SYCL_Q_CGF(h) [&](sycl::handler & h)
 
-#define DPCPP_Q_SUBMIT(q, cgf, ...) \
+#define SYCL_Q_SUBMIT(q, cgf, ...) \
   { auto e = (q).submit((cgf), ##__VA_ARGS__); }
 
 namespace gpu {
@@ -102,7 +102,7 @@ inline void hgemm_addmm(sycl::queue& queue, scalar_t* out, const scalar_t* res,
                         const int n, const int k, const float alpha,
                         const float beta) {
   HGEMM_DEFINITIONS
-  auto cgf = DPCPP_Q_CGF(cgh) {
+  auto cgf = SYCL_Q_CGF(cgh) {
     cgh.parallel_for<
         HGEMM_ADDMM_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
                            L3_KS, SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
@@ -143,7 +143,7 @@ inline void hgemm_addmm(sycl::queue& queue, scalar_t* out, const scalar_t* res,
           gemm_op(ei, arg);
         });
   };
-  DPCPP_Q_SUBMIT(queue, cgf);
+  SYCL_Q_SUBMIT(queue, cgf);
 }
 
 template <typename scalar_t, int WG_M, int WG_N, int SG_M, int SG_N, int SG_K,
@@ -153,7 +153,7 @@ inline void hgemm_common(sycl::queue& queue, scalar_t* out, const scalar_t* a,
                          const scalar_t* b, const int m, const int n,
                          const int k) {
   HGEMM_DEFINITIONS
-  auto cgf = DPCPP_Q_CGF(cgh) {
+  auto cgf = SYCL_Q_CGF(cgh) {
     cgh.parallel_for<
         HGEMM_COMMON_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
                             L3_KS, SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
@@ -190,7 +190,7 @@ inline void hgemm_common(sycl::queue& queue, scalar_t* out, const scalar_t* a,
           gemm_op(ei, arg);
         });
   };
-  DPCPP_Q_SUBMIT(queue, cgf);
+  SYCL_Q_SUBMIT(queue, cgf);
 }
 
 template <typename scalar_t, int WG_M, int WG_N, int SG_M, int SG_N, int SG_K,
@@ -200,7 +200,7 @@ inline void hgemm_res(sycl::queue& queue, scalar_t* out, const scalar_t* a,
                       const scalar_t* b, const scalar_t* res, const int m,
                       const int n, const int k, const float res_factor) {
   HGEMM_DEFINITIONS
-  auto cgf = DPCPP_Q_CGF(cgh) {
+  auto cgf = SYCL_Q_CGF(cgh) {
     cgh.parallel_for<
         HGEMM_RES_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, L3_KS,
                          SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
@@ -242,7 +242,7 @@ inline void hgemm_res(sycl::queue& queue, scalar_t* out, const scalar_t* a,
           gemm_op(ei, arg);
         });
   };
-  DPCPP_Q_SUBMIT(queue, cgf);
+  SYCL_Q_SUBMIT(queue, cgf);
 }
 
 template <typename scalar_t, int WG_M, int WG_N, int SG_M, int SG_N, int SG_K,
@@ -252,7 +252,7 @@ inline void hgemm_bias(sycl::queue& queue, scalar_t* out, const scalar_t* a,
                        const scalar_t* b, const scalar_t* bias, const int m,
                        const int n, const int k, const float bias_factor) {
   HGEMM_DEFINITIONS
-  auto cgf = DPCPP_Q_CGF(cgh) {
+  auto cgf = SYCL_Q_CGF(cgh) {
     cgh.parallel_for<
         HGEMM_BIAS_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, L3_KS,
                           SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
@@ -293,7 +293,7 @@ inline void hgemm_bias(sycl::queue& queue, scalar_t* out, const scalar_t* a,
           gemm_op(ei, arg);
         });
   };
-  DPCPP_Q_SUBMIT(queue, cgf);
+  SYCL_Q_SUBMIT(queue, cgf);
 }
 
 template <typename scalar_t, int WG_M, int WG_N, int SG_M, int SG_N, int SG_K,
@@ -305,7 +305,7 @@ inline void hgemm_bias_res(sycl::queue& queue, scalar_t* out, const scalar_t* a,
                            const int k, const float bias_factor,
                            const float res_factor) {
   HGEMM_DEFINITIONS
-  auto cgf = DPCPP_Q_CGF(cgh) {
+  auto cgf = SYCL_Q_CGF(cgh) {
     cgh.parallel_for<
         HGEMM_BIAS_RES_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
                               L3_KS, SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
@@ -349,7 +349,7 @@ inline void hgemm_bias_res(sycl::queue& queue, scalar_t* out, const scalar_t* a,
           gemm_op(ei, arg);
         });
   };
-  DPCPP_Q_SUBMIT(queue, cgf);
+  SYCL_Q_SUBMIT(queue, cgf);
 }
 
 template <typename scalar_t, int WG_M, int WG_N, int SG_M, int SG_N, int SG_K,
@@ -360,7 +360,7 @@ inline void hgemm_bias_gelu(sycl::queue& queue, scalar_t* out,
                             const scalar_t* bias, const int m, const int n,
                             const int k, const float bias_factor) {
   HGEMM_DEFINITIONS
-  auto cgf = DPCPP_Q_CGF(cgh) {
+  auto cgf = SYCL_Q_CGF(cgh) {
     cgh.parallel_for<
         HGEMM_BIAS_GELU_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
                                L3_KS, SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
@@ -402,7 +402,7 @@ inline void hgemm_bias_gelu(sycl::queue& queue, scalar_t* out,
           gemm_op(ei, arg);
         });
   };
-  DPCPP_Q_SUBMIT(queue, cgf);
+  SYCL_Q_SUBMIT(queue, cgf);
 }
 
 template <typename scalar_t, int WG_M, int WG_N, int SG_M, int SG_N, int SG_K,
@@ -426,7 +426,7 @@ inline void hgemm_qkv(sycl::queue& queue, scalar_t* out0, scalar_t* out1,
   cl::sycl::range<3> LocalRange{SLM_KS, thread_range_m, thread_range_n};
   cl::sycl::nd_range<3> NDRange(GroupRange * LocalRange, LocalRange);
 
-  auto cgf = DPCPP_Q_CGF(cgh) {
+  auto cgf = SYCL_Q_CGF(cgh) {
     cgh.parallel_for<
         HGEMM_QKV_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, L3_KS,
                          SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
@@ -472,7 +472,7 @@ inline void hgemm_qkv(sycl::queue& queue, scalar_t* out0, scalar_t* out1,
           gemm_op(ei, arg);
         });
   };
-  DPCPP_Q_SUBMIT(queue, cgf);
+  SYCL_Q_SUBMIT(queue, cgf);
 }
 
 template <typename scalar_t, int WG_M, int WG_N, int SG_M, int SG_N, int SG_K,
@@ -497,7 +497,7 @@ inline void hgemm_qkv_bias(sycl::queue& queue, scalar_t* out0, scalar_t* out1,
   cl::sycl::range<3> LocalRange{SLM_KS, thread_range_m, thread_range_n};
   cl::sycl::nd_range<3> NDRange(GroupRange * LocalRange, LocalRange);
 
-  auto cgf = DPCPP_Q_CGF(cgh) {
+  auto cgf = SYCL_Q_CGF(cgh) {
     cgh.parallel_for<
         HGEMM_QKV_BIAS_KERNEL<scalar_t, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
                               L3_KS, SYNC_FREQ, STAGES, B_ROW_MAJOR>>(
@@ -551,7 +551,7 @@ inline void hgemm_qkv_bias(sycl::queue& queue, scalar_t* out0, scalar_t* out1,
           gemm_op(ei, arg);
         });
   };
-  DPCPP_Q_SUBMIT(queue, cgf);
+  SYCL_Q_SUBMIT(queue, cgf);
 }
 
 #undef HGEMM_DEFINITIONS

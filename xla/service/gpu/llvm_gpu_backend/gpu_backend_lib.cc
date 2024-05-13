@@ -232,7 +232,7 @@ Status LinkAndOptimizeModule(llvm::Module* module,
                              llvm::TargetMachine* target_machine,
                              int inline_threshold) {
   bool opt = true;
-  tsl::ReadBoolFromEnvVar("DPCPP_LLVM_OPT", true, &opt);
+  tsl::ReadBoolFromEnvVar("SYCL_LLVM_OPT", true, &opt);
   if (opt) {
     RunOptimizationPipeline(module, hlo_module_config, target_machine);
   }
@@ -242,7 +242,7 @@ Status LinkAndOptimizeModule(llvm::Module* module,
 
   // verifyModule() returns true if the module is broken.
   TF_RET_CHECK(!llvm::verifyModule(*module, &err_stream))
-      << "Invalid LLVM IR after dpcpp optimizations:\n"
+      << "Invalid LLVM IR after sycl optimizations:\n"
       << err_stream.str() << "\n";
 
   return OkStatus();

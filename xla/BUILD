@@ -3,7 +3,7 @@ cc_binary(
     linkshared = True,
     visibility = ["//visibility:public"],
     deps = select({
-        "@local_config_dpcpp//dpcpp:using_dpcpp": [
+        "@local_config_sycl//sycl:using_sycl": [
             "//xla/pjrt:xpu_pjrt_client",
             "//xla/python:py_client_gpu",
         ],

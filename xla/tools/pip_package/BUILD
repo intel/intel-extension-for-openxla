@@ -4,12 +4,12 @@
 package(default_visibility = ["//visibility:private"])
 
 load("//xla:xla.bzl", "transitive_hdrs")
-load("@local_config_dpcpp//dpcpp:build_defs.bzl", "if_dpcpp")
+load("@local_config_sycl//sycl:build_defs.bzl", "if_sycl")
 
 COMMON_PIP_DEPS = [
     "MANIFEST.in",
     "xla_setup.py",
-] + if_dpcpp([
+] + if_sycl([
     "//xla:pjrt_plugin_xpu.so",
 ])
 
