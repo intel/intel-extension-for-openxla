@@ -2358,6 +2358,254 @@ index 02e89bccf..97d9b9e21 100644
    return ReductionCodegenInfo(
        tiling, reduction_dimensions.is_row_reduction, reduction_is_race_free,
        GroupDisjointReductions(analysis), hero_reduction);
+diff --git a/xla/service/gpu/fusions/transpose.cc b/xla/service/gpu/fusions/transpose.cc
+index 80c0b9391..6dce724dd 100644
+--- a/xla/service/gpu/fusions/transpose.cc
++++ b/xla/service/gpu/fusions/transpose.cc
+@@ -47,6 +47,7 @@ limitations under the License.
+ #include "xla/service/gpu/target_util.h"
+ #include "xla/service/llvm_ir/fused_ir_emitter.h"
+ #include "xla/service/llvm_ir/ir_array.h"
++#include "xla/service/llvm_ir/kernel_support_library.h"
+ #include "xla/service/llvm_ir/llvm_util.h"
+ #include "xla/status.h"
+ #include "xla/util.h"
+@@ -72,7 +73,7 @@ Tiling ComputeTransposeTiling(const TransposeDescription& tiled_transpose) {
+                                              transposed_dims[permutation[2]]};
+ 
+   // We tile along the minor dimensions pre- and post-transpose.
+-  absl::InlinedVector<int64_t, 4> tile_sizes{1, 1, 1};
++  absl::InlinedVector<int64_t, 4> tile_sizes{1, 1, 2};
+   tile_sizes[permutation[2]] = WarpSize() / kNumRows;
+   absl::InlinedVector<int64_t, 4> num_threads{1, 1, WarpSize()};
+   num_threads[permutation[2]] = kNumRows;
+@@ -177,61 +178,145 @@ absl::Status TransposeFusion::EmitKernel(IrEmitterContext& ir_emitter_context,
+         tile_size, absl::StrCat("tr_tile_", tile_idx));
+   }
+ 
++  KernelSupportLibrary ksl(builder, llvm_ir::UnrollMode::kDefaultUnroll);
++
+   auto tile_generator = [&](const TilingThreadIdInfo& thread_id_info,
+                             const llvm_ir::IrArray::Index& tile_start_index,
+                             absl::Span<llvm::Value* const> tile_dimensions) {
+     // Copy input parameter values to shared memory buffers:
+-    // tile[thread_id_y, thread_id_x] = input[index]
+-    EmitTile(builder, tiling_, thread_id_info, tile_dimensions,
+-             [&](absl::Span<llvm::Value* const> index_in_tile) {
+-               auto index = tile_start_index.AddOffset(index_in_tile, builder);
+-               for (const auto& tr : transposes) {
+-                 auto input_gen =
+-                     *fused_emitter.GetGenerator(*tr.instr->operand(0));
+-                 auto input_index = index.SourceIndexOfBitcast(
+-                     tr.instr->operand(0)->shape(), builder);
+-                 llvm::Value* value = *input_gen(input_index);
+-                 tiles[tr.instr].Store(value, index_in_tile, builder);
+-               }
+-
+-               // Compute all extra output values before writing them. This
+-               // avoids overwriting aliased input/output values before all
+-               // reads occurred.
+-               std::vector<std::tuple<llvm_ir::IrArray, llvm_ir::IrArray::Index,
+-                                      llvm::Value*>>
+-                   scheduled_writes;
+-               for (const auto& [output_idx, root] : extra_outputs) {
+-                 auto extra_output_index =
+-                     index.SourceIndexOfBitcast(root->shape(), builder);
+-                 auto output_gen = *fused_emitter.GetGenerator(*root);
+-                 llvm::Value* output_value = *output_gen(extra_output_index);
+-                 scheduled_writes.emplace_back(
+-                     outputs[output_idx], extra_output_index, output_value);
+-               }
+-
+-               for (const auto& [output, idx, value] : scheduled_writes) {
+-                 output.EmitWriteArrayElement(idx, value, builder);
+-               }
+-             });
++    // tile[thread_id_y, thread_id_x * 2] = input[index]
++    // tile[thread_id_y, thread_id_x * 2 + 1] = input[index + 1]
++    llvm::Type* index_ty = thread_id_info.thread_id->getType();
++    auto constant = [&](int64_t val) {
++      return llvm::ConstantInt::get(index_ty, val);
++    };
++    absl::InlinedVector<llvm::Value*, 4> tile_dimensions_Div2{
++        tile_dimensions[0], tile_dimensions[1],
++        builder->CreateUDiv(builder->CreateAdd(tile_dimensions[2], constant(1)),
++                            constant(2))};
++    EmitTile(
++        builder, tiling_, thread_id_info, tile_dimensions_Div2,
++        [&](absl::Span<llvm::Value* const> index_in_tile) {
++          absl::InlinedVector<llvm::Value*, 4> index_in_tile_1{
++              index_in_tile[0], index_in_tile[1],
++              builder->CreateMul(index_in_tile[2], constant(2))};
++          absl::InlinedVector<llvm::Value*, 4> index_in_tile_2{
++              index_in_tile[0], index_in_tile[1],
++              builder->CreateAdd(index_in_tile_1[2], constant(1))};
++
++          auto index_1 = tile_start_index.AddOffset(index_in_tile_1, builder);
++          auto index_2 = tile_start_index.AddOffset(index_in_tile_2, builder);
++
++          auto boundary = tile_start_index.AddOffset(tile_dimensions, builder);
++          auto boundary_multidim = boundary.multidim();
++          // auto index_1_multidim = index_1.multidim();
++          // auto* is_read_1 =
++          //     builder->CreateICmpULT(index_1_multidim[2], boundary_multidim[2]);
++          auto index_2_multidim = index_2.multidim();
++          auto* is_read_2 =
++              builder->CreateICmpULT(index_2_multidim[2], boundary_multidim[2]);
++
++          for (const auto& tr : transposes) {
++            auto input_gen = *fused_emitter.GetGenerator(*tr.instr->operand(0));
++            auto input_index_1 = index_1.SourceIndexOfBitcast(
++                tr.instr->operand(0)->shape(), builder);
++            auto input_index_2 = index_2.SourceIndexOfBitcast(
++                tr.instr->operand(0)->shape(), builder);
++            // ksl.If("is_read_1", is_read_1, [&]() {
++            llvm::Value* value_1 = *input_gen(input_index_1);
++            tiles[tr.instr].Store(value_1, index_in_tile_1, builder);
++            // });
++            ksl.If("is_read_2", is_read_2, [&]() {
++              llvm::Value* value_2 = *input_gen(input_index_2);
++              tiles[tr.instr].Store(value_2, index_in_tile_2, builder);
++            });
++          }
+ 
++          // Compute all extra output values before writing them. This
++          // avoids overwriting aliased input/output values before all
++          // reads occurred.
++          // std::vector<std::tuple<llvm_ir::IrArray, llvm_ir::IrArray::Index,
++          //                        llvm::Value*>>
++          //     scheduled_writes;
++          // FIXME(Intel): It's not needed now because in-place optimization is
++          // not supported. May need to fix it in the future.
++          for (const auto& [output_idx, root] : extra_outputs) {
++            auto extra_output_index_1 =
++                index_1.SourceIndexOfBitcast(root->shape(), builder);
++            auto extra_output_index_2 =
++                index_2.SourceIndexOfBitcast(root->shape(), builder);
++            auto output_gen = *fused_emitter.GetGenerator(*root);
++            llvm::Value* output_value_1 = *output_gen(extra_output_index_1);
++            llvm::Value* output_value_2 = *output_gen(extra_output_index_2);
++            // ksl.If("is_read_1", is_read_1, [&]() {
++            outputs[output_idx].EmitWriteArrayElement(
++                extra_output_index_1, output_value_1, builder);
++            // });
++            ksl.If("is_read_2", is_read_2, [&]() {
++              outputs[output_idx].EmitWriteArrayElement(
++                  extra_output_index_2, output_value_2, builder);
++            });
++          }
++        });
+     EmitSyncThreads(builder, ir_emitter_context);
+ 
+     auto output_tile_index = PermuteIndex(tile_start_index, permutation);
+     auto transposed_tile_dimensions = Permute(tile_dimensions, permutation);
++    absl::InlinedVector<llvm::Value*, 4> transposed_tile_dimensions_Div2{
++        transposed_tile_dimensions[0], transposed_tile_dimensions[1],
++        builder->CreateUDiv(
++            builder->CreateAdd(transposed_tile_dimensions[2], constant(1)),
++            constant(2))};
+ 
+     EmitTile(
+-        builder, tiling_, thread_id_info, transposed_tile_dimensions,
++        builder, tiling_, thread_id_info, transposed_tile_dimensions_Div2,
+         /*emit_elem_function=*/
+         [&](absl::Span<llvm::Value* const> index_in_tile) {
+-          auto index = output_tile_index.AddOffset(index_in_tile, builder);
++          absl::InlinedVector<llvm::Value*, 4> index_in_tile_1{
++              index_in_tile[0], index_in_tile[1],
++              builder->CreateMul(index_in_tile[2], constant(2))};
++          absl::InlinedVector<llvm::Value*, 4> index_in_tile_2{
++              index_in_tile[0], index_in_tile[1],
++              builder->CreateAdd(index_in_tile_1[2], constant(1))};
++
++          auto index_1 = output_tile_index.AddOffset(index_in_tile_1, builder);
++          auto index_2 = output_tile_index.AddOffset(index_in_tile_2, builder);
++
++          auto boundary =
++              output_tile_index.AddOffset(transposed_tile_dimensions, builder);
++          auto boundary_multidim = boundary.multidim();
++          // auto index_1_multidim = index_1.multidim();
++          // auto* is_write_1 =
++          //     builder->CreateICmpULT(index_1_multidim[2], boundary_multidim[2]);
++          auto index_2_multidim = index_2.multidim();
++          auto* is_write_2 =
++              builder->CreateICmpULT(index_2_multidim[2], boundary_multidim[2]);
++
+           for (const auto& tr : transposes) {
+-            llvm::Value* loaded = tiles[tr.instr].Load(
+-                Permute(index_in_tile, permutation), builder);
++            llvm::Value* loaded_1 = tiles[tr.instr].Load(
++                Permute(index_in_tile_1, permutation), builder);
++            llvm::Value* loaded_2 = tiles[tr.instr].Load(
++                Permute(index_in_tile_2, permutation), builder);
++
++            for (const auto& [output_idx, root] :
++                 transposes_to_roots[tr.instr]) {
++              if (root != tr.instr) continue;
++              auto output_index_1 =
++                  index_1.SourceIndexOfBitcast(tr.instr->shape(), builder);
++              auto output_index_2 =
++                  index_2.SourceIndexOfBitcast(tr.instr->shape(), builder);
++              // ksl.If("is_write_1", is_write_1, [&]() {
++              outputs[output_idx].EmitWriteArrayElement(output_index_1,
++                                                        loaded_1, builder);
++              // });
++              ksl.If("is_write_2", is_write_2, [&]() {
++                outputs[output_idx].EmitWriteArrayElement(output_index_2,
++                                                          loaded_2, builder);
++              });
++            }
+ 
+             FusedIrEmitter fused_emitter(elemental_emitter);
+-            fused_emitter.BindGenerator(
+-                *tr.instr,
+-                [&](const llvm_ir::IrArray::Index&) { return loaded; });
++
+             for (int64_t i = 0;
+                  i < fusion.fused_instructions_computation()->num_parameters();
+                  ++i) {
+@@ -248,24 +333,30 @@ absl::Status TransposeFusion::EmitKernel(IrEmitterContext& ir_emitter_context,
+             // Compute all output values before writing them. This avoids
+             // overwriting aliased input/output values before all reads
+             // occurred.
+-            std::vector<std::tuple<llvm_ir::IrArray, llvm_ir::IrArray::Index,
+-                                   llvm::Value*>>
+-                scheduled_writes;
+             for (const auto& [output_idx, root] :
+                  transposes_to_roots[tr.instr]) {
++              if (root == tr.instr) continue;
+               TF_ASSIGN_OR_RETURN(llvm_ir::ElementGenerator gen,
+                                   fused_emitter.GetGenerator(*root));
+ 
+               // Both for emission and writing it should be
+               // index-as-transformed by the computation.
+-              auto untiled_index =
+-                  index.SourceIndexOfBitcast(root->shape(), builder);
+-              TF_ASSIGN_OR_RETURN(llvm::Value * generated, gen(untiled_index));
+-              scheduled_writes.emplace_back(outputs[output_idx], untiled_index,
+-                                            generated);
+-            }
+-            for (const auto& [output, idx, value] : scheduled_writes) {
+-              output.EmitWriteArrayElement(idx, value, builder);
++              auto untiled_index_1 =
++                  index_1.SourceIndexOfBitcast(root->shape(), builder);
++              auto untiled_index_2 =
++                  index_2.SourceIndexOfBitcast(root->shape(), builder);
++              TF_ASSIGN_OR_RETURN(llvm::Value * generated_1,
++                                  gen(untiled_index_1));
++              TF_ASSIGN_OR_RETURN(llvm::Value * generated_2,
++                                  gen(untiled_index_2));
++              // ksl.If("is_write_1", is_write_1, [&]() {
++              outputs[output_idx].EmitWriteArrayElement(untiled_index_1,
++                                                        generated_1, builder);
++              // });
++              ksl.If("is_write_2", is_write_2, [&]() {
++                outputs[output_idx].EmitWriteArrayElement(untiled_index_2,
++                                                          generated_2, builder);
++              });
+             }
+           }
+           return absl::OkStatus();
 diff --git a/xla/service/gpu/gemm_rewriter.cc b/xla/service/gpu/gemm_rewriter.cc
 index 8a3919a75..a69632e96 100644
 --- a/xla/service/gpu/gemm_rewriter.cc
