@@ -444,30 +444,61 @@ index e055a619f5..fa5e93af61 100644
          "@com_google_absl//absl/strings",
          "@com_google_absl//absl/types:optional",
 diff --git a/third_party/tsl/tsl/framework/bfc_allocator.cc b/third_party/tsl/tsl/framework/bfc_allocator.cc
-index e19c0018d2..499cb686ac 100644
+index e19c0018d2..0d22b94fb9 100644
 --- a/third_party/tsl/tsl/framework/bfc_allocator.cc
 +++ b/third_party/tsl/tsl/framework/bfc_allocator.cc
-@@ -48,7 +48,7 @@ BFCAllocator::BFCAllocator(std::unique_ptr<SubAllocator> sub_allocator,
+@@ -47,12 +47,13 @@ BFCAllocator::BFCAllocator(std::unique_ptr<SubAllocator> sub_allocator,
+       sub_allocator_(std::move(sub_allocator)),
        name_(name),
        free_chunks_list_(kInvalidChunkHandle),
-       next_allocation_id_(1) {
+-      next_allocation_id_(1) {
 -  if (opts.allow_growth) {
-+  if (opts.allow_growth || AllocMode() == 2) {
++      next_allocation_id_(1),
++      alloc_mode(AllocMode()) {
++  if (opts.allow_growth || alloc_mode == BFC_EXTEND_SMALL) {
      // 2MiB smallest initial allocation, unless total memory available
      // is less.
      curr_region_allocation_bytes_ =
-@@ -133,26 +133,28 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
+-        RoundedBytes(std::min(total_memory, size_t{2 << 20}));
++        RoundedBytes(std::min(total_memory, kSmallSize));
+   } else {
+     curr_region_allocation_bytes_ = RoundedBytes(total_memory);
+   }
+@@ -126,34 +127,51 @@ bool BFCAllocator::Extend(size_t alignment, size_t rounded_bytes) {
+   // allocation, keep multiplying by a power of two until that is
+   // sufficient.
+   bool increased_allocation = false;
+-  while (rounded_bytes > curr_region_allocation_bytes_) {
+-    curr_region_allocation_bytes_ *= 2;
+-    increased_allocation = true;
++  if (alloc_mode == BFC_EXTEND_LARGE) {
++    while (rounded_bytes > curr_region_allocation_bytes_) {
++      curr_region_allocation_bytes_ *= 2;
++      increased_allocation = true;
++    }
++  } else {
++    // Requested bytes              --- Allocated bytes
++    // (0, kSmallSize]              --- kSmallBuffer
++    // (kSmallSize, kMinLargeAlloc) --- kLargeBuffer
++    // [kMinLargeAlloc, max]        --- round up to multiple of kRoundLarge
++    curr_region_allocation_bytes_ =
++        (rounded_bytes <= kSmallSize)
++            ? kSmallBuffer
++            : ((rounded_bytes < kMinLargeAlloc)
++                    ? kLargeBuffer
++                    : (kRoundLarge *
++                      ((rounded_bytes + kRoundLarge - 1) / kRoundLarge)));
+   }
  
    // Try allocating.
    size_t bytes = std::min(curr_region_allocation_bytes_, available_bytes);
-+
-+  if (is_arc_device_) {
-+    bytes = std::min(bytes, GetLimitAlloc());
-+  } else {
-+    bytes = std::min(bytes, static_cast<size_t>(memory_limit_ * 0.75)); 
-+  }
++  bytes = std::min(bytes, GetLimitAlloc());
 +
    size_t bytes_received;
++  VLOG(1) << "BFCAllocator try to alloc " << bytes << "bytes!\r\n";
++  VLOG(1) << "BFCAllocator current available_bytes is " <<  available_bytes << "bytes!\r\n";
++  VLOG(1) << "BFCAllocator current rounded_bytes is " <<  rounded_bytes << "bytes!\r\n";
++  VLOG(1) << "BFCAllocator current curr_region_allocation_bytes_ is " <<  curr_region_allocation_bytes_ << "bytes!\r\n";
    void* mem_addr = sub_allocator_->Alloc(alignment, bytes, &bytes_received);
 -  if (mem_addr == nullptr && !started_backpedal_) {
 -    // Only backpedal once.
@@ -491,10 +522,14 @@ index e19c0018d2..499cb686ac 100644
 -    return false;
 -  }
 -
-   if (!increased_allocation) {
+-  if (!increased_allocation) {
++  if (alloc_mode == BFC_EXTEND_SMALL) {
++    curr_region_allocation_bytes_ = kSmallSize;
++  } else if (!increased_allocation) {
      // Increase the region size of the next required allocation.
      curr_region_allocation_bytes_ *= 2;
-@@ -1253,4 +1255,33 @@ AllocatorMemoryType BFCAllocator::GetMemoryType() const {
+   }
+@@ -1253,4 +1271,35 @@ AllocatorMemoryType BFCAllocator::GetMemoryType() const {
    return sub_allocator_->GetMemoryType();
  }
  
@@ -519,28 +554,33 @@ index e19c0018d2..499cb686ac 100644
 +size_t BFCAllocator::GetLimitAlloc() {
 +  // set default limit to 4GB
 +  int64 limit_size = 4 * 1024 - 1;
++  if (!is_arc_device_) {
++    limit_size = memory_limit_ / 1024 / 1024 * 0.75;
++  }
 +  Status status = ReadInt64FromEnvVar("ITEX_LIMIT_MEMORY_SIZE_IN_MB",
 +                                        limit_size, &limit_size);
 +  if (!status.ok()) {
 +    LOG(ERROR) << "Failed to read environment variable ITEX_LIMIT_MEMORY_SIZE_IN_MB!"; 
 +  }
-+
 +  return limit_size * 1024 * 1024;
 +}
  }  // namespace tsl
 diff --git a/third_party/tsl/tsl/framework/bfc_allocator.h b/third_party/tsl/tsl/framework/bfc_allocator.h
-index 47619856ab..d9583c221b 100644
+index 47619856ab..213a901fdf 100644
 --- a/third_party/tsl/tsl/framework/bfc_allocator.h
 +++ b/third_party/tsl/tsl/framework/bfc_allocator.h
-@@ -33,6 +33,7 @@ limitations under the License.
+@@ -33,6 +33,10 @@ limitations under the License.
  #include "tsl/platform/strcat.h"
  #include "tsl/platform/thread_annotations.h"
  #include "tsl/platform/types.h"
 +#include "tsl/util/env_var.h"
++
++#define BFC_EXTEND_LARGE 1
++#define BFC_EXTEND_SMALL 2
  
  namespace tensorflow {
  class MemoryDump;
-@@ -97,6 +98,11 @@ class BFCAllocator : public Allocator {
+@@ -97,6 +101,11 @@ class BFCAllocator : public Allocator {
  
    bool ClearStats() override;
  
@@ -552,7 +592,7 @@ index 47619856ab..d9583c221b 100644
    void SetTimingCounter(SharedCounter* sc) { timing_counter_ = sc; }
  
    void SetSafeFrontier(uint64 count) override;
-@@ -108,6 +114,9 @@ class BFCAllocator : public Allocator {
+@@ -108,6 +117,9 @@ class BFCAllocator : public Allocator {
    MemoryDump RecordMemoryMap();
  
   private:
@@ -562,18 +602,24 @@ index 47619856ab..d9583c221b 100644
    struct Bin;
  
    void* AllocateRawInternal(size_t alignment, size_t num_bytes,
-@@ -152,6 +161,10 @@ class BFCAllocator : public Allocator {
+@@ -152,6 +164,16 @@ class BFCAllocator : public Allocator {
                    int64_t req_bytes, int64_t alloc_bytes)
        TF_EXCLUSIVE_LOCKS_REQUIRED(lock_);
  
 +  int64 AllocMode();
++  int64 alloc_mode;
 +  size_t GetLimitAlloc();
 +  
-+  
++  static constexpr size_t kSmallSize = 1048576;
++  static constexpr size_t kSmallBuffer = 2097152;
++  static constexpr size_t kLargeBuffer = 20971520;
++  static constexpr size_t kMinLargeAlloc = 10485760;
++  static constexpr size_t kRoundLarge = 2097152;
++
    // A ChunkHandle is an index into the chunks_ vector in BFCAllocator
    // kInvalidChunkHandle means an invalid chunk
    typedef size_t ChunkHandle;
-@@ -579,10 +592,6 @@ class BFCAllocator : public Allocator {
+@@ -579,10 +601,6 @@ class BFCAllocator : public Allocator {
    // The size of the current region allocation.
    size_t curr_region_allocation_bytes_;
  
