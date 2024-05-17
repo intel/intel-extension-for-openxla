@@ -45,7 +45,7 @@ def _get_toolkit_path():
   sycl_toolkit_path = _get_default_sycl_toolkit_path()
   if "DPCPP_TOOLKIT_PATH" in os.environ:
     sycl_toolkit_path = os.environ["DPCPP_TOOLKIT_PATH"]
-  else if "SYCL_TOOLKIT_PATH" in os.environ:
+  elif "SYCL_TOOLKIT_PATH" in os.environ:
     sycl_toolkit_path = os.environ["SYCL_TOOLKIT_PATH"]
   return os.path.realpath(sycl_toolkit_path)
 
