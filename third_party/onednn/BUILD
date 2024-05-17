@@ -22,7 +22,6 @@ py_binary(
     name = "gen_onednn_version",
     srcs = ["gen_onednn_version.py"],
     visibility = [
-        "@onednn_cpu//:__subpackages__",
         "@onednn_gpu//:__subpackages__",
     ],
 )
