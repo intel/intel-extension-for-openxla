@@ -1915,7 +1915,7 @@ index 42026cec2..e71170a99 100644
    // kernels makes sense.
  
 diff --git a/xla/service/gpu/fusions/reduction.cc b/xla/service/gpu/fusions/reduction.cc
-index 02e89bccf..97d9b9e21 100644
+index 02e89bccf..786be5acd 100644
 --- a/xla/service/gpu/fusions/reduction.cc
 +++ b/xla/service/gpu/fusions/reduction.cc
 @@ -106,6 +106,7 @@ constexpr int kRowMinorReducedDimension = 2;
@@ -1926,7 +1926,7 @@ index 02e89bccf..97d9b9e21 100644
  
  using TypedPointer = std::pair<llvm::Value* const, llvm::Type* const>;
  
-@@ -259,22 +260,72 @@ ReductionFusion::IndexGroups ReductionFusion::GroupDisjointReductions(
+@@ -259,22 +260,73 @@ ReductionFusion::IndexGroups ReductionFusion::GroupDisjointReductions(
  }
  
  namespace {
@@ -1998,14 +1998,15 @@ index 02e89bccf..97d9b9e21 100644
 -  // Enabling vectorization if number of threads is <= warpsize leads to half or
 -  // more of the threads not doing any work.
 -  if (num_threads <= WarpSize()) {
-+  // Enabling vectorization if (number_threads * vector_size) is <=
-+  // minor_reduced_dimension otherwise exist threads not doing any work.
-+  if (num_threads * 2 >
-+      reduction_dimensions.dimensions[kRowMinorReducedDimension]) {
++  // Enabling vectorization if minor_reduced_dimension is divisible by
++  // num_threads * vector_size, otherwise exist threads not doing any work.
++  if (reduction_dimensions.dimensions[kRowMinorReducedDimension] %
++          (num_threads * 2) !=
++      0) {
      return 1;
    }
  
-@@ -294,6 +345,74 @@ int GetVectorSize(const HloFusionAnalysis& analysis,
+@@ -294,6 +346,74 @@ int GetVectorSize(const HloFusionAnalysis& analysis,
    return 1;
  }
  
@@ -2080,7 +2081,7 @@ index 02e89bccf..97d9b9e21 100644
  llvm::Value* CastSharedToGlobal(llvm::IRBuilder<>* builder, llvm::Value* input,
                                  llvm::Type* element_type, llvm::Twine name) {
    return builder->CreateAddrSpaceCast(
-@@ -460,20 +579,12 @@ ReductionFusion::ReductionGroupEmitter::ReductionGroupEmitter(
+@@ -460,20 +580,12 @@ ReductionFusion::ReductionGroupEmitter::ReductionGroupEmitter(
             << reduction_emitter_.fusion_.ToString();
  
    auto* builder = reduction_emitter_.builder_;
@@ -2102,7 +2103,7 @@ index 02e89bccf..97d9b9e21 100644
        const HloInstruction* init_value =
            reduce_hlo->init_values()[op_result_idx];
  
-@@ -482,7 +593,31 @@ ReductionFusion::ReductionGroupEmitter::ReductionGroupEmitter(
+@@ -482,7 +594,31 @@ ReductionFusion::ReductionGroupEmitter::ReductionGroupEmitter(
            *init_value))(llvm_ir::IrArray::Index(builder->getInt32Ty()))
                                         .value();
  
@@ -2135,7 +2136,7 @@ index 02e89bccf..97d9b9e21 100644
        const Tiling& tiling = reduction_info.GetTiling();
        auto shared_cache = [&]() -> std::optional<llvm_ir::SharedMemoryTile> {
          auto* module = reduction_emitter.ir_emitter_context_.llvm_module();
-@@ -774,7 +909,9 @@ ReductionFusion::ReductionGroupEmitter::GetOutputIndexForReduction(
+@@ -774,7 +910,9 @@ ReductionFusion::ReductionGroupEmitter::GetOutputIndexForReduction(
      auto* minor_idx = builder->CreateAdd(offset[kColMinorKeptDimension],
                                           thread_ids[kColReducedDimension]);
      return {{major_idx, minor_idx},
@@ -2146,7 +2147,7 @@ index 02e89bccf..97d9b9e21 100644
              index_ty};
    }();
  
-@@ -956,8 +1093,11 @@ void ReductionFusion::ReductionGroupEmitter::
+@@ -956,8 +1094,11 @@ void ReductionFusion::ReductionGroupEmitter::
    auto* builder = reduction_emitter_.builder_;
    KernelSupportLibrary ksl(builder);
    const HloComputation* reducer = reduction->to_apply();
@@ -2160,7 +2161,7 @@ index 02e89bccf..97d9b9e21 100644
  
    auto constant = [&](uint64_t c) -> llvm::Constant* {
      return llvm::ConstantInt::get(reduction_emitter_.index_ty_, c);
-@@ -967,53 +1107,74 @@ void ReductionFusion::ReductionGroupEmitter::
+@@ -967,53 +1108,74 @@ void ReductionFusion::ReductionGroupEmitter::
    };
    const auto& reduction_info = reduction_emitter_.reduction_codegen_info_;
    const Tiling& tiling = reduction_info.GetTiling();
@@ -2273,7 +2274,7 @@ index 02e89bccf..97d9b9e21 100644
  }
  
  // Generate a single element of the tile (update the accumulator state) for a
-@@ -1023,6 +1184,8 @@ void ReductionFusion::ReductionGroupEmitter::GenerateElementForReducer(
+@@ -1023,6 +1185,8 @@ void ReductionFusion::ReductionGroupEmitter::GenerateElementForReducer(
      const llvm_ir::IrArray::Index& index) const {
    HloComputation* reducer = reduction->to_apply();
    auto* builder = reduction_emitter_.builder_;
@@ -2282,7 +2283,7 @@ index 02e89bccf..97d9b9e21 100644
    CHECK_EQ(reducer->num_parameters() % 2, 0);
  
    absl::InlinedVector<llvm::Value*, 2> reduction_accumulators;
-@@ -1030,12 +1193,21 @@ void ReductionFusion::ReductionGroupEmitter::GenerateElementForReducer(
+@@ -1030,12 +1194,21 @@ void ReductionFusion::ReductionGroupEmitter::GenerateElementForReducer(
    for (int red_idx = 0; red_idx < reducer->num_parameters() / 2; red_idx++) {
      const auto& state = GetCalculationStateFor(reduction, red_idx);
  
@@ -2306,7 +2307,7 @@ index 02e89bccf..97d9b9e21 100644
      reduction_input_value.push_back(input_address);
    }
  
-@@ -1319,7 +1491,8 @@ ReductionFusion::ComputeReductionCodegenInfo(
+@@ -1319,7 +1492,8 @@ ReductionFusion::ComputeReductionCodegenInfo(
    // parallelizing the z dimension (major reduced dimensions). The general
    // recommendation is to use between 128 and 512 threads, so we just go for
    // 256. See https://forums.developer.nvidia.com/t/55529
@@ -2316,7 +2317,7 @@ index 02e89bccf..97d9b9e21 100644
    if (reduction_dimensions.is_row_reduction &&
        num_threads_x * 2 <= kThreadsPerBlockTarget) {
      int64_t kept_size = reduction_dimensions.dimensions[kRowKeptDimension];
-@@ -1339,12 +1512,22 @@ ReductionFusion::ComputeReductionCodegenInfo(
+@@ -1339,12 +1513,22 @@ ReductionFusion::ComputeReductionCodegenInfo(
    int vector_size = GetVectorSize(analysis, reduction_dimensions, num_threads_x,
                                    reduction_tiling);
  
@@ -2340,7 +2341,7 @@ index 02e89bccf..97d9b9e21 100644
    if (rows_per_warp > 1) {
      // If we produce more than one element per thread, that means the reduced
      // dimension is small and it can't be tiled - we already have more threads
-@@ -1353,7 +1536,7 @@ ReductionFusion::ComputeReductionCodegenInfo(
+@@ -1353,7 +1537,7 @@ ReductionFusion::ComputeReductionCodegenInfo(
      // uses the thread ID as the coordinate.
      tile_per_thread[2] = 1;
    }
@@ -2349,7 +2350,7 @@ index 02e89bccf..97d9b9e21 100644
      num_threads.push_back(1);  // The vector dimension is a loop.
      tiled_shape.push_back(vector_size);
      tile_per_thread.push_back(vector_size);
-@@ -1363,6 +1546,8 @@ ReductionFusion::ComputeReductionCodegenInfo(
+@@ -1363,6 +1547,8 @@ ReductionFusion::ComputeReductionCodegenInfo(
                  /*loops_to_unroll=*/{false, false, true, false});
    bool reduction_is_race_free = ReductionIsRaceFree(
        hero_reduction->GetModule()->config(), reduction_dimensions);
