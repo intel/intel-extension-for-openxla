@@ -130,7 +130,7 @@ jobs:
               exit
           fi
           # Loop through all Python files in the folder and execute them
-          dev_num=4 #IDC have 4 1100 pvc card
+          dev_num=2 #IDC have 4 1100 pvc card
           # Create a pipe and bind the file descriptor 6
           tmp_fifofile="/tmp/$$.fifo"
           mkfifo $tmp_fifofile
