@@ -84,7 +84,7 @@ jobs:
           basekit_path=/home/sdp
           source ${basekit_path}/intel/oneapi/compiler/latest/env/vars.sh
           source ${basekit_path}/intel/oneapi/mkl/latest/env/vars.sh
-          export ZE_AFFINITY_MASK=5,6
+          export ZE_AFFINITY_MASK=6,7
           ut_branch=$(cat ./test/BRANCH_NAME)
           git clone https://github.com/google/jax.git
           cd jax && git checkout $ut_branch
