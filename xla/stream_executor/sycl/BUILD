@@ -277,7 +277,7 @@ cc_library(
     deps = [
         ":sycl_rpath",
         "@xla//xla/stream_executor:stream_executor_bundle",
-    ] + if_static(
-        [":all_runtime"],
-    ),
+    ] + [
+        ":all_runtime",
+    ]
 )
