@@ -26,6 +26,7 @@ This is an implementation of the Flash Attention algorithm
 
 #include "fmha_policy.h"
 #include "fmha_utils.h"
+#include "tsl/platform/logging.h"
 #include "xetla.hpp"
 
 // Set to 1 to get raw output, not permuted
@@ -590,18 +591,17 @@ void fmha_forward_impl(sycl::queue& q, T* query, T* key, T* value, T* bias,
     cgh.parallel_for<class FmhaForwardKernel<
         fmha_policy, T, kUseBias, kIsCausal, kIsDropout, kIsTraining>>(
         NdRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          // exec item
-          sycl::nd_item<3> ei(item);
+      // exec item
+      sycl::nd_item<3> ei(item);
 
-          // init fmha forward op and arguments
-          fmha_forward_op_t fmha_fwd_op;
-          typename fmha_forward_op_t::arguments_t args(
-              query, key, value, bias, dropout, dropout_prob, out,
-              activation_ptr, num_batches, num_heads, head_size, num_queries,
-              num_keys, head_scale);
+      // init fmha forward op and arguments
+      fmha_forward_op_t fmha_fwd_op;
+      typename fmha_forward_op_t::arguments_t args(
+          query, key, value, bias, dropout, dropout_prob, out, activation_ptr,
+          num_batches, num_heads, head_size, num_queries, num_keys, head_scale);
 
-          // call the functor
-          fmha_fwd_op(ei, args);
+      // call the functor
+      fmha_fwd_op(ei, args);
         });
   });
 }

@@ -243,7 +243,8 @@ cc_library(
     srcs = ["xetla_gpu_fused_mha_runner.cc"],
     hdrs = ["xetla_gpu_fused_mha_runner.h"],
     deps = [
-        "//xla/service/gpu/xetla/sdp:sdp_kernel",
+        "//xla/service/gpu/xetla/sdp:sdp_backward_kernel",
+        "//xla/service/gpu/xetla/sdp:sdp_forward_kernel",
         "//xla/stream_executor/sycl:sycl_executor",
         "@com_google_absl//absl/strings",
         "@xla//xla:shape_util",
