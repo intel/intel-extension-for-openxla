@@ -5566,6 +5566,29 @@ index e182a6e19..c8331a080 100644
    }
    return OkStatus();
  }
+diff --git a/xla/service/instruction_fusion.cc b/xla/service/instruction_fusion.cc
+index a36681f05..49d1a7bc5 100644
+--- a/xla/service/instruction_fusion.cc
++++ b/xla/service/instruction_fusion.cc
+@@ -938,7 +938,18 @@ bool IsSafeToFuseSliceIntoDusFusion(const HloInstruction* producer,
+       }
+       // If the producer has only elementwise ops or bitcasts, we can fuse.
+       if (producer_nonelementwise_ops.empty()) {
++#ifdef TENSORFLOW_USE_SYCL
++        if (!ExtractInstructions(producer, HloOpcode::kBitcast).empty() &&
++            !ExtractInstructions(consumer, HloOpcode::kDynamicUpdateSlice)
++                 .empty()) {
++          return "SYCL does not support the in-place fusion from bitcast to "
++                 "dynamic-update-slice.";
++        } else {
++          return {};
++        }
++#else
+         return {};
++#endif
+       }
+       auto dus_ops =
+           ExtractInstructions(consumer, HloOpcode::kDynamicUpdateSlice);
 diff --git a/xla/service/llvm_ir/kernel_support_library.cc b/xla/service/llvm_ir/kernel_support_library.cc
 index 7d72be76a..568b7e3ec 100644
 --- a/xla/service/llvm_ir/kernel_support_library.cc
