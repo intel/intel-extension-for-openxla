@@ -1,0 +1,46 @@
+name: Public Sycl build
+run-name: Sync build is testing out GitHub Action
+on:
+    workflow_call:
+    push:
+        branches:
+            - wenjun/build_check
+
+jobs:
+    Sync-Build-CI:
+        runs-on: Intel_openxla
+        steps:
+        - name: Check out repository code
+          uses: actions/checkout@v4
+        - name: Prepare Conda Environment
+          run: |
+            set +e
+            CONDA_ENV=Sync_build_nightly_${{ runner.name }}
+            source /opt/conda/bin/activate ${CONDA_ENV}
+            if [ $? -ne 0 ]; then
+                    echo 'conda env does not exist'
+                    conda create -n ${CONDA_ENV} python=3.10 -y
+                    conda activate ${CONDA_ENV}
+            fi
+            pip install numpy
+        - name: Sync Build
+          run: |
+            set +e
+            CONDA_ENV=Sync_build_nightly_${{ runner.name }}
+            source /opt/conda/bin/activate ${CONDA_ENV}
+            #build 
+            export SYCL_TOOLKIT_PATH=/home/sdp/intel/oneapi/compiler/2024.1
+            export workspace=$PWD/build_workspace
+            mkdir -p $workspace
+            export xla_path=$workspace/stock_xla
+            cd $workspace
+            git clone https://github.com/openxla/xla.git stock_xla
+            bash $xla_path/build_tools/sycl/build.sh $workspace |& tee $workspace/build.log
+            build_result=${PIPESTATUS[0]}
+            echo $build_result
+            if [ "$build_result" = "0" ];then
+                echo "Build successful"
+            else
+                echo "Build Failed"
+                exit 1
+            fi
