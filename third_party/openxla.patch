@@ -422,7 +422,7 @@ index fa02d95b4a..405cee4be7 100644
              "//third_party/llvm:build.patch",
              "//third_party/llvm:mathextras.patch",
 diff --git a/third_party/tsl/tsl/framework/BUILD b/third_party/tsl/tsl/framework/BUILD
-index e055a619f5..fa5e93af61 100644
+index e055a619f5..8c387f3651 100644
 --- a/third_party/tsl/tsl/framework/BUILD
 +++ b/third_party/tsl/tsl/framework/BUILD
 @@ -117,7 +117,8 @@ cc_library(
@@ -435,7 +435,15 @@ index e055a619f5..fa5e93af61 100644
              "//tsl/lib/gtl:inlined_vector",
              "//tsl/platform:strcat",
              "//tsl/platform:stringprintf",
-@@ -208,6 +209,7 @@ cc_library(
+@@ -187,6 +188,7 @@ cc_library(
+         "allocator_retry.h",
+         "bfc_allocator.cc",
+     ],
++    copts = ["-g"],
+     hdrs = ["bfc_allocator.h"],
+     features = ["parse_headers"],
+     visibility = ["//visibility:public"],
+@@ -208,6 +210,7 @@ cc_library(
          "//tsl/profiler/lib:scoped_memory_debug_annotation",
          "//tsl/profiler/lib:traceme",
          "//tsl/protobuf:bfc_memory_map_proto_cc",
@@ -643,6 +651,21 @@ index b52a7ae315..0934d4ed32 100644
      }),
  )
  
+diff --git a/third_party/tsl/tsl/platform/default/BUILD b/third_party/tsl/tsl/platform/default/BUILD
+index f778883ecc..312c01e17e 100644
+--- a/third_party/tsl/tsl/platform/default/BUILD
++++ b/third_party/tsl/tsl/platform/default/BUILD
+@@ -318,7 +318,9 @@ cc_library(
+         "//tsl/platform:snappy.h",
+         "//tsl/platform/profile_utils:cpu_utils.h",
+     ],
+-    copts = tsl_copts(),
++    copts = tsl_copts() + [
++        "-fvisibility=hidden",
++    ],
+     defines = ["TF_USE_SNAPPY"] + select({
+         # TF Additional NUMA defines
+         "//tsl:with_numa_support": ["TENSORFLOW_USE_NUMA"],
 diff --git a/third_party/tsl/workspace2.bzl b/third_party/tsl/workspace2.bzl
 index 5bfb6fd033..78e69ea519 100644
 --- a/third_party/tsl/workspace2.bzl
@@ -2963,7 +2986,7 @@ index c69d218c68..a0c242f94a 100644
  
    // Integer convolution must use NHWC or NCHW_VECT_C.
 diff --git a/xla/service/gpu/gpu_transfer_manager.cc b/xla/service/gpu/gpu_transfer_manager.cc
-index 4ef4ece8dc..1ca8d7352b 100644
+index 4ef4ece8dc..f2e15bddc4 100644
 --- a/xla/service/gpu/gpu_transfer_manager.cc
 +++ b/xla/service/gpu/gpu_transfer_manager.cc
 @@ -36,6 +36,7 @@ limitations under the License.
@@ -2986,11 +3009,14 @@ index 4ef4ece8dc..1ca8d7352b 100644
 +}
 +
  static bool InitModule() {
++  // xla::TransferManager::RegisterTransferManager(
++  //     stream_executor::cuda::kCudaPlatformId, &CreateNVPTXTransferManager);
++  // xla::TransferManager::RegisterTransferManager(
++  //     stream_executor::rocm::kROCmPlatformId, &CreateAMDGPUTransferManager);
    xla::TransferManager::RegisterTransferManager(
-       stream_executor::cuda::kCudaPlatformId, &CreateNVPTXTransferManager);
-   xla::TransferManager::RegisterTransferManager(
-       stream_executor::rocm::kROCmPlatformId, &CreateAMDGPUTransferManager);
-+  xla::TransferManager::RegisterTransferManager(
+-      stream_executor::cuda::kCudaPlatformId, &CreateNVPTXTransferManager);
+-  xla::TransferManager::RegisterTransferManager(
+-      stream_executor::rocm::kROCmPlatformId, &CreateAMDGPUTransferManager);
 +      stream_executor::sycl::kSyclPlatformId, &CreateSYCLTransferManager);
    return true;
  }
