@@ -422,7 +422,7 @@ index fa02d95b4a..405cee4be7 100644
              "//third_party/llvm:build.patch",
              "//third_party/llvm:mathextras.patch",
 diff --git a/third_party/tsl/tsl/framework/BUILD b/third_party/tsl/tsl/framework/BUILD
-index e055a619f5..8c387f3651 100644
+index e055a619f5..fa5e93af61 100644
 --- a/third_party/tsl/tsl/framework/BUILD
 +++ b/third_party/tsl/tsl/framework/BUILD
 @@ -117,7 +117,8 @@ cc_library(
@@ -435,15 +435,7 @@ index e055a619f5..8c387f3651 100644
              "//tsl/lib/gtl:inlined_vector",
              "//tsl/platform:strcat",
              "//tsl/platform:stringprintf",
-@@ -187,6 +188,7 @@ cc_library(
-         "allocator_retry.h",
-         "bfc_allocator.cc",
-     ],
-+    copts = ["-g"],
-     hdrs = ["bfc_allocator.h"],
-     features = ["parse_headers"],
-     visibility = ["//visibility:public"],
-@@ -208,6 +210,7 @@ cc_library(
+@@ -208,6 +209,7 @@ cc_library(
          "//tsl/profiler/lib:scoped_memory_debug_annotation",
          "//tsl/profiler/lib:traceme",
          "//tsl/protobuf:bfc_memory_map_proto_cc",
