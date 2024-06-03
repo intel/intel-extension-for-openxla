@@ -2978,7 +2978,7 @@ index c69d218c68..a0c242f94a 100644
  
    // Integer convolution must use NHWC or NCHW_VECT_C.
 diff --git a/xla/service/gpu/gpu_transfer_manager.cc b/xla/service/gpu/gpu_transfer_manager.cc
-index 4ef4ece8dc..f2e15bddc4 100644
+index 4ef4ece8dc..338299ecbc 100644
 --- a/xla/service/gpu/gpu_transfer_manager.cc
 +++ b/xla/service/gpu/gpu_transfer_manager.cc
 @@ -36,6 +36,7 @@ limitations under the License.
@@ -2989,7 +2989,7 @@ index 4ef4ece8dc..f2e15bddc4 100644
  #include "xla/stream_executor/stream_executor.h"
  #include "xla/types.h"
  #include "xla/util.h"
-@@ -208,11 +209,20 @@ static std::unique_ptr<xla::TransferManager> CreateAMDGPUTransferManager() {
+@@ -208,11 +209,21 @@ static std::unique_ptr<xla::TransferManager> CreateAMDGPUTransferManager() {
            .getPointerSize(0 /* default address space */));
  }
  
@@ -3001,6 +3001,7 @@ index 4ef4ece8dc..f2e15bddc4 100644
 +}
 +
  static bool InitModule() {
++  // Remove Cuda and ROCm registry to avoid runtime error.
 +  // xla::TransferManager::RegisterTransferManager(
 +  //     stream_executor::cuda::kCudaPlatformId, &CreateNVPTXTransferManager);
 +  // xla::TransferManager::RegisterTransferManager(
@@ -5832,182 +5833,3 @@ index 2a624ffc70..9ae7931f7a 100644
    }
  
    TF_RETURN_IF_ERROR(GetKernel(loader_spec, kernel_base.get()));
-diff --git a/xla/stream_executor/tf_allocator_adapter.h b/xla/stream_executor/tf_allocator_adapter.h
-new file mode 100644
-index 0000000000..6810585d8a
---- /dev/null
-+++ b/xla/stream_executor/tf_allocator_adapter.h
-@@ -0,0 +1,173 @@
-+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
-+
-+Licensed under the Apache License, Version 2.0 (the "License");
-+you may not use this file except in compliance with the License.
-+You may obtain a copy of the License at
-+
-+    http://www.apache.org/licenses/LICENSE-2.0
-+
-+Unless required by applicable law or agreed to in writing, software
-+distributed under the License is distributed on an "AS IS" BASIS,
-+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-+See the License for the specific language governing permissions and
-+limitations under the License.
-+==============================================================================*/
-+
-+#ifndef XLA_STREAM_EXECUTOR_TF_ALLOCATOR_ADAPTER_H_
-+#define XLA_STREAM_EXECUTOR_TF_ALLOCATOR_ADAPTER_H_
-+
-+#include <memory>
-+#include <tuple>
-+#include <utility>
-+#include <vector>
-+
-+#include "xla/stream_executor/device_memory.h"
-+#include "xla/stream_executor/device_memory_allocator.h"
-+#include "xla/stream_executor/platform.h"
-+#include "xla/stream_executor/stream.h"
-+#include "xla/stream_executor/stream_executor.h"
-+#include "tsl/framework/allocator.h"
-+#include "tsl/platform/statusor.h"
-+
-+namespace stream_executor {
-+
-+// Adapter class that wraps a Tensorflow allocator.
-+//
-+// Assumes that the Tensorflow allocator permits asynchronous deallocation:
-+// see comment on `AllowsAsynchronousDeallocation()`.
-+class TfAllocatorAdapter : public DeviceMemoryAllocator {
-+ public:
-+  // stream: a Stream on which the allocator can only be used. If non-null, the
-+  // allocator can not be used on any other stream.
-+  TfAllocatorAdapter(tsl::Allocator *wrapped, Stream *stream);
-+
-+  // Constructor for the cases where `stream` can not be provided.
-+  TfAllocatorAdapter(tsl::Allocator *wrapped, Platform *platform);
-+
-+  ~TfAllocatorAdapter() override;
-+
-+  tsl::StatusOr<OwningDeviceMemory> Allocate(int device_ordinal, uint64_t size,
-+                                             bool retry_on_failure,
-+                                             int64_t memory_space) override;
-+
-+  void* AllocateRaw(int device_ordinal, uint64_t size,
-+                                             bool retry_on_failure,
-+                                             int64_t memory_space);
-+
-+  tsl::Status Deallocate(int device_ordinal, DeviceMemoryBase mem) override;
-+
-+  // The Tensorflow BFC allocator used on GPU allows host-side deallocation
-+  // before GPU execution takes place. Tensorflow uses the ordering of the main
-+  // compute stream to enforce a happens-before relationship between a memory
-+  // allocation and code that reuses the same memory. If Tensorflow adds
-+  // support for multiple GPU streams or allocators with different ordering
-+  // requirements, this code may need to change.
-+  // (This attribute has no effect on CPU.)
-+  bool AllowsAsynchronousDeallocation() const override { return true; }
-+
-+  tsl::StatusOr<Stream *> GetStream(int device_ordinal) override;
-+
-+  tsl::StatusOr<tsl::Allocator *> GetAllocator(int device_ordinal);
-+
-+ private:
-+  tsl::Allocator *wrapped_;
-+  Stream *stream_;
-+};
-+
-+// Adapter class that wraps per-device TF allocators with corresponding streams
-+// as a TfAllocatorAdapter. Assumes that the Tensorflow allocator permits
-+// asynchronous deallocation; see comment on `AllowsAsynchronousDeallocation()`.
-+class MultiDeviceAdapter : public DeviceMemoryAllocator {
-+ public:
-+  using AllocatorWithStream =
-+      std::pair<std::unique_ptr<tsl::Allocator>, Stream *>;
-+  using AllocatorWithLogicalIdAndStream =
-+      std::tuple<std::unique_ptr<tsl::Allocator>, int, Stream *>;
-+
-+  MultiDeviceAdapter(const Platform *platform,
-+                     std::vector<AllocatorWithStream> tf_allocators)
-+      : DeviceMemoryAllocator(platform) {
-+    tf_allocators_.reserve(tf_allocators.size());
-+    for (AllocatorWithStream &p : tf_allocators) {
-+      int device_ordinal = p.second->parent()->device_ordinal();
-+      if (per_device_allocators_.size() <= device_ordinal) {
-+        per_device_allocators_.resize(device_ordinal + 1);
-+      }
-+      CHECK(!per_device_allocators_[device_ordinal]);
-+      per_device_allocators_[device_ordinal] =
-+          std::make_unique<TfAllocatorAdapter>(p.first.get(), p.second);
-+      tf_allocators_.push_back(std::move(p.first));
-+    }
-+  }
-+
-+  MultiDeviceAdapter(const Platform *platform,
-+                     std::vector<AllocatorWithLogicalIdAndStream> tf_allocators)
-+      : DeviceMemoryAllocator(platform) {
-+    tf_allocators_.reserve(tf_allocators.size());
-+    for (AllocatorWithLogicalIdAndStream &t : tf_allocators) {
-+      const int device_ordinal = std::get<1>(t);
-+      Stream *stream = std::get<2>(t);
-+      if (per_device_allocators_.size() <= device_ordinal) {
-+        per_device_allocators_.resize(device_ordinal + 1);
-+      }
-+      CHECK(!per_device_allocators_[device_ordinal]);
-+      per_device_allocators_[device_ordinal] =
-+          std::make_unique<TfAllocatorAdapter>(std::get<0>(t).get(), stream);
-+      tf_allocators_.push_back(std::move(std::get<0>(t)));
-+    }
-+  }
-+
-+  tsl::StatusOr<OwningDeviceMemory> Allocate(int device_ordinal, uint64_t size,
-+                                             bool retry_on_failure,
-+                                             int64_t memory_space) override {
-+    CHECK_LT(device_ordinal, per_device_allocators_.size());
-+    return per_device_allocators_[device_ordinal]->Allocate(
-+        device_ordinal, size, retry_on_failure, memory_space);
-+  }
-+
-+  tsl::Status Deallocate(int device_ordinal, DeviceMemoryBase mem) override {
-+    CHECK_LT(device_ordinal, per_device_allocators_.size());
-+    return per_device_allocators_[device_ordinal]->Deallocate(device_ordinal,
-+                                                              mem);
-+  }
-+
-+  void* AllocateRaw(int device_ordinal, uint64_t size,
-+                    bool retry_on_failure,
-+                    int64_t memory_space) {
-+    CHECK_LT(device_ordinal, per_device_allocators_.size());
-+    return per_device_allocators_[device_ordinal]->AllocateRaw(
-+        device_ordinal, size, retry_on_failure, memory_space);
-+  }
-+  
-+  tsl::Status DeallocateRaw(int device_ordinal, void* mem_opaque) {
-+    DeviceMemoryBase device_mem(mem_opaque);
-+    return this->Deallocate(device_ordinal, device_mem);
-+  }
-+
-+  // The Tensorflow BFC allocator used on GPU allows host-side deallocation
-+  // before GPU execution takes place. Tensorflow uses the ordering of the main
-+  // compute stream to enforce a happens-before relationship between a memory
-+  // allocation and code that reuses the same memory. If Tensorflow adds
-+  // support for multiple GPU streams or allocators with different ordering
-+  // requirements, this code may need to change.
-+  // (This attribute has no effect on CPU.)
-+  bool AllowsAsynchronousDeallocation() const override { return true; }
-+
-+  tsl::StatusOr<Stream *> GetStream(int device_ordinal) override {
-+    return per_device_allocators_[device_ordinal]->GetStream(device_ordinal);
-+  }
-+
-+  tsl::StatusOr<tsl::Allocator *> GetAllocator(int device_ordinal) {
-+    return per_device_allocators_[device_ordinal]->GetAllocator(device_ordinal);
-+  }
-+
-+ private:
-+  std::vector<std::unique_ptr<TfAllocatorAdapter>> per_device_allocators_;
-+  // The wrapped TF allocators backing per_device_allocators_
-+  // (TfAllocatorAdapter does not take ownership of its underlying Allocator).
-+  std::vector<std::unique_ptr<tsl::Allocator>> tf_allocators_;
-+};
-+
-+}  // namespace stream_executor
-+
-+#endif  // XLA_STREAM_EXECUTOR_TF_ALLOCATOR_ADAPTER_H_
