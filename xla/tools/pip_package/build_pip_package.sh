@@ -112,6 +112,8 @@ function prepare_src() {
     ls -al ${XLA_TMPDIR}
     mv -f ${XLA_TMPDIR}/xla/* ${XLA_TMPDIR}/jax_plugins/intel_extension_for_openxla/
     cp -rf xla/python/*.py ${XLA_TMPDIR}/jax_plugins/intel_extension_for_openxla/
+    cp LICENSE.txt ${XLA_TMPDIR}/jax_plugins/intel_extension_for_openxla/
+    cp -r third-party-programs ${XLA_TMPDIR}/jax_plugins/intel_extension_for_openxla/
     "${PYTHON_BIN_PATH:-python}" xla/python/gen_xla_version.py --in=xla/python/version.py.in --hash=`get_git_desc` --out=${XLA_TMPDIR}/jax_plugins/intel_extension_for_openxla/version.py
     # emit_version_info ${XLA_TMPDIR}/jax_plugins/python/version.py
     chmod +x ${XLA_TMPDIR}/jax_plugins/intel_extension_for_openxla/__init__.py

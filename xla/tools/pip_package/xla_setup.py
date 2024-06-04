@@ -128,7 +128,8 @@ setup(
     package_data={
         _ext_path: [
             'python/*.so',
-            'pjrt_plugin_xpu.so'
+            'pjrt_plugin_xpu.so',
+            'third-party-programs/*',
         ] + matches,
     },
     exclude_package_data={
