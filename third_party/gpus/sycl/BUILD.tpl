@@ -43,4 +43,23 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
+cc_library(
+    name = "level_zero",
+    srcs = [
+        %{level_zero_libs}
+    ],
+    data = [
+        %{level_zero_libs}
+    ],
+    hdrs = [
+        %{level_zero_headers}
+    ],
+    includes = [
+        ".",
+        "level_zero/include",
+    ],
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+)
+
 %{copy_rules}

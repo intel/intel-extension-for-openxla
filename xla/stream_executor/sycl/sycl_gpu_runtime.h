@@ -29,6 +29,8 @@ limitations under the License.
 #error "Unsupported compiler"
 #endif
 
+#include <level_zero/ze_api.h>
+
 enum SYCLError_t {
   SYCL_SUCCESS,
   SYCL_ERROR_NO_DEVICE,

@@ -668,18 +668,6 @@ def set_sycl_toolkit_path(environ_cp):
     """Check if a mkl toolkit path is valid."""
     home_path = toolkit_path.split("compiler")[0]
     version = toolkit_path.split("compiler")[1].split("/")[1]
-    mkl_path = os.path.join(home_path, 'mkl' + '/' + version + '/')
-    exists = (
-        os.path.exists(os.path.join(mkl_path, 'include')) and
-        os.path.exists(os.path.join(mkl_path, 'lib')))
-    if not exists:
-      print(
-          'Invalid oneMKL Toolkit path. %s or %s cannot be found'
-          % (os.path.join(mkl_path, 'include'),
-             os.path.join(mkl_path, 'lib')))
-      return False
-    else:
-      print('Auto configured oneMKL Toolkit path: %s\n' % (mkl_path))
 
     return True
 

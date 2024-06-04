@@ -101,6 +101,16 @@ This repo pulls public XLA code as its third party build dependency. As an openx
 bazel build --override_repository=xla=/path/to/xla //xla/tools/pip_package:build_pip_package
 ```
 
+**Custom Library Path**:
+
+By default, bazel will automatically search for the required libraries on your system. This eliminates the need for manual configuration in most cases. For more advanced use cases, you can specify a custom location for the libraries using environment variables:
+
+```bash
+export MKL_INSTALL_PATH=/opt/intel/oneapi/mkl/2024.2
+export L0_INSTALL_PATH=/usr
+bazel build //xla/tools/pip_package:build_pip_package
+```
+
 ## 4. Run JAX Example
 
 ### Run the below jax python code
