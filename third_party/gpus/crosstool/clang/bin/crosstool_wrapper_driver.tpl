@@ -105,7 +105,6 @@ def call_compiler(argv, link = False, sycl_compile = True, xetla = False):
   link_flags.append("-Wl,--enable-new-dtags")
   link_flags.append("-Wl,-rpath=%{SYCL_ROOT_DIR}/lib/")
   link_flags.append("-Wl,-rpath=%{SYCL_ROOT_DIR}/compiler/lib/intel64_lin/")
-  link_flags.append("-lze_loader")
   link_flags.append("-lOpenCL")
 
   sycl_link_flags = ['-fPIC']

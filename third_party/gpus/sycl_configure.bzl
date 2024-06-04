@@ -30,8 +30,17 @@ load(
 _GCC_HOST_COMPILER_PATH = "GCC_HOST_COMPILER_PATH"
 _GCC_HOST_COMPILER_PREFIX = "GCC_HOST_COMPILER_PREFIX"
 
-def _mkl_path(sycl_config):
-    return sycl_config.sycl_basekit_path + "/mkl/" + sycl_config.sycl_basekit_version_number
+def _mkl_include_path(sycl_config):
+    return sycl_config.mkl_include_dir
+
+def _mkl_library_path(sycl_config):
+    return sycl_config.mkl_library_dir
+
+def _l0_include_path(sycl_config):
+    return sycl_config.l0_include_dir
+
+def _l0_library_path(sycl_config):
+    return sycl_config.l0_library_dir
 
 def _sycl_header_path(repository_ctx, sycl_config, bash_bin):
     sycl_header_path = sycl_config.sycl_basekit_path + "/compiler/" + sycl_config.sycl_basekit_version_number
@@ -57,7 +66,7 @@ def _sycl_include_path(repository_ctx, sycl_config, bash_bin):
     """
     inc_dirs = []
 
-    inc_dirs.append(_mkl_path(sycl_config) + "/include")
+    inc_dirs.append(_mkl_include_path(sycl_config))
     inc_dirs.append(_sycl_header_path(repository_ctx, sycl_config, bash_bin) + "/include")
     inc_dirs.append(_sycl_header_path(repository_ctx, sycl_config, bash_bin) + "/include/sycl")
 
@@ -145,8 +154,7 @@ def _lib_name(lib, version = "", static = False):
 def _sycl_lib_paths(repository_ctx, lib, basedir):
     file_name = _lib_name(lib, version = "", static = False)
     return [
-        repository_ctx.path("%s/lib/%s" % (basedir, file_name)),
-        repository_ctx.path("%s/lib/intel64/%s" % (basedir, file_name)),
+        repository_ctx.path("%s/%s" % (basedir, file_name)),
     ]
 
 def _batch_files_exist(repository_ctx, libs_paths, bash_bin):
@@ -186,11 +194,10 @@ def _find_libs(repository_ctx, sycl_config, bash_bin):
     Returns:
       Map of library names to structs of filename and path
     """
-    mkl_path = _mkl_path(sycl_config)
+    mkl_path = _mkl_library_path(sycl_config)
     libs_paths = [
         (name, _sycl_lib_paths(repository_ctx, name, path))
         for name, path in [
-            # ("sycl", sycl_config.sycl_basekit_path + "/compiler/latest/linux/"),
             ("mkl_intel_ilp64", mkl_path),
             ("mkl_sequential", mkl_path),
             ("mkl_core", mkl_path),
@@ -207,6 +214,8 @@ def _find_libs(repository_ctx, sycl_config, bash_bin):
         libs_paths.append(("mkl_sycl_rng", _sycl_lib_paths(repository_ctx, "mkl_sycl_rng", mkl_path)))
         libs_paths.append(("mkl_sycl_stats", _sycl_lib_paths(repository_ctx, "mkl_sycl_stats", mkl_path)))
         libs_paths.append(("mkl_sycl_data_fitting", _sycl_lib_paths(repository_ctx, "mkl_sycl_data_fitting", mkl_path)))
+    l0_path = _l0_library_path(sycl_config)
+    libs_paths.append(("ze_loader", _sycl_lib_paths(repository_ctx, "ze_loader", l0_path)))
     return _select_sycl_lib_paths(repository_ctx, libs_paths, bash_bin)
 
 def find_sycl_config(repository_ctx):
@@ -231,11 +240,19 @@ def _get_sycl_config(repository_ctx, bash_bin):
     sycl_toolkit_path = config["sycl_toolkit_path"]
     sycl_version_number = config["sycl_version_number"]
     sycl_basekit_version_number = config["sycl_basekit_version_number"]
+    mkl_include_dir = config["mkl_include_dir"]
+    mkl_library_dir = config["mkl_library_dir"]
+    l0_include_dir = config["l0_include_dir"]
+    l0_library_dir = config["l0_library_dir"]
     return struct(
         sycl_basekit_path = sycl_basekit_path,
         sycl_toolkit_path = sycl_toolkit_path,
         sycl_version_number = sycl_version_number,
         sycl_basekit_version_number = sycl_basekit_version_number,
+        mkl_include_dir = mkl_include_dir,
+        mkl_library_dir = mkl_library_dir,
+        l0_include_dir = l0_include_dir,
+        l0_library_dir = l0_library_dir,
     )
 
 def _tpl_path(repository_ctx, labelname):
@@ -397,8 +414,14 @@ def _create_local_sycl_repository(repository_ctx):
     copy_rules.append(make_copy_dir_rule(
         repository_ctx,
         name = "mkl-include",
-        src_dir = _mkl_path(sycl_config) + "/include",
+        src_dir = _mkl_include_path(sycl_config),
         out_dir = "sycl/include",
+    ))
+    copy_rules.append(make_copy_dir_rule(
+        repository_ctx,
+        name = "level-zero-include",
+        src_dir = _l0_include_path(sycl_config),
+        out_dir = "level_zero/include/level_zero",
     ))
 
     sycl_libs = _find_libs(repository_ctx, sycl_config, bash_bin)
@@ -438,6 +461,7 @@ def _create_local_sycl_repository(repository_ctx):
             "sycl/lib/" + sycl_libs["mkl_sycl_stats"].file_name,
             "sycl/lib/" + sycl_libs["mkl_sycl_data_fitting"].file_name,
         )
+    level_zero_libs = '"{}",\n'.format("sycl/lib/" + sycl_libs["ze_loader"].file_name,)
     repository_dict = {
         "%{mkl_intel_ilp64_lib}": sycl_libs["mkl_intel_ilp64"].file_name,
         "%{mkl_sequential_lib}": sycl_libs["mkl_sequential"].file_name,
@@ -445,6 +469,8 @@ def _create_local_sycl_repository(repository_ctx):
         "%{mkl_sycl_libs}": mkl_sycl_libs,
         "%{copy_rules}": "\n".join(copy_rules),
         "%{sycl_headers}": ('":mkl-include",\n":sycl-include",\n'),
+        "%{level_zero_libs}": level_zero_libs,
+        "%{level_zero_headers}": ('":level-zero-include"'),
     }
     repository_ctx.template(
         "sycl/BUILD",
@@ -483,7 +509,6 @@ def _create_local_sycl_repository(repository_ctx):
     sycl_defines["%{SYCL_ROOT_DIR}"] = str(sycl_config.sycl_toolkit_path)
     sycl_defines["%{basekit_path}"] = str(sycl_config.sycl_basekit_path)
     sycl_defines["%{basekit_version}"] = str(sycl_config.sycl_basekit_version_number)
-    sycl_defines["%{MKL_PATH}"] = _mkl_path(sycl_config)
 
     # Only expand template variables in the BUILD file
     repository_ctx.template(

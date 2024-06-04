@@ -20,6 +20,7 @@ xpu_library(
         "@com_google_absl//absl/strings",
         "@tsl//tsl/util:env_var",
         "@local_config_sycl//sycl:sycl_headers",
+        "@local_config_sycl//sycl:level_zero",
     ],
 )
 
