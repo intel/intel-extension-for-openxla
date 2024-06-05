@@ -32,7 +32,7 @@ variables if they are specified. List of library-specific environment variables:
 
   Library   Additional base directories
   ----------------------------------------------------------------
-  MKL       MKL_INSTALL_PATH
+  MKL       ONEAPI_MKL_PATH
   L0        L0_INSTALL_PATH
 """
 
@@ -199,7 +199,7 @@ def find_sycl_config():
   result.update(_find_sycl_config(basekit_path))
 
   default_mkl_path = [basekit_path + "/mkl/" + _get_basekit_version()]
-  mkl_paths = _get_legacy_path("MKL_INSTALL_PATH", default_mkl_path)
+  mkl_paths = _get_legacy_path("ONEAPI_MKL_PATH", default_mkl_path)
   result.update(_find_mkl_config(mkl_paths))
 
   default_l0_path = ["/usr"]
