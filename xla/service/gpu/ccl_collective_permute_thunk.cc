@@ -191,10 +191,12 @@ absl::Status RunCollectivePermute(
   PrimitiveType element_type = buffer.element_type;
   size_t element_count = buffer.element_count;
 
-  auto ccl_api = dynamic_cast<CclApi*>(nccl_api);
-  TF_RETURN_IF_ERROR(ccl_api->CollectivePermute(
-      src_addr, dest_addr, element_count, element_type, source_id, target_id,
-      comm, &stream));
+  if (source_id || target_id) {
+    auto ccl_api = dynamic_cast<CclApi*>(nccl_api);
+    TF_RETURN_IF_ERROR(ccl_api->CollectivePermute(
+        src_addr, dest_addr, element_count, element_type, source_id, target_id,
+        comm, &stream));
+  }
 
   if (!source_id) {
     // If there is no source peer, i.e. no one send us any data, zero out dest

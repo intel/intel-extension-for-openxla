@@ -588,6 +588,7 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                     size_t element_count, PrimitiveType dtype,
                     ReductionKind reduction_kind,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+  CHECK_NE(comm->nranks, 1);
   gpu_stream
       ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
   std::shared_ptr<Collective<Participant>> collective;
@@ -788,10 +789,10 @@ void sycl_allgather(const void* send_buffer, void* recv_buffer,
       tsl::mutex_lock lock(collective->mu);
       collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
-      if (collective->participants.size() == comm->nranks) {
-        Manager::instance().collectives.erase(comm->id);
-        rank_to_launch_kernel = true;
-      }
+    }
+    if (collective->participants.size() == comm->nranks) {
+      Manager::instance().collectives.erase(comm->id);
+      rank_to_launch_kernel = true;
     }
   }
 
@@ -841,6 +842,7 @@ void sycl_alltoall(std::vector<const void*> send_buffers,
                    std::vector<void*> recv_buffers, size_t element_count,
                    PrimitiveType dtype, se::gpu::GpuStreamHandle gpu_stream,
                    ncclComm_t comm) {
+  CHECK_NE(comm->nranks, 1);
   gpu_stream
       ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
   std::shared_ptr<Collective<AlltoAllParticipant>> collective;
@@ -947,6 +949,7 @@ void sycl_alltoall_split(std::vector<const void*> send_buffers,
                          std::vector<void*> recv_buffers, size_t element_count,
                          PrimitiveType dtype,
                          se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+  CHECK_NE(comm->nranks, 1);
   gpu_stream
       ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
   std::shared_ptr<Collective<AlltoAllParticipant>> collective;
@@ -1070,10 +1073,10 @@ void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
       tsl::mutex_lock lock(collective->mu);
       collective->participants.push_back(
           {gpu_stream, send_buffer, recv_buffer, comm->rank});
-      if (collective->participants.size() == comm->nranks) {
-        Manager::instance().collectives.erase(comm->id);
-        rank_to_launch_kernel = true;
-      }
+    }
+    if (collective->participants.size() == comm->nranks) {
+      Manager::instance().collectives.erase(comm->id);
+      rank_to_launch_kernel = true;
     }
   }
 
@@ -1240,10 +1243,10 @@ void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
       tsl::mutex_lock lock(collective->mu);
       collective->participants.push_back({gpu_stream, send_buffer, recv_buffer,
                                           source_id, target_id, comm->rank});
-      if (collective->participants.size() == comm->nranks) {
-        Manager::instance().permute_collectives.erase(comm->id);
-        rank_to_launch_kernel = true;
-      }
+    }
+    if (collective->participants.size() == comm->nranks) {
+      Manager::instance().permute_collectives.erase(comm->id);
+      rank_to_launch_kernel = true;
     }
   }
 
