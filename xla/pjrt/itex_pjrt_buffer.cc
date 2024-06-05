@@ -59,9 +59,9 @@ ITEXPjRtBuffer::ITEXPjRtBuffer(int device_id,
       client_->allocator());
 }
 
-ITEXPjRtBuffer::~ITEXPjRtBuffer() { 
+ITEXPjRtBuffer::~ITEXPjRtBuffer() {
   VLOG(1) << "ITEXPjRtBuffer::~ITEXPjRtBuffer";
-  Delete(); 
+  Delete();
 }
 
 StatusOr<std::unique_ptr<PjRtBuffer>> ITEXPjRtBuffer::CopyToDevice(
@@ -82,15 +82,22 @@ StatusOr<std::unique_ptr<PjRtBuffer>> ITEXPjRtBuffer::CopyToDevice(
   CHECK_EQ(dst_local_device->allocation_model(),
            transfer_local_device->allocation_model());
 
+  // We assume each device has single stream when using ITEX custom PJRT buffer.
   se::Stream* transfer_stream =
       transfer_local_device->GetDeviceToDeviceStream();
+  se::Stream* dst_stream = dst_local_device->compute_stream();
+
   TF_ASSIGN_OR_RETURN(
       std::unique_ptr<ITEXPjRtBuffer> dst_buffer,
-      AllocateITEXDestinationBuffer(device_ordinal_, device_, client_,
-                                    dimensions_, element_type_, buffer_size()));
+      AllocateITEXDestinationBuffer(dst_local_device->local_device_id().value(),
+                                    dst_device, client_, dimensions_,
+                                    element_type_, buffer_size()));
 
+  transfer_stream->ThenWaitFor(dst_stream);
   transfer_stream->ThenMemcpyD2D(&dst_buffer->buffer(), buffer(),
                                  dst_buffer->buffer_size());
+  dst_stream->ThenWaitFor(transfer_stream);
+
   if (!transfer_stream->ok()) {
     return absl::InternalError("Device->Device Memcpy failed.");
   }
