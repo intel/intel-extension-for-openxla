@@ -1,4 +1,4 @@
-name: Public Sycl build
+name: Public Sycl Build from Remote
 run-name: Sync build is testing out GitHub Action
 on:
     workflow_call:
