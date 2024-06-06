@@ -1365,7 +1365,10 @@ PJRT_Error* PJRT_LoadedExecutable_Execute(
       args->options->struct_size));
   xla::ExecuteOptions options;
   options.launch_id = args->options->launch_id;
-  options.strict_shape_checking = true;
+  // Like tf (https://github.com/tensorflow/tensorflow/blob/
+  // efa3d5ba476ada79976cdea1d8bc494563bec47b/tensorflow/compiler/
+  // jit/xla_launch_util.cc#L813), we only check size equal but not dims equal.
+  options.strict_shape_checking = false;
   options.arguments_are_tupled = false;
   options.untuple_result = true;
   options.context = nullptr;
