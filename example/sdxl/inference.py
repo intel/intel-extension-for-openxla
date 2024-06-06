@@ -90,6 +90,7 @@ def generate(
         guidance_scale=guidance_scale,
         jit=True,
     ).images
+    images.block_until_ready()
     print(f"Compiled in {time.time() - start}")
 
     start = time.time()
@@ -104,6 +105,7 @@ def generate(
             guidance_scale=guidance_scale,
             jit=True,
         ).images
+        images.block_until_ready()
         print("Latency of iter {}: {:.3f}s".format(i, time.time() - cur), file=sys.stderr)
     
     end = time.time()
