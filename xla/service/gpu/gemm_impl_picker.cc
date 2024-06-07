@@ -151,6 +151,7 @@ absl::StatusOr<AutotuneResult> DoGemmAutotuneNoCache(
 
   TF_ASSIGN_OR_RETURN(GemmConfig config, GemmConfig::For(gemm));
   AutotuneResult best_algorithm;
+
   if (!IsXetlaSupport(config)) {
     best_algorithm.mutable_gemm()->set_algorithm(se::blas::kOneDnnGemm);
     return best_algorithm;
@@ -171,18 +172,29 @@ absl::StatusOr<AutotuneResult> DoGemmAutotuneNoCache(
     TF_RETURN_IF_ERROR(gemm_update->set_backend_config(gpu_config));
     absl::StatusOr<absl::Duration> run_time =
         GetExecuteTime(gemm_update, autotune_config);
-    if (!run_time.ok()) continue;
+    // Since there're only 2 algorithms, directly pick oneDNN if XeTLA failed.
+    if (!run_time.ok()) {
+      CHECK_EQ(algorithm, se::blas::kXetlaGemm);
+      AutotuneResult best_algorithm;
+      best_algorithm.mutable_gemm()->set_algorithm(se::blas::kOneDnnGemm);
+      return best_algorithm;
+    };
 
     results.emplace_back();
     AutotuneResult& result = results.back();
     result.mutable_gemm()->set_algorithm(algorithm);
     *result.mutable_run_time() = tsl::proto_utils::ToDurationProto(*run_time);
   }
-  if (results.empty()) {
+
+  // Debug flag to force XeTLA path if it's available.
+  bool xetla_flag = false;
+  tsl::ReadBoolFromEnvVar("_FORCE_XETLA", false, &xetla_flag);
+  if (xetla_flag) {
     AutotuneResult best_algorithm;
-    best_algorithm.mutable_gemm()->set_algorithm(se::blas::kOneDnnGemm);
+    best_algorithm.mutable_gemm()->set_algorithm(se::blas::kXetlaGemm);
     return best_algorithm;
   }
+
   auto best = absl::c_min_element(
       results, [](const AutotuneResult& lhs, const AutotuneResult& rhs) {
         return tsl::proto_utils::FromDurationProto(lhs.run_time()) <
