@@ -36,9 +36,20 @@ def initialize():
         f"WARNING: Native library {path} does not exist. "
         f"This most likely indicates an issue with how {__package__} "
         f"was built or installed.")
+
+  options = dict()
+
+  # xb.CUDA_VISIBLE_DEVICES is set by jax.distribute.initialize(local_device_ids).
+  # xb.CUDA_VISIBLE_DEVICES would has default value 'all' if users not call 
+  # jax.distribute.initialize or call it without setting local_device_ids.
+  visible_devices = xb.CUDA_VISIBLE_DEVICES.value
+  if visible_devices != 'all':
+    options['visible_devices'] = [int(x) for x in visible_devices.split(',')]
+  
   c_api = xb.register_plugin("xpu",
                      priority=500,
-                     library_path=str(path))
+                     library_path=str(path),
+                     options=options)
   
   try:
     import functools
