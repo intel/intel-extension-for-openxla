@@ -30,7 +30,7 @@ pip install transformers==4.38 diffusers==0.26.3 datasets==2.12.0 msgpack==1.0.7
 | **ENV** | **Description** | **PVC Platform** | **ATSM/DG2 Platform** | 
 | :---: | :---: | :---: |:---: |
 | ZE_AFFINITY_MASK | Run this model on single GPU tile |export ZE_AFFINITY_MASK=0 | export ZE_AFFINITY_MASK=0 |
-| XLA_FLAGS | Customize xla debug options | export XLA_FLAGS="--xla_gpu_force_conv_nhwc" | export XLA_FLAGS="--xla_gpu_force_conv_nhwc" |
+| XLA_FLAGS | Customize xla debug options | export XLA_FLAGS="--xla_gpu_force_conv_nhwc --xla_disable_hlo_passes=dot-merger" | export XLA_FLAGS="--xla_gpu_force_conv_nhwc --xla_disable_hlo_passes=dot-merger" |
 
 ### 2. Options
 
