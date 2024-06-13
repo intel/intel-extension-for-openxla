@@ -178,3 +178,4 @@ jax.local_devices():  [xpu(id=0), xpu(id=1)]
     sudo ln -s /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /usr/lib/gcc/x86_64-linux-gnu/12/libstdc++.so
     ```
 
+
