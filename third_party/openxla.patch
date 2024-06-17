@@ -1425,7 +1425,7 @@ index dca7a07a8..58b2cbf7a 100644
                          MakeGetTupleElementHlo(new_conv, 0));
      TF_RETURN_IF_ERROR(comp->ReplaceInstruction(instr, new_instr));
 diff --git a/xla/service/gpu/cudnn_fused_mha_rewriter.cc b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
-index 04fe02e37..83d8c9f94 100644
+index 04fe02e37..0eb7aa21d 100644
 --- a/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 +++ b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 @@ -235,12 +235,14 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
@@ -1519,7 +1519,7 @@ index 04fe02e37..83d8c9f94 100644
    }
 +#else
 +  auto is_hidden_dim_supported =
-+      hidden_dim[0] <= 256 && hidden_dim[0] % 32 == 0;
++      hidden_dim[0] <= 256 && hidden_dim[0] % 2 == 0;
 +  auto is_flash_attention = is_hidden_dim_supported;
 +#endif
    return is_flash_attention;
