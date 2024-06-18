@@ -35,6 +35,7 @@ parser.add_argument("--num-iter", default=10, type=int, help="num iter")
 parser.add_argument("--profile", action="store_true")
 parser.add_argument('--pipeline_mode', choices=["img2img", "text2img"],
                     default="text2img", type=str, help='evaluation method')
+parser.add_argument("--accuracy", action="store_true")
 args = parser.parse_args()
 print(args, file=sys.stderr)
 
@@ -103,3 +104,13 @@ print("Average Throughput per second is: {:.3f} steps".format(1 / latency * num_
 images = images.reshape((images.shape[0],) + images.shape[-3:])
 images = pipeline.numpy_to_pil(images)
 images[0].save("img.png")
+
+def nrmse(source, target):
+    assert source.shape == target.shape
+    rmse = np.sqrt(np.mean((source.astype(np.float32) - target.astype(np.float32))**2))
+    return 1 - rmse / 255
+
+if args.accuracy:
+    source = np.array(Image.open("img.png"))
+    target = np.array(Image.open("target.png"))
+    print("RMSE accuracy is: {:.3f}".format(nrmse(source, target)), file=sys.stderr)

@@ -5,6 +5,7 @@ import argparse
 import jax
 import numpy as np
 from flax.jax_utils import replicate
+from PIL import Image
 
 from diffusers import FlaxStableDiffusionXLPipeline
 from diffusers.models import FlaxAutoencoderKL
@@ -22,8 +23,10 @@ parser.add_argument(
 )
 parser.add_argument("--num-iter", default=1, type=int, help="num iter")
 parser.add_argument("--num-inference-steps", default=25, type=int, help="inference steps")
+parser.add_argument("--accuracy", action="store_true")
 
 args = parser.parse_args()
+print(args, file=sys.stderr)
 
 dtype = jax.numpy.bfloat16 if args.dtype == "bfloat16" else jax.numpy.float16
 
@@ -116,6 +119,14 @@ print("Average Latency per image is: {:.3f} s".format(latency), file=sys.stderr)
 print("Average Throughput per second is: {:.3f} steps".format(1 / latency * num_steps), file=sys.stderr)
 images = images.reshape((images.shape[0] * images.shape[1],) + images.shape[-3:])
 images = pipeline.numpy_to_pil(np.array(images))
+images[0].save("castle.png")
 
-for i, image in enumerate(images):
-    image.save(f"castle_{i}.png")
+def nrmse(source, target):
+    assert source.shape == target.shape
+    rmse = np.sqrt(np.mean((source.astype(np.float32) - target.astype(np.float32))**2))
+    return 1 - rmse / 255
+
+if args.accuracy:
+    source = np.array(Image.open("castle.png"))
+    target = np.array(Image.open("target.png"))
+    print("RMSE accuracy is: {:.3f}".format(nrmse(source, target)), file=sys.stderr)

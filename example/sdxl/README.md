@@ -35,20 +35,27 @@ pip install transformers==4.38 diffusers==0.26.3 datasets==2.12.0 msgpack==1.0.7
 ### 2. Options
 
 ```
---dtype: support bfloat16 and float16, default is bfloat16.
+--dtype: Support bfloat16 and float16, default is bfloat16.
 --num-iter: The number of times to run generation, default is 1.
 --num-inference-steps: The inference steps for each generated image, default is 25.
+--accuracy: Check whether the demo result is expected. Output range is `0`~`1`, higher is better.
 ```
 
 ### 3. Inference Command Example
 
-```
-python inference.py --dtype=bfloat16
+```shell
+python inference.py --dtype=bfloat16 --accuracy
 ```
 
 ## Expected Output
 
+### Performance
 ```
 Average Latency per image is: x.xxx s
 Average Throughput per second is: x.xxx steps
+```
+
+### Accuracy
+```
+RMSE accuracy is: 0.979
 ```

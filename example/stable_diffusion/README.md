@@ -34,9 +34,20 @@ pip install transformers==4.38 diffusers==0.26.3 datasets==2.12.0 msgpack==1.0.7
 | [stabilityai/stable-diffusion-2](https://huggingface.co/stabilityai/stable-diffusion-2) | 768x768 | ```python jax_stable.py -m stabilityai/stable-diffusion-2``` |
 | [stabilityai/stable-diffusion-2-1](https://huggingface.co/stabilityai/stable-diffusion-2-1) | 768x768 | ```python jax_stable.py -m stabilityai/stable-diffusion-2-1``` |
 
+Add option `--accuracy` to check whether the demo result is expected. Output range is `0`~`1`, higher is better:
+```shell
+python jax_stable.py -m stabilityai/stable-diffusion-2-1 --accuracy
+```
+
 ## Expected Output
 
+### Performance
 ```
 Average Latency per image is: x.xxx s
 Average Throughput per second is: x.xxx steps
+```
+
+### Accuracy
+```
+RMSE accuracy is: 0.976
 ```
