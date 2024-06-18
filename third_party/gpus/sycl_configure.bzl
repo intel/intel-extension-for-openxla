@@ -43,7 +43,7 @@ def _l0_library_path(sycl_config):
     return sycl_config.l0_library_dir
 
 def _sycl_header_path(repository_ctx, sycl_config, bash_bin):
-    sycl_header_path = sycl_config.sycl_basekit_path + "/compiler/" + sycl_config.sycl_basekit_version_number
+    sycl_header_path = sycl_config.sycl_toolkit_path
     include_dir = sycl_header_path + "/include"
     if not files_exist(repository_ctx, [include_dir], bash_bin)[0]:
         sycl_header_path = sycl_header_path + "/linux"

@@ -63,7 +63,11 @@ def _get_basekit_path():
   return _get_toolkit_path().split("/compiler/")[0]
 
 def _get_basekit_version():
-  return _get_toolkit_path().split("/compiler/")[1].split("/")[0]
+  try:
+    version = _get_toolkit_path().split("/compiler/")[1].split("/")[0]
+  except:
+    version = "unknown"
+  return version
 
 def _get_composite_version_number(major, minor, patch):
   return 10000 * major + 100 * minor + patch
@@ -137,12 +141,12 @@ def _find_library(base_paths, library_name):
   filepattern = ".".join(["lib" + library_name, "so"]) + "*"
   return _find_file(base_paths, _library_paths(), filepattern)
 
-def _find_sycl_config(basekit_path):
+def _find_sycl_config(toolkit_path):
 
   def sycl_version_numbers(path):
     possible_version_files = [
-        "compiler/latest/linux/include/sycl/version.hpp",
-        "compiler/latest/include/sycl/version.hpp",
+        "linux/include/sycl/version.hpp",
+        "include/sycl/version.hpp",
     ]
     version_file = None
     for f in possible_version_files:
@@ -159,7 +163,7 @@ def _find_sycl_config(basekit_path):
     patch = _get_header_version(version_file, "__LIBSYCL_PATCH_VERSION")
     return major, minor, patch
 
-  major, minor, patch = sycl_version_numbers(basekit_path)
+  major, minor, patch = sycl_version_numbers(toolkit_path)
 
   sycl_config = {
     "sycl_version_number": _get_composite_version_number(major, minor, patch),
@@ -188,15 +192,11 @@ def find_sycl_config():
   """Returns a dictionary of SYCL components config info."""
   basekit_path = _get_basekit_path()
   toolkit_path = _get_toolkit_path()
-  if not os.path.exists(basekit_path):
-    raise ConfigError(
-        'Specified SYCL_TOOLKIT_PATH "{}" does not exist'.format(basekit_path))
 
   result = {}
-
   result["sycl_basekit_path"] = basekit_path
   result["sycl_toolkit_path"] = toolkit_path
-  result.update(_find_sycl_config(basekit_path))
+  result.update(_find_sycl_config(toolkit_path))
 
   default_mkl_path = [basekit_path + "/mkl/" + _get_basekit_version()]
   mkl_paths = _get_legacy_path("ONEAPI_MKL_PATH", default_mkl_path)
