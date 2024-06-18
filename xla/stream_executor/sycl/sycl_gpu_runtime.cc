@@ -510,15 +510,12 @@ void SYCLFree(sycl::device* device, void* ptr) {
 }
 
 sycl::event SYCLGetEventFromStream(sycl::queue* stream) {
-  // FIXME(intel): Below WA caused backend mismatch error in OOB test,
-  // need to fix it before reenabling.
-  // return stream->submit([&](sycl::handler& cgh) {
-  //     cgh.host_task([=]() {}); });
-
-  // TODO(intel): use get_last_event once new basekit is ready.
-  // return stream->ext_oneapi_get_last_event();
-
+  // Only use new API after Toolkit 2024.2.
+#if (__LIBSYCL_MAJOR_VERSION >= 7) && (__LIBSYCL_MINOR_VERSION >= 2)
+  return stream->ext_oneapi_get_last_event();
+#else
   return stream->ext_oneapi_submit_barrier();
+#endif
 }
 
 void SYCLStreamDependOnEvents(sycl::queue* stream,
@@ -528,7 +525,6 @@ void SYCLStreamDependOnEvents(sycl::queue* stream,
     cgh.host_task([=]() {});
   });
 }
-
 
 const char* ToString(SYCLError_t error) {
   switch (error) {
