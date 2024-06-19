@@ -123,3 +123,34 @@ python finetune.py \
 ```
 [INFO] Average Lantency of each steps is : xxx.xxx ms.
 ```
+
+## Accuracy
+Based on lm-eval-harness.
+### Script Parameters
+
+| **Parameter** | **Default Value** |
+| :---: | :--- |
+| **model** | gemma |
+| **model_name** | gemma_2b_en |
+| **dtype** | bfloat16 |
+| **num_beams** | 1 |
+```
+git clone https://github.com/EleutherAI/lm-evaluation-harness.git lm_eval
+cd lm_eval
+git checkout b281b0921b636bc36ad05c0b0b0763bd6dd43463
+git apply ../gemma.patch
+pip install -r requirements.txt
+python main.py \
+  --model gemma \
+  --model_args model_name=gemma_2b_en,dtype=float32,num_beams=1 \
+  --tasks openbookqa \
+  --no_cache
+```
+### Output
+```
+gemma (model_name=gemma_2b_en,dtype=float32,num_beams=1), limit: None, provide_description: False, num_fewshot: 0, batch_size: None
+|   Task   |Version| Metric |Value|   |Stderr|
+|----------|------:|--------|----:|---|-----:|
+|openbookqa|      0|acc     |0.302|±  |0.0206|
+|          |       |acc_norm|0.398|±  |0.0219|
+```
