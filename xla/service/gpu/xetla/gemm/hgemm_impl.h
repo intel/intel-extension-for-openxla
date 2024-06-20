@@ -328,8 +328,7 @@ inline void hgemm_gelu(sycl::queue& queue, scalar_t* out, const scalar_t* a,
               periodic_sync_interval>::gemm;
           using epilogue_t = group::epilogue_t<
               xetla::group::epilogue_policy_tile_op<
-                  xetla::subgroup::chained_tile_op_t<
-                      epilogue_impl::bias_op_t<data_type_bias>>,
+                  xetla::subgroup::chained_tile_op_t<subgroup::gelu_fwd_op_t>,
                   gpu_arch::Xe>,
               tile_shape,
               mem_desc_t<scalar_t, mem_layout::row_major, mem_space::global>>;
