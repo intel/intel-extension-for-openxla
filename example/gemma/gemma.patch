@@ -20,7 +20,7 @@ index 8ca27fac..6127ce6c 100644
  
 diff --git a/lm_eval/models/gemma.py b/lm_eval/models/gemma.py
 new file mode 100644
-index 00000000..bc4540f7
+index 00000000..732185c4
 --- /dev/null
 +++ b/lm_eval/models/gemma.py
 @@ -0,0 +1,79 @@
@@ -41,7 +41,7 @@ index 00000000..bc4540f7
 +        self.model = keras_nlp.models.GemmaCausalLM.from_preset(model_name)
 +        if num_beams > 1:
 +            from keras_nlp.samplers import BeamSampler
-+            model.compile(sampler=BeamSampler(num_beams=args.num_beams))
++            self.model.compile(sampler=BeamSampler(num_beams=num_beams))
 +
 +    @property
 +    def eot_token_id(self):
