@@ -1265,26 +1265,28 @@ void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
       se::gpu::GpuStreamHandle stream = p[0].stream;
       stream_wait_streamlist(stream, p);
 
-      if (dtype == PRED)
-        permute_dpcpp<bool>(stream, element_count, p, comm->nranks);
-      else if (dtype == F32)
-        permute_dpcpp<float>(stream, element_count, p, comm->nranks);
-      else if (dtype == F64)
-        permute_dpcpp<double>(stream, element_count, p, comm->nranks);
-      else if (dtype == S32)
-        permute_dpcpp<int32_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == S64)
-        permute_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == BF16)
-        permute_dpcpp<bfloat16>(stream, element_count, p, comm->nranks);
-      else if (dtype == U32)
-        permute_dpcpp<uint32_t>(stream, element_count, p, comm->nranks);
-      else if (dtype == U64)
-        permute_dpcpp<uint64_t>(stream, element_count, p, comm->nranks);
-      else
-        LOG(FATAL) << "PrimitiveType "
-                   << primitive_util::LowercasePrimitiveTypeName(dtype)
-                   << " is not supported in Permute.";
+      if (source_id || target_id) {
+        if (dtype == PRED)
+          permute_dpcpp<bool>(stream, element_count, p, comm->nranks);
+        else if (dtype == F32)
+          permute_dpcpp<float>(stream, element_count, p, comm->nranks);
+        else if (dtype == F64)
+          permute_dpcpp<double>(stream, element_count, p, comm->nranks);
+        else if (dtype == S32)
+          permute_dpcpp<int32_t>(stream, element_count, p, comm->nranks);
+        else if (dtype == S64)
+          permute_dpcpp<int64_t>(stream, element_count, p, comm->nranks);
+        else if (dtype == BF16)
+          permute_dpcpp<bfloat16>(stream, element_count, p, comm->nranks);
+        else if (dtype == U32)
+          permute_dpcpp<uint32_t>(stream, element_count, p, comm->nranks);
+        else if (dtype == U64)
+          permute_dpcpp<uint64_t>(stream, element_count, p, comm->nranks);
+        else
+          LOG(FATAL) << "PrimitiveType "
+                     << primitive_util::LowercasePrimitiveTypeName(dtype)
+                     << " is not supported in Permute.";
+      }
 
       streamlist_wait_stream(stream, p);
       collective->done = true;
