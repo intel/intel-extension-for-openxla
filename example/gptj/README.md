@@ -20,16 +20,9 @@ pip install jax==0.4.25 jaxlib==0.4.25 flax==0.8.2 transformers==4.38 datasets==
 | *```--greedy```*| *```False```*| Enable greedy search or beam search. |
 | *```--num-iter```*| *```10```*| Number of iterations. |
 | *```--num-warmup```*| *```3```*| Number of warmup iterations. |
-| *```--accuracy-only```*| *```False```*| Run for performance or accuracy only. |
+| *```--accuracy```*| *```False```*| Run accuracy check. |
 
-## Accuracy Example
-
-```bash
-export ZE_AFFINITY_MASK=0
-python jax_gptj.py --accuracy-only --dtype "float16"
-```
-
-## Performance Example
+## Example
 
 To fully utilize the hardware capabilities and achieve the best performance, you may consider setting the below ENV variables to enable our customized optimization strategies.
 
@@ -56,4 +49,18 @@ python jax_gptj.py --input-tokens 1024 --max-new-tokens 128
 ```
 Inference latency: x.xxx sec.
 Inference throughput: x.xxx samples/sec.
+```
+
+### Accuracy Output
+
+```bash
+export ZE_AFFINITY_MASK=0
+python jax_gptj.py --input-tokens 1024 --max-new-tokens 128 --accuracy
+```
+
+```
+Inference latency: x.xxx sec.
+Inference throughput: x.xxx samples/sec.
+
+Accuracy = 1.00
 ```
