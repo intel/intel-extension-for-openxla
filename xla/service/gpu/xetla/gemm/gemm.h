@@ -112,7 +112,8 @@ class XetlaGemmKernel {
     return *this;
   }
 
-  template <int WG_M, int WG_N, int SG_M, int SG_N, int SG_K, int SLM_KS>
+  template <int WG_M, int WG_N, int SG_M, int SG_N, int SG_K, int SLM_KS,
+            bool B_ROW_MAJOR>
   bool dispatch(se::gpu::GpuStreamHandle handle);
 
   bool run(se::gpu::GpuStreamHandle handle);
