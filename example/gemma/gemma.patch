@@ -103,3 +103,16 @@ index 00000000..732185c4
 +    def _model_generate(self, context, max_length, eos_token_id):
 +        # Isn't used because we override greedy_until
 +        raise NotImplementedError()
+diff --git a/setup.py b/setup.py
+index 5db43c17..ea8b627a 100644
+--- a/setup.py
++++ b/setup.py
+@@ -21,7 +21,7 @@ setuptools.setup(
+     ],
+     python_requires=">=3.9",
+     install_requires=[
+-        "datasets>=2.0.0",
++        "datasets>=2.20.0",
+         "jsonlines",
+         "numexpr",
+         "openai>=0.6.4",
