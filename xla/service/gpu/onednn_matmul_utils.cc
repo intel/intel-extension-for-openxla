@@ -26,33 +26,115 @@ limitations under the License.
 #include <vector>
 #include <xetla.hpp>
 
-#include "absl/algorithm/container.h"
-#include "absl/types/span.h"
-#include "dnnl.hpp"       // NOLINT(build/include_subdir)
-#include "dnnl_sycl.hpp"  // NOLINT(build/include_subdir)
-#include "tsl/framework/numeric_types.h"
-#include "tsl/platform/statusor.h"
-#include "tsl/platform/types.h"
-#include "tsl/util/env_var.h"
-#include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/hlo/ir/hlo_module.h"
-#include "xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.h"
-#include "xla/service/gpu/matrix_descriptor.h"
 #include "xla/service/gpu/xetla/gemm/gemm.h"
 #include "xla/service/onednn_util.h"
-#include "xla/shape.h"
-#include "xla/shape_util.h"
-#include "xla/status_macros.h"
-#include "xla/statusor.h"
-#include "xla/stream_executor/blas.h"
-#include "xla/stream_executor/device_memory.h"
-#include "xla/stream_executor/sycl/sycl_stream.h"
-#include "xla/types.h"
-#include "xla/util.h"
-#include "xla/xla_data.pb.h"
 
 namespace xla {
 namespace gpu {
+
+namespace SYCLGemm{
+    absl::StatusOr<GemmBackendEpilogue> EpilogueCast(std::string& epilogue){
+        if(epilogue == "DEFAULT"){
+            return GemmBackendEpilogue::DEFAULT;
+        }else if(epilogue == "RELU"){
+            return GemmBackendEpilogue::RELU;
+        }else if(epilogue == "GELU"){
+            return GemmBackendEpilogue::GELU;
+        }else if(epilogue == "BIAS"){
+            return GemmBackendEpilogue::BIAS;
+        }else if(epilogue == "BIAS_RELU"){
+            return GemmBackendEpilogue::BIAS_RELU;
+        }else if(epilogue == "BIAS_GELU"){
+            return GemmBackendEpilogue::BIAS_GELU;
+        }else if(epilogue == "GELU_AUX"){
+            return GemmBackendEpilogue::GELU_AUX;
+        }else if(epilogue == "BIAS_GELU_AUX"){
+            return GemmBackendEpilogue::BIAS_GELU_AUX;
+        }else{
+            return Internal("Unknown Epilogue.");
+        }
+    }
+
+    absl::StatusOr<std::string> EpilogueCast(GemmBackendEpilogue epilogue){
+        if(epilogue == GemmBackendEpilogue::DEFAULT){
+            return "DEFAULT";
+        }else if(epilogue == GemmBackendEpilogue::RELU){
+            return "RELU";
+        }else if(epilogue == GemmBackendEpilogue::GELU){
+            return "GELU";
+        }else if(epilogue == GemmBackendEpilogue::BIAS){
+            return "BIAS";
+        }else if(epilogue == GemmBackendEpilogue::BIAS_RELU){
+            return "BIAS_RELU";
+        }else if(epilogue == GemmBackendEpilogue::BIAS_GELU){
+            return "BIAS_GELU";
+        }else if(epilogue == GemmBackendEpilogue::GELU_AUX){
+            return "GELU_AUX";
+        }else if(epilogue == GemmBackendEpilogue::BIAS_GELU_AUX){
+            return "BIAS_GELU_AUX";
+        }else{
+            return Internal("Unknown Epilogue.");
+        }
+    }
+
+    absl::StatusOr<bool> EpilogueAddsVectorBias(GemmBackendEpilogue epilogue) {
+        switch (epilogue) {
+            case GemmBackendEpilogue::DEFAULT:
+            case GemmBackendEpilogue::RELU:
+            case GemmBackendEpilogue::GELU:
+            case GemmBackendEpilogue::GELU_AUX:
+                return false;
+            case GemmBackendEpilogue::BIAS:
+            case GemmBackendEpilogue::BIAS_RELU:
+            case GemmBackendEpilogue::BIAS_GELU:
+            case GemmBackendEpilogue::BIAS_GELU_AUX:
+                return true;
+            default:
+                return Internal("Unknown Epilogue.");
+        }
+    }
+
+    absl::StatusOr<bool> EpilogueHasAuxiliaryOutput(GemmBackendEpilogue epilogue) {
+        switch (epilogue) {
+            case GemmBackendEpilogue::DEFAULT:
+            case GemmBackendEpilogue::RELU:
+            case GemmBackendEpilogue::GELU:
+            case GemmBackendEpilogue::BIAS:
+            case GemmBackendEpilogue::BIAS_RELU:
+            case GemmBackendEpilogue::BIAS_GELU:
+                return false;
+            case GemmBackendEpilogue::GELU_AUX:
+            case GemmBackendEpilogue::BIAS_GELU_AUX:
+                return true;
+            default:
+              return Internal("Unknown Epilogue.");
+        }
+    }
+
+    absl::StatusOr<GemmBackendEpilogue> AsSYCLEpilogue(
+        GemmBackendConfig_Epilogue epilogue) {
+          switch (epilogue) {
+            case GemmBackendConfig::DEFAULT:
+              return GemmBackendEpilogue::DEFAULT;
+            case GemmBackendConfig::RELU:
+              return GemmBackendEpilogue::RELU;
+            case GemmBackendConfig::GELU:
+              return GemmBackendEpilogue::GELU;
+            case GemmBackendConfig::GELU_AUX:
+              return GemmBackendEpilogue::GELU_AUX;
+            case GemmBackendConfig::BIAS:
+              return GemmBackendEpilogue::BIAS;
+            case GemmBackendConfig::BIAS_RELU:
+              return GemmBackendEpilogue::BIAS_RELU;
+            case GemmBackendConfig::BIAS_GELU:
+              return GemmBackendEpilogue::BIAS_GELU;
+            case GemmBackendConfig::BIAS_GELU_AUX:
+              return GemmBackendEpilogue::BIAS_GELU_AUX;
+            default:
+              return Internal("Unsupported Epilogue.");
+          }
+    }
+}
 
 // Returns the xetla native type (eg, float) corresponding to the given template
 // parameter XLA primitive type (eg, F32).
@@ -167,11 +249,11 @@ std::enable_if_t<std::is_same_v<InputT, ::gpu::xetla::bf16> ||
 RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
              const MatrixDescriptor& rhs, const MatrixDescriptor& c,
              const MatrixDescriptor& out, se::DeviceMemoryBase bias,
-             se::gpu::BlasLt::Epilogue epilogue, float beta) {
+             SYCLGemm::GemmBackendEpilogue epilogue, float beta) {
   void* bias_data = const_cast<void*>(bias.opaque());
   void* c_data = const_cast<void*>(c.data.opaque());
   switch (epilogue) {
-    case se::gpu::BlasLt::Epilogue::kDefault: {
+    case SYCLGemm::GemmBackendEpilogue::DEFAULT: {
       auto policy = ::gpu::xetla::XetlaGemmKernel<InputT>()
                         .add_matrix_c(out)
                         .add_matrix_a(lhs)
@@ -193,7 +275,7 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
       }
       return policy.fallback();
     }
-    case se::gpu::BlasLt::Epilogue::kBias: {
+    case SYCLGemm::GemmBackendEpilogue::BIAS: {
       auto policy =
           ::gpu::xetla::XetlaGemmKernel<InputT>()
               .add_matrix_c(out)
@@ -216,7 +298,7 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
       }
       return policy.fallback();
     }
-    case se::gpu::BlasLt::Epilogue::kGELU: {
+    case SYCLGemm::GemmBackendEpilogue::GELU: {
       auto policy =
           ::gpu::xetla::XetlaGemmKernel<InputT>()
               .add_matrix_c(out)
@@ -231,7 +313,7 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
       }
       return policy.fallback();
     }
-    case se::gpu::BlasLt::Epilogue::kBiasThenGELU: {
+    case SYCLGemm::GemmBackendEpilogue::BIAS_GELU: {
       auto policy =
           ::gpu::xetla::XetlaGemmKernel<InputT>()
               .add_matrix_c(out)
@@ -249,8 +331,8 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
       }
       return policy.fallback();
     }
-    case se::gpu::BlasLt::Epilogue::kReLU:
-    case se::gpu::BlasLt::Epilogue::kBiasThenReLU:
+    case SYCLGemm::GemmBackendEpilogue::RELU:
+    case SYCLGemm::GemmBackendEpilogue::BIAS_RELU:
       return true;
     default:
       return Internal("Unsupported Activation mode");
@@ -264,7 +346,7 @@ std::enable_if_t<!std::is_same_v<InputT, ::gpu::xetla::bf16> &&
 RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
              const MatrixDescriptor& rhs, const MatrixDescriptor& c,
              const MatrixDescriptor& out, se::DeviceMemoryBase bias,
-             se::gpu::BlasLt::Epilogue epilogue, float beta) {
+             SYCLGemm::GemmBackendEpilogue epilogue, float beta) {
   return Internal("Unsupported Datatype in XeTLA");
 }
 
@@ -313,7 +395,7 @@ absl::Status DoXetlaGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
                          const MatrixDescriptor& rhs, const MatrixDescriptor& c,
                          const MatrixDescriptor& output,
                          se::DeviceMemoryBase bias, float alpha, float beta,
-                         se::gpu::BlasLt::Epilogue epilogue, se::Stream* stream,
+                         SYCLGemm::GemmBackendEpilogue epilogue, se::Stream* stream,
                          std::optional<se::blas::AlgorithmType> algorithm,
                          se::ScratchAllocator* scratch_allocator,
                          se::blas::ComputePrecision compute_precision) {
@@ -340,7 +422,7 @@ absl::Status DoOnednnGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
                           const MatrixDescriptor& c,
                           const MatrixDescriptor& output,
                           se::DeviceMemoryBase bias, float alpha, float beta,
-                          se::gpu::BlasLt::Epilogue epilogue,
+                          SYCLGemm::GemmBackendEpilogue epilogue,
                           se::Stream* stream,
                           std::optional<se::blas::AlgorithmType> algorithm,
                           se::ScratchAllocator* scratch_allocator,
@@ -399,16 +481,16 @@ absl::Status DoOnednnGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
   CHECK(fabs(alpha - 1.0f) < 1e-6);
   if (c_data && fabs(beta - 0.0f) > 1e-6) post_ops.append_sum(beta);
   switch (epilogue) {
-    case se::gpu::BlasLt::Epilogue::kReLU:
-    case se::gpu::BlasLt::Epilogue::kBiasThenReLU:
+    case SYCLGemm::GemmBackendEpilogue::RELU:
+    case SYCLGemm::GemmBackendEpilogue::BIAS_RELU:
       post_ops.append_eltwise(dnnl::algorithm::eltwise_relu, 0, 0);
       break;
-    case se::gpu::BlasLt::Epilogue::kGELU:
-    case se::gpu::BlasLt::Epilogue::kBiasThenGELU:
+    case SYCLGemm::GemmBackendEpilogue::GELU:
+    case SYCLGemm::GemmBackendEpilogue::BIAS_GELU:
       post_ops.append_eltwise(dnnl::algorithm::eltwise_gelu_tanh, 0, 0);
       break;
-    case se::gpu::BlasLt::Epilogue::kDefault:
-    case se::gpu::BlasLt::Epilogue::kBias:
+    case SYCLGemm::GemmBackendEpilogue::DEFAULT:
+    case SYCLGemm::GemmBackendEpilogue::BIAS:
       break;
     default:
       return Internal("Unsupported Activation mode");
@@ -456,7 +538,7 @@ absl::Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
                     const MatrixDescriptor& lhs, const MatrixDescriptor& rhs,
                     const MatrixDescriptor& c, const MatrixDescriptor& output,
                     se::DeviceMemoryBase bias, float alpha, float beta,
-                    se::gpu::BlasLt::Epilogue epilogue, se::Stream* stream,
+                    SYCLGemm::GemmBackendEpilogue epilogue, se::Stream* stream,
                     std::optional<se::blas::AlgorithmType> algorithm,
                     se::ScratchAllocator* scratch_allocator,
                     se::blas::ComputePrecision compute_precision) {
@@ -511,7 +593,7 @@ absl::Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
                      se::DeviceMemoryBase c_buffer,
                      se::DeviceMemoryBase output_buffer,
                      se::DeviceMemoryBase bias_buffer, se::Stream* stream,
-                     se::gpu::BlasLt::Epilogue epilogue,
+                     SYCLGemm::GemmBackendEpilogue epilogue,
                      se::ScratchAllocator* scratch_allocator) {
   VLOG(2) << "Executing a GemmThunk";
 

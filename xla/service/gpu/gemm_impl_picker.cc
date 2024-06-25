@@ -55,26 +55,6 @@ bool IsXetlaSupport(const GemmConfig& config) {
   return xetla_support;
 }
 
-absl::StatusOr<se::gpu::BlasLt::Epilogue> AsBlasLtEpilogue(
-    GemmBackendConfig_Epilogue epilogue) {
-  switch (epilogue) {
-    case GemmBackendConfig::DEFAULT:
-      return se::gpu::BlasLt::Epilogue::kDefault;
-    case GemmBackendConfig::RELU:
-      return se::gpu::BlasLt::Epilogue::kReLU;
-    case GemmBackendConfig::GELU:
-      return se::gpu::BlasLt::Epilogue::kGELU;
-    case GemmBackendConfig::BIAS:
-      return se::gpu::BlasLt::Epilogue::kBias;
-    case GemmBackendConfig::BIAS_RELU:
-      return se::gpu::BlasLt::Epilogue::kBiasThenReLU;
-    case GemmBackendConfig::BIAS_GELU:
-      return se::gpu::BlasLt::Epilogue::kBiasThenGELU;
-    default:
-      return absl::InternalError("Unsupported Epilogue.");
-  }
-}
-
 absl::StatusOr<absl::Duration> GetExecuteTime(
     const HloInstruction* gemm, const AutotuneConfig& autotune_config) {
   se::DeviceMemoryAllocator* allocator = autotune_config.GetAllocator();
@@ -122,7 +102,7 @@ absl::StatusOr<absl::Duration> GetExecuteTime(
             autotune_config, rng_state));
   }
 
-  TF_ASSIGN_OR_RETURN(auto epilogue, AsBlasLtEpilogue(gemm_config.epilogue()));
+  TF_ASSIGN_OR_RETURN(auto epilogue, SYCLGemm::AsSYCLEpilogue(gemm_config.epilogue()));
   se::OwningScratchAllocator<> scratch_allocator(
       stream->parent()->device_ordinal(), autotune_config.GetAllocator());
 

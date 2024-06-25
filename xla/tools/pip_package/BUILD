@@ -10,6 +10,7 @@ COMMON_PIP_DEPS = [
     "README.md",
     "xla_setup.py",
     "//xla:pjrt_plugin_xpu.so",
+    "//xla/service/gpu:sycl_onednn.so",
     "//xla/python:xpu_plugin_extension.so"
 ]
 

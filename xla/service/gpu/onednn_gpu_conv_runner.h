@@ -1,4 +1,4 @@
-/* Copyright (c) 2023 Intel Corporation
+/* Copyright (c) 2024 Intel Corporation
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,18 +18,11 @@ limitations under the License.
 
 #include <optional>
 
-#include "xla/hlo/ir/hlo_instruction.h"
-#include "xla/hlo/ir/hlo_instructions.h"
-#include "xla/service/gpu/backend_configs.pb.h"
-#include "xla/service/gpu/cublas_cudnn.h"
+#include "xla/ffi/ffi.h"
+#include "xla/ffi/ffi_api.h"
 #include "xla/service/gpu/gpu_conv_runner.h"
 #include "xla/service/gpu/thunk.h"
 #include "xla/service/onednn_util.h"
-#include "xla/status.h"
-#include "xla/statusor.h"
-#include "xla/stream_executor/stream_executor.h"
-#include "xla/types.h"
-#include "xla/xla_data.pb.h"
 
 namespace xla {
 
@@ -59,17 +52,16 @@ typedef struct OneDnnConvPrimitive {
 } OneDnnConvPrimitive;
 
 absl::StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
-    se::Stream*, const GpuConvDescriptor& descriptor,
-    const std::vector<se::DeviceMemoryBase>& operand_se_buffers,
-    const se::DeviceMemoryBase& result_buffer,
-    const Thunk::ExecuteParams& params,
-    se::ScratchAllocator* scratch_allocator);
+    se::Stream*, const ffi::Dictionary& dict,
+    absl::flat_hash_map<std::string, std::string>& backend_dict,
+    const std::vector<ffi::BufferBase>& operand_se_buffers,
+    const ffi::BufferBase& result_buffer,
+    se::ScratchAllocator* scratch_allocator, CudnnConvKind conv_kind);
 
 absl::Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
-                  const GpuConvDescriptor& conv_descriptor,
-                  absl::Span<const se::DeviceMemoryBase> operand_buffers,
-                  se::DeviceMemoryBase result_buffer,
-                  const Thunk::ExecuteParams& params);
+                        const ffi::Dictionary& dict,
+                        absl::Span<const ffi::BufferBase> operand_buffers,
+                        ffi::BufferBase result_buffer, CudnnConvKind conv_kind);
 
 }  // namespace gpu
 }  // namespace xla

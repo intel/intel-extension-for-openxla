@@ -129,6 +129,7 @@ setup(
         _ext_path: [
             'python/*.so',
             'pjrt_plugin_xpu.so',
+            'service/gpu/sycl_onednn.so',
             'third-party-programs/*',
         ] + matches,
     },

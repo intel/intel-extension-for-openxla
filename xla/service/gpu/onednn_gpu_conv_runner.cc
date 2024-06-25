@@ -1,4 +1,4 @@
-/* Copyright (c) 2023 Intel Corporation
+/* Copyright (c) 2024 Intel Corporation
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ limitations under the License.
 
 #include "xla/service/gpu/scratch_allocator.h"
 #include "xla/service/gpu/stream_executor_util.h"
-#include "xla/stream_executor/gpu/gpu_stream.h"
 
 namespace xla {
 namespace gpu {
@@ -66,60 +65,68 @@ int64_t GetVectCSize(FilterLayout layout) {
 
 absl::Status CreateOneDnnPrimitive(
     OneDnnConvPrimitive* onednn_primitive,  // NOLINT
-    const GpuConvDescriptor& conv_descriptor,
-    absl::Span<const se::DeviceMemoryBase> operand_buffers,
-    se::DeviceMemoryBase result_buffer, const Thunk::ExecuteParams& params,
-    se::ScratchAllocator* scratch_allocator) {
-  sycl::queue* dpcpp_stream = se::gpu::AsGpuStreamValue(params.stream);
-  auto& buffer_allocations = *params.buffer_allocations;
+    const ffi::Dictionary& dict,
+    absl::flat_hash_map<std::string, std::string>& backend_dict,
+    absl::Span<const ffi::BufferBase> operand_buffers,
+    ffi::BufferBase result_buffer, se::Stream* stream,
+    se::ScratchAllocator* scratch_allocator, CudnnConvKind conv_kind) {
+  sycl::queue* dpcpp_stream = se::gpu::AsGpuStreamValue(stream);
   onednn_primitive->engine = FindOrCreateEngine(dpcpp_stream);
   onednn_primitive->stream =
       dnnl::sycl_interop::make_stream(onednn_primitive->engine, *dpcpp_stream);
-  DataLayout input_dl;
-  FilterLayout filter_dl;
-  DataLayout output_dl;
+  DataLayout input_dl = static_cast<DataLayout>(*dict.get<int32_t>("input_dl"));
+  FilterLayout filter_dl =
+      static_cast<FilterLayout>(*dict.get<int32_t>("filter_dl"));
+  DataLayout output_dl =
+      static_cast<DataLayout>(*dict.get<int32_t>("output_dl"));
 
-  Shape input_shape, filter_shape, output_shape;
+  PrimitiveType input_type, filter_type, output_type;
+  absl::Span<const int64_t> input_dimensions, filter_dimensions,
+      output_dimensions;
   void* input_data;
   void* filter_data;
   void* output_data;
   void* bias_data = nullptr;
   void* side_input_data = nullptr;
 
-  const CudnnConvBackendConfig& backend_config = conv_descriptor.backend_config;
-  float conv_result_scale =
-      static_cast<float>(backend_config.conv_result_scale());
+  float conv_result_scale = std::stof(backend_dict["conv_result_scale"]);
   bool conv_result_scale_one = (fabs(conv_result_scale - 1.0f) < 1e-6);
 
-  switch (conv_descriptor.kind) {
+  switch (conv_kind) {
     case CudnnConvKind::kForward:
     case CudnnConvKind::kForwardActivation:
-      input_shape = conv_descriptor.operand0_shape;
-      filter_shape = conv_descriptor.operand1_shape;
-      output_shape = conv_descriptor.result_shape;
+      input_type = operand_buffers[0].dtype;
 
-      input_data = const_cast<void*>(operand_buffers[0].opaque());
-      filter_data = const_cast<void*>(operand_buffers[1].opaque());
-      output_data = const_cast<void*>(result_buffer.opaque());
+      input_dimensions = operand_buffers[0].dimensions;
+      filter_dimensions = operand_buffers[1].dimensions;
+      output_dimensions = result_buffer.dimensions;
+
+      input_data = const_cast<void*>(operand_buffers[0].data.opaque());
+      filter_data = const_cast<void*>(operand_buffers[1].data.opaque());
+      output_data = const_cast<void*>(result_buffer.data.opaque());
       break;
     case CudnnConvKind::kBackwardInput:
-      input_shape = conv_descriptor.result_shape;
-      filter_shape = conv_descriptor.operand1_shape;
-      output_shape = conv_descriptor.operand0_shape;
+      input_type = result_buffer.dtype;
 
-      input_data = const_cast<void*>(result_buffer.opaque());
-      filter_data = const_cast<void*>(operand_buffers[1].opaque());
-      output_data = const_cast<void*>(operand_buffers[0].opaque());
+      input_dimensions = result_buffer.dimensions;
+      filter_dimensions = operand_buffers[1].dimensions;
+      output_dimensions = operand_buffers[0].dimensions;
+
+      input_data = const_cast<void*>(result_buffer.data.opaque());
+      filter_data = const_cast<void*>(operand_buffers[1].data.opaque());
+      output_data = const_cast<void*>(operand_buffers[0].data.opaque());
 
       break;
     case CudnnConvKind::kBackwardFilter:
-      input_shape = conv_descriptor.operand0_shape;
-      filter_shape = conv_descriptor.result_shape;
-      output_shape = conv_descriptor.operand1_shape;
+      input_type = operand_buffers[0].dtype;
 
-      input_data = const_cast<void*>(operand_buffers[0].opaque());
-      filter_data = const_cast<void*>(result_buffer.opaque());
-      output_data = const_cast<void*>(operand_buffers[1].opaque());
+      input_dimensions = operand_buffers[0].dimensions;
+      filter_dimensions = result_buffer.dimensions;
+      output_dimensions = operand_buffers[1].dimensions;
+
+      input_data = const_cast<void*>(operand_buffers[0].data.opaque());
+      filter_data = const_cast<void*>(result_buffer.data.opaque());
+      output_data = const_cast<void*>(operand_buffers[1].data.opaque());
 
       break;
     default:
@@ -128,33 +135,16 @@ absl::Status CreateOneDnnPrimitive(
 
   float side_input_scale;
   bool side_input_scale_zero;
-  if (conv_descriptor.kind == CudnnConvKind::kForwardActivation) {
-    bias_data = const_cast<void*>(operand_buffers[2].opaque());
+  if (conv_kind == CudnnConvKind::kForwardActivation) {
+    bias_data = const_cast<void*>(operand_buffers[2].data.opaque());
     if (operand_buffers.size() >= 4) {
-      side_input_data = const_cast<void*>(operand_buffers[3].opaque());
-      side_input_scale = backend_config.side_input_scale();
+      side_input_data = const_cast<void*>(operand_buffers[3].data.opaque());
+      side_input_scale = std::stof(backend_dict["side_input_scale"]);
       side_input_scale_zero = (fabs(side_input_scale - 0.0f) < 1e-6);
     }
   }
 
-  const Window& window = conv_descriptor.window;
-  const ConvolutionDimensionNumbers& dnums = conv_descriptor.dnums;
-
-  VLOG(3) << "input shape: " << ShapeUtil::HumanStringWithLayout(input_shape);
-  VLOG(3) << "filter shape: " << ShapeUtil::HumanStringWithLayout(filter_shape);
-  VLOG(3) << "Output shape: " << ShapeUtil::HumanStringWithLayout(output_shape);
-  VLOG(3) << "Window: { " << window.ShortDebugString() << " }";
-  VLOG(3) << "Dim nums: { " << dnums.ShortDebugString() << " }";
-  if (backend_config.reordered_int8_nchw_vect()) {
-    VLOG(3) << "Filter and bias (if present) must be reordered with "
-            << "cudnnReorderFilterAndBias";
-  }
-
-  TF_ASSIGN_OR_RETURN(std::tie(input_dl, filter_dl, output_dl),
-                      XlaConvShapesToStreamExecutorLayouts(
-                          dnums, input_shape, filter_shape, output_shape));
-
-  const int num_dimensions = conv_descriptor.window.dimensions_size();
+  const int num_dimensions = *dict.get<int32_t>("window_num_dimensions");
   CHECK_LE(num_dimensions, 3);
 
   // OneDNN does not support 1D convolutions. We therefore express 1D
@@ -164,19 +154,19 @@ absl::Status CreateOneDnnPrimitive(
   const int effective_num_dimensions = std::max(2, num_dimensions);
 
   int ic = GetVectCSize(input_dl) *
-           input_shape.dimensions(dnums.input_feature_dimension());
-  int n = input_shape.dimensions(dnums.input_batch_dimension());
+           input_dimensions[*dict.get<int64_t>("input_feature_dimension")];
+  int n = input_dimensions[*dict.get<int64_t>("input_batch_dimension")];
   int id, ih, iw;
   if (num_dimensions == 3) {
-    id = input_shape.dimensions(dnums.input_spatial_dimensions(0));
-    ih = input_shape.dimensions(dnums.input_spatial_dimensions(1));
-    iw = input_shape.dimensions(dnums.input_spatial_dimensions(2));
+    id = input_dimensions[*dict.get<int64_t>("input_spatial_dimensions_0")];
+    ih = input_dimensions[*dict.get<int64_t>("input_spatial_dimensions_1")];
+    iw = input_dimensions[*dict.get<int64_t>("input_spatial_dimensions_2")];
   } else if (num_dimensions == 2) {
-    ih = input_shape.dimensions(dnums.input_spatial_dimensions(0));
-    iw = input_shape.dimensions(dnums.input_spatial_dimensions(1));
+    ih = input_dimensions[*dict.get<int64_t>("input_spatial_dimensions_0")];
+    iw = input_dimensions[*dict.get<int64_t>("input_spatial_dimensions_1")];
   } else if (num_dimensions == 1) {
     ih = 1;
-    iw = input_shape.dimensions(dnums.input_spatial_dimensions(0));
+    iw = input_dimensions[*dict.get<int64_t>("input_spatial_dimensions_0")];
   } else if (num_dimensions == 0) {
     ih = 1;
     iw = 1;
@@ -186,15 +176,15 @@ absl::Status CreateOneDnnPrimitive(
 
   int kd, kh, kw;
   if (num_dimensions == 3) {
-    kd = filter_shape.dimensions(dnums.kernel_spatial_dimensions(0));
-    kh = filter_shape.dimensions(dnums.kernel_spatial_dimensions(1));
-    kw = filter_shape.dimensions(dnums.kernel_spatial_dimensions(2));
+    kd = filter_dimensions[*dict.get<int64_t>("kernel_spatial_dimensions_0")];
+    kh = filter_dimensions[*dict.get<int64_t>("kernel_spatial_dimensions_1")];
+    kw = filter_dimensions[*dict.get<int64_t>("kernel_spatial_dimensions_2")];
   } else if (num_dimensions == 2) {
-    kh = filter_shape.dimensions(dnums.kernel_spatial_dimensions(0));
-    kw = filter_shape.dimensions(dnums.kernel_spatial_dimensions(1));
+    kh = filter_dimensions[*dict.get<int64_t>("kernel_spatial_dimensions_0")];
+    kw = filter_dimensions[*dict.get<int64_t>("kernel_spatial_dimensions_1")];
   } else if (num_dimensions == 1) {
     kh = 1;
-    kw = filter_shape.dimensions(dnums.kernel_spatial_dimensions(0));
+    kw = filter_dimensions[*dict.get<int64_t>("kernel_spatial_dimensions_0")];
   } else if (num_dimensions == 0) {
     kh = 1;
     kw = 1;
@@ -207,9 +197,9 @@ absl::Status CreateOneDnnPrimitive(
   // O = filter_out/G
   // TODO: depthwise-conv
   int filter_ic =
-      filter_shape.dimensions(dnums.kernel_input_feature_dimension());
+      filter_dimensions[*dict.get<int64_t>("kernel_input_feature_dimension")];
   int filter_oc =
-      filter_shape.dimensions(dnums.kernel_output_feature_dimension());
+      filter_dimensions[*dict.get<int64_t>("kernel_output_feature_dimension")];
   bool is_group_conv = ic != filter_ic;
   int kg = ic / filter_ic;  // kg for group-conv and depthwise-conv
   int ko = filter_oc / kg;
@@ -220,42 +210,43 @@ absl::Status CreateOneDnnPrimitive(
   int stride_d, stride_h, stride_w, dilate_d, dilate_h, dilate_w;
 
   if (num_dimensions == 3) {
-    padding_d_l = window.dimensions(0).padding_low();
-    padding_h_l = window.dimensions(1).padding_low();
-    padding_w_l = window.dimensions(2).padding_low();
-    padding_d_h = window.dimensions(0).padding_high();
-    padding_h_h = window.dimensions(1).padding_high();
-    padding_w_h = window.dimensions(2).padding_high();
+    padding_d_l = *dict.get<int64_t>("window_padding_low_0");
+    padding_h_l = *dict.get<int64_t>("window_padding_low_1");
+    padding_w_l = *dict.get<int64_t>("window_padding_low_2");
+    padding_d_h = *dict.get<int64_t>("window_padding_high_0");
+    padding_h_h = *dict.get<int64_t>("window_padding_high_1");
+    padding_w_h = *dict.get<int64_t>("window_padding_high_2");
 
-    stride_d = window.dimensions(0).stride();
-    stride_h = window.dimensions(1).stride();
-    stride_w = window.dimensions(2).stride();
+    stride_d = *dict.get<int64_t>("window_stride_0");
+    stride_h = *dict.get<int64_t>("window_stride_1");
+    stride_w = *dict.get<int64_t>("window_stride_2");
 
-    dilate_d = window.dimensions(0).window_dilation();
-    dilate_h = window.dimensions(1).window_dilation();
-    dilate_w = window.dimensions(2).window_dilation();
+    dilate_d = *dict.get<int64_t>("window_dilation_0");
+    dilate_h = *dict.get<int64_t>("window_dilation_1");
+    dilate_w = *dict.get<int64_t>("window_dilation_2");
   } else if (num_dimensions == 2) {
-    padding_h_l = window.dimensions(0).padding_low();
-    padding_w_l = window.dimensions(1).padding_low();
-    padding_h_h = window.dimensions(0).padding_high();
-    padding_w_h = window.dimensions(1).padding_high();
+    padding_h_l = *dict.get<int64_t>("window_padding_low_0");
+    padding_w_l = *dict.get<int64_t>("window_padding_low_1");
+    padding_h_h = *dict.get<int64_t>("window_padding_high_0");
+    ;
+    padding_w_h = *dict.get<int64_t>("window_padding_high_1");
 
-    stride_h = window.dimensions(0).stride();
-    stride_w = window.dimensions(1).stride();
+    stride_h = *dict.get<int64_t>("window_stride_0");
+    stride_w = *dict.get<int64_t>("window_stride_1");
 
-    dilate_h = window.dimensions(0).window_dilation();
-    dilate_w = window.dimensions(1).window_dilation();
+    dilate_h = *dict.get<int64_t>("window_dilation_0");
+    dilate_w = *dict.get<int64_t>("window_dilation_1");
   } else if (num_dimensions == 1) {
     padding_h_l = 0;
-    padding_w_l = window.dimensions(0).padding_low();
+    padding_w_l = *dict.get<int64_t>("window_padding_low_0");
     padding_h_h = 0;
-    padding_w_h = window.dimensions(0).padding_high();
+    padding_w_h = *dict.get<int64_t>("window_padding_high_0");
 
     stride_h = 1;
-    stride_w = window.dimensions(0).stride();
+    stride_w = *dict.get<int64_t>("window_stride_0");
 
     dilate_h = 1;
-    dilate_w = window.dimensions(0).window_dilation();
+    dilate_w = *dict.get<int64_t>("window_dilation_0");
   } else if (num_dimensions == 0) {
     padding_h_l = 0;
     padding_w_l = 0;
@@ -270,17 +261,17 @@ absl::Status CreateOneDnnPrimitive(
   }
 
   int od, oh, ow;
-  int oc = output_shape.dimensions(dnums.output_feature_dimension());
+  int oc = output_dimensions[*dict.get<int64_t>("output_feature_dimension")];
   if (num_dimensions == 3) {
-    od = output_shape.dimensions(dnums.output_spatial_dimensions(0));
-    oh = output_shape.dimensions(dnums.output_spatial_dimensions(1));
-    ow = output_shape.dimensions(dnums.output_spatial_dimensions(2));
+    od = output_dimensions[*dict.get<int64_t>("output_spatial_dimensions_0")];
+    oh = output_dimensions[*dict.get<int64_t>("output_spatial_dimensions_1")];
+    ow = output_dimensions[*dict.get<int64_t>("output_spatial_dimensions_2")];
   } else if (num_dimensions == 2) {
-    oh = output_shape.dimensions(dnums.output_spatial_dimensions(0));
-    ow = output_shape.dimensions(dnums.output_spatial_dimensions(1));
+    oh = output_dimensions[*dict.get<int64_t>("output_spatial_dimensions_0")];
+    ow = output_dimensions[*dict.get<int64_t>("output_spatial_dimensions_1")];
   } else if (num_dimensions == 1) {
     oh = 1;
-    ow = output_shape.dimensions(dnums.output_spatial_dimensions(0));
+    ow = output_dimensions[*dict.get<int64_t>("output_spatial_dimensions_0")];
   } else if (num_dimensions == 0) {
     oh = 1;
     ow = 1;
@@ -394,7 +385,6 @@ absl::Status CreateOneDnnPrimitive(
 
     dnnl::memory::data_type data_type;
 
-    PrimitiveType input_type = input_shape.element_type();
     switch (input_type) {
       case BF16:
         data_type = dnnl::memory::data_type::bf16;
@@ -466,32 +456,23 @@ absl::Status CreateOneDnnPrimitive(
           {DNNL_ARG_ATTR_MULTIPLE_POST_OP(po.len() - 1) | DNNL_ARG_SRC_1,
            onednn_primitive->bias_memory});
     }
-    if (conv_descriptor.kind == CudnnConvKind::kForwardActivation) {
-      float leakyrelu_alpha =
-            static_cast<float>(backend_config.leakyrelu_alpha());
-      switch (conv_descriptor.backend_config.activation_mode()) {
-        case stream_executor::dnn::kSigmoid:
-          po.append_eltwise(dnnl::algorithm::eltwise_logistic, 1, 0);
-          break;
-        case stream_executor::dnn::kRelu:
-          po.append_eltwise(dnnl::algorithm::eltwise_relu, 0, 0);
-          break;
-        case stream_executor::dnn::kRelu6:
-          po.append_eltwise(dnnl::algorithm::eltwise_clip_v2, 0, 6);
-          break;
-        case stream_executor::dnn::kTanh:
-          po.append_eltwise(dnnl::algorithm::eltwise_tanh, 0, 0);
-          break;
-        case stream_executor::dnn::kElu:
-          po.append_eltwise(dnnl::algorithm::eltwise_elu, 1, 0);
-          break;
-        case stream_executor::dnn::kLeakyRelu:
-          po.append_eltwise(dnnl::algorithm::eltwise_relu, leakyrelu_alpha, 0);
-          break;
-        case stream_executor::dnn::kNone:
-          break;
-        default:
-          return Internal("Unsupported Activation mode");
+    if (conv_kind == CudnnConvKind::kForwardActivation) {
+      if (backend_dict["activation_mode"] == "kNone") {
+      } else if (backend_dict["activation_mode"] == "kSigmoid") {
+        po.append_eltwise(dnnl::algorithm::eltwise_logistic, 1, 0);
+      } else if (backend_dict["activation_mode"] == "kRelu") {
+        po.append_eltwise(dnnl::algorithm::eltwise_relu, 0, 0);
+      } else if (backend_dict["activation_mode"] == "kRelu6") {
+        po.append_eltwise(dnnl::algorithm::eltwise_clip_v2, 0, 6);
+      } else if (backend_dict["activation_mode"] == "kTanh") {
+        po.append_eltwise(dnnl::algorithm::eltwise_tanh, 0, 0);
+      } else if (backend_dict["activation_mode"] == "kElu") {
+        po.append_eltwise(dnnl::algorithm::eltwise_elu, 1, 0);
+      } else if (backend_dict["activation_mode"] == "kLeakyRelu") {
+        float leakyrelu_alpha = std::stof(backend_dict["leakyrelu_alpha"]);
+        po.append_eltwise(dnnl::algorithm::eltwise_relu, leakyrelu_alpha, 0);
+      } else {
+        return Internal("Unsupported Activation mode");
       }
     }
     post_ops_attr.set_post_ops(po);
@@ -503,8 +484,8 @@ absl::Status CreateOneDnnPrimitive(
       post_ops_attr.set_fpmath_mode(fp32_math_mode);
     }
 
-    if (conv_descriptor.kind == CudnnConvKind::kForward ||
-        conv_descriptor.kind == CudnnConvKind::kForwardActivation) {
+    if (conv_kind == CudnnConvKind::kForward ||
+        conv_kind == CudnnConvKind::kForwardActivation) {
       ConvFwdPd fwd_pd;
       if (bias_data != nullptr && conv_result_scale_one) {
         auto bias_md = dnnl::memory::desc(bias_dims, data_type,
@@ -564,7 +545,7 @@ absl::Status CreateOneDnnPrimitive(
       onednn_primitive->fwd_primitives_args.insert(
           {DNNL_ARG_SCRATCHPAD, onednn_primitive->scratchpad_memory});
 
-    } else if (conv_descriptor.kind == CudnnConvKind::kBackwardInput) {
+    } else if (conv_kind == CudnnConvKind::kBackwardInput) {
       // TODO: handle post_ops_attr.
       ConvFwdPd fwd_pd = ConvFwdPd(
           onednn_primitive->engine, dnnl::prop_kind::forward,
@@ -621,7 +602,7 @@ absl::Status CreateOneDnnPrimitive(
       onednn_primitive->bwd_input_primitive =
           dnnl::convolution_backward_data(bwd_input_pd);
 
-    } else if (conv_descriptor.kind == CudnnConvKind::kBackwardFilter) {
+    } else if (conv_kind == CudnnConvKind::kBackwardFilter) {
       // TODO: handle post_ops_attr.
       ConvFwdPd fwd_pd = ConvFwdPd(
           onednn_primitive->engine, dnnl::prop_kind::forward,
@@ -691,15 +672,16 @@ absl::Status CreateOneDnnPrimitive(
 }  // namespace
 
 absl::StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
-    se::Stream* stream, const GpuConvDescriptor& descriptor,
-    const std::vector<se::DeviceMemoryBase>& operand_se_buffers,
-    const se::DeviceMemoryBase& result_buffer,
-    const Thunk::ExecuteParams& params,
-    se::ScratchAllocator* scratch_allocator) {
+    se::Stream* stream, const ffi::Dictionary& dict,
+    absl::flat_hash_map<std::string, std::string>& backend_dict,
+    const std::vector<ffi::BufferBase>& operand_se_buffers,
+    const ffi::BufferBase& result_buffer,
+    se::ScratchAllocator* scratch_allocator, CudnnConvKind conv_kind) {
   OneDnnConvPrimitive primitive;
-  auto status = CreateOneDnnPrimitive(&primitive, descriptor,
+  auto status = CreateOneDnnPrimitive(&primitive, dict, backend_dict,
                                       absl::MakeSpan(operand_se_buffers),
-                                      result_buffer, params, scratch_allocator);
+                                      result_buffer, stream, scratch_allocator,
+                                      conv_kind);
   if (TF_PREDICT_FALSE(!status.ok())) {
     return status;
   }
@@ -707,42 +689,41 @@ absl::StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
 }
 
 absl::Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
-                  const GpuConvDescriptor& conv_descriptor,
-                  absl::Span<const se::DeviceMemoryBase> operand_buffers,
-                  se::DeviceMemoryBase result_buffer,
-                  const Thunk::ExecuteParams& params) {
+                        const ffi::Dictionary& dict,
+                        absl::Span<const ffi::BufferBase> operand_buffers,
+                        ffi::BufferBase result_buffer, CudnnConvKind conv_kind) {
   void* input_data;
   void* filter_data;
   void* output_data;
   void* bias_data = nullptr;
   void* side_input_data = nullptr;
 
-  switch (conv_descriptor.kind) {
+  switch (conv_kind) {
     case CudnnConvKind::kForward:
     case CudnnConvKind::kForwardActivation:
-      input_data = const_cast<void*>(operand_buffers[0].opaque());
-      filter_data = const_cast<void*>(operand_buffers[1].opaque());
-      output_data = const_cast<void*>(result_buffer.opaque());
+      input_data = const_cast<void*>(operand_buffers[0].data.opaque());
+      filter_data = const_cast<void*>(operand_buffers[1].data.opaque());
+      output_data = const_cast<void*>(result_buffer.data.opaque());
       break;
     case CudnnConvKind::kBackwardInput:
-      input_data = const_cast<void*>(result_buffer.opaque());
-      filter_data = const_cast<void*>(operand_buffers[1].opaque());
-      output_data = const_cast<void*>(operand_buffers[0].opaque());
+      input_data = const_cast<void*>(result_buffer.data.opaque());
+      filter_data = const_cast<void*>(operand_buffers[1].data.opaque());
+      output_data = const_cast<void*>(operand_buffers[0].data.opaque());
 
       break;
     case CudnnConvKind::kBackwardFilter:
-      input_data = const_cast<void*>(operand_buffers[0].opaque());
-      filter_data = const_cast<void*>(result_buffer.opaque());
-      output_data = const_cast<void*>(operand_buffers[1].opaque());
+      input_data = const_cast<void*>(operand_buffers[0].data.opaque());
+      filter_data = const_cast<void*>(result_buffer.data.opaque());
+      output_data = const_cast<void*>(operand_buffers[1].data.opaque());
       break;
     default:
       return Internal("Unkown convolution kind");
   }
 
-  if (conv_descriptor.kind == CudnnConvKind::kForwardActivation) {
-    bias_data = const_cast<void*>(operand_buffers[2].opaque());
+  if (conv_kind == CudnnConvKind::kForwardActivation) {
+    bias_data = const_cast<void*>(operand_buffers[2].data.opaque());
     if (operand_buffers.size() >= 4) {
-      side_input_data = const_cast<void*>(operand_buffers[3].opaque());
+      side_input_data = const_cast<void*>(operand_buffers[3].data.opaque());
     }
   }
   onednn_primitive.src_memory.set_data_handle(input_data);
@@ -752,22 +733,22 @@ absl::Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
     onednn_primitive.bias_memory.set_data_handle(bias_data);
   }
   try {
-    if (conv_descriptor.kind == CudnnConvKind::kForward ||
-        conv_descriptor.kind == CudnnConvKind::kForwardActivation) {
+    if (conv_kind == CudnnConvKind::kForward ||
+        conv_kind == CudnnConvKind::kForwardActivation) {
       if (onednn_primitive.has_reorder) {
         onednn_primitive.filter_reorder_primitive.execute(
             onednn_primitive.stream, onednn_primitive.reorder_args);
       }
       onednn_primitive.fwd_primitive.execute(
           onednn_primitive.stream, onednn_primitive.fwd_primitives_args);
-    } else if (conv_descriptor.kind == CudnnConvKind::kBackwardInput) {
+    } else if (conv_kind == CudnnConvKind::kBackwardInput) {
       if (onednn_primitive.has_reorder) {
         onednn_primitive.filter_reorder_primitive.execute(
             onednn_primitive.stream, onednn_primitive.reorder_args);
       }
       onednn_primitive.bwd_input_primitive.execute(
           onednn_primitive.stream, onednn_primitive.bwd_input_primitive_args);
-    } else if (conv_descriptor.kind == CudnnConvKind::kBackwardFilter) {
+    } else if (conv_kind == CudnnConvKind::kBackwardFilter) {
       onednn_primitive.bwd_filter_primitive.execute(
           onednn_primitive.stream, onednn_primitive.bwd_filter_primitive_args);
       if (onednn_primitive.has_reorder) {

@@ -21,6 +21,24 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "sycl_custom_call",
+    srcs = [
+        "sycl_custom_call.cc",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//xla/service:onednn_util",
+        "//xla/service/gpu:sycl_onednn",
+        "@xla//xla/ffi",
+        "@xla//xla/ffi:ffi_api",
+        "@xla//xla/stream_executor",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+    alwayslink = 1,
+)
+
 xetla_library(
     name = "onednn_matmul_utils",
     srcs = ["onednn_matmul_utils.cc"],
@@ -29,27 +47,7 @@ xetla_library(
         ":scratch_allocator",
         "//xla/service:onednn_util",
         "//xla/service/gpu/xetla/gemm:gemm_kernel",
-        "//xla/stream_executor/sycl:sycl_executor",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/types:span",
-        "@onednn_gpu//:onednn_gpu",
-        "@tsl//tsl/framework:numeric_types",
-        "@tsl//tsl/platform:statusor",
-        "@tsl//tsl/platform:types",
-        "@xetla//:xetla_header",
-        "@xla//xla:shape_util",
-        "@xla//xla:status_macros",
-        "@xla//xla:statusor",
-        "@xla//xla:types",
-        "@xla//xla:util",
-        "@xla//xla:xla_data_proto_cc",
-        "@xla//xla/hlo/ir:hlo",
-        "@xla//xla/mlir_hlo",
-        "@xla//xla/mlir_hlo:lhlo_gpu",
-        "@xla//xla/service/gpu:backend_configs_cc",
-        "@xla//xla/service/gpu:ir_emission_utils",
         "@xla//xla/service/gpu:matmul_utils",
-        "@xla//xla/stream_executor:stream_executor_headers",
     ],
 )
 
@@ -58,7 +56,7 @@ cc_library(
     srcs = ["gemm_impl_picker.cc",],
     hdrs = ["gemm_impl_picker.h"],
     deps = [
-        ":onednn_matmul_utils",
+        ":sycl_onednn",
         "//xla/stream_executor/sycl:hw_info",
         "@com_google_absl//absl/algorithm:container",
         "@tsl//tsl/platform:errors",
@@ -179,31 +177,50 @@ xpu_library(
     ],
 )
 
+cc_import(
+    name = "sycl_onednn",
+    hdrs = [
+        "sycl_onednn.h",
+        "onednn_gpu_conv_runner.h",
+        "onednn_matmul_utils.h",
+    ],
+    shared_library = ":sycl_onednn.so",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":scratch_allocator",
+        "@xla//xla/service/gpu:gpu_conv_runner",
+        "@xla//xla/service/gpu:thunk",
+        "@xla//xla/service/gpu:matmul_utils",
+    ],
+)
+
+cc_binary(
+    name = "sycl_onednn.so",
+    srcs = [
+        "sycl_onednn.cc",
+        "sycl_onednn.h",
+    ],
+    linkshared = True,
+    deps = [
+        ":onednn_gpu_conv_runner",
+        ":onednn_matmul_utils",
+    ],
+)
+
 cc_library(
     name = "onednn_gpu_conv_runner",
-    srcs = ["onednn_gpu_conv_runner.cc"],
-    hdrs = ["onednn_gpu_conv_runner.h"],
+    srcs = [
+        "onednn_gpu_conv_runner.cc",
+        "onednn_gpu_conv_runner.h",
+    ],
     deps = [
         ":scratch_allocator",
         "//xla/service:onednn_util",
-        "@com_google_absl//absl/strings",
-        "@tsl//tsl/framework:numeric_types",
-        "@xla//xla:shape_util",
-        "@xla//xla:status",
-        "@xla//xla:status_macros",
-        "@xla//xla:statusor",
-        "@xla//xla:types",
-        "@xla//xla:util",
-        "@xla//xla:xla_data_proto_cc",
-        "@xla//xla/hlo/ir:hlo",
-        "@xla//xla/service/gpu:backend_configs_cc",
-        "@xla//xla/service/gpu:cublas_cudnn",
+        "@xla//xla/ffi",
+        "@xla//xla/ffi:ffi_api",
         "@xla//xla/service/gpu:gpu_conv_runner",
         "@xla//xla/service/gpu:stream_executor_util",
         "@xla//xla/service/gpu:thunk",
-        "@xla//xla/stream_executor",
-        "@xla//xla/stream_executor/gpu:gpu_stream",
-        "@xla//xla/stream_executor/gpu:gpu_types_header",
     ],
 )
 

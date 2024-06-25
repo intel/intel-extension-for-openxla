@@ -26,7 +26,7 @@ namespace se = ::stream_executor;
 namespace gpu {
 namespace xetla {
 
-std::unordered_map<std::string, std::tuple<int, int, int, int, int, int>>
+static std::unordered_map<std::string, std::tuple<int, int, int, int, int, int>>
     configMap = {{"1_4096_16384", std::make_tuple(128, 128, 16, 32, 64, 1)},
                  {"1_16384_4096", std::make_tuple(8, 512, 8, 16, 16, 1)},
                  {"1_4096_4096", std::make_tuple(128, 64, 16, 16, 64, 1)},

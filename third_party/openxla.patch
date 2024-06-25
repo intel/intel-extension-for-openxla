@@ -1,6 +1,6 @@
 diff --git a/third_party/tsl/third_party/eigen3/eigen.patch b/third_party/tsl/third_party/eigen3/eigen.patch
 new file mode 100644
-index 0000000000..8954b1d2e3
+index 000000000..8954b1d2e
 --- /dev/null
 +++ b/third_party/tsl/third_party/eigen3/eigen.patch
 @@ -0,0 +1,13 @@
@@ -18,7 +18,7 @@ index 0000000000..8954b1d2e3
 +   #define EIGEN_COMP_CXXVER 17
 + #elif EIGEN_CPLUSPLUS >= 201402L
 diff --git a/third_party/tsl/third_party/eigen3/workspace.bzl b/third_party/tsl/third_party/eigen3/workspace.bzl
-index 027454e46d..ca5489940e 100644
+index 027454e46..ca5489940 100644
 --- a/third_party/tsl/third_party/eigen3/workspace.bzl
 +++ b/third_party/tsl/third_party/eigen3/workspace.bzl
 @@ -14,6 +14,7 @@ def repo():
@@ -30,7 +30,7 @@ index 027454e46d..ca5489940e 100644
          strip_prefix = "eigen-{commit}".format(commit = EIGEN_COMMIT),
          urls = tf_mirror_urls("https://gitlab.com/libeigen/eigen/-/archive/{commit}/eigen-{commit}.tar.gz".format(commit = EIGEN_COMMIT)),
 diff --git a/third_party/tsl/third_party/gpus/cuda_configure.bzl b/third_party/tsl/third_party/gpus/cuda_configure.bzl
-index 1665388439..e88f55019d 100644
+index 166538843..e88f55019 100644
 --- a/third_party/tsl/third_party/gpus/cuda_configure.bzl
 +++ b/third_party/tsl/third_party/gpus/cuda_configure.bzl
 @@ -26,7 +26,7 @@
@@ -53,7 +53,7 @@ index 1665388439..e88f55019d 100644
      "execute",
 diff --git a/third_party/tsl/third_party/grpc/c_ares.patch b/third_party/tsl/third_party/grpc/c_ares.patch
 new file mode 100644
-index 0000000000..752965f933
+index 000000000..752965f93
 --- /dev/null
 +++ b/third_party/tsl/third_party/grpc/c_ares.patch
 @@ -0,0 +1,200 @@
@@ -258,7 +258,7 @@ index 0000000000..752965f933
 +         ":windows": ["-defaultlib:ws2_32.lib"],
 +         "//conditions:default": [],
 diff --git a/third_party/tsl/third_party/grpc/upb_platform_fix.patch b/third_party/tsl/third_party/grpc/upb_platform_fix.patch
-index 6edd66067e..022c9d1557 100644
+index 6edd66067..022c9d155 100644
 --- a/third_party/tsl/third_party/grpc/upb_platform_fix.patch
 +++ b/third_party/tsl/third_party/grpc/upb_platform_fix.patch
 @@ -11,3 +11,12 @@ index ad85b202..2311b2e4 100644
@@ -275,7 +275,7 @@ index 6edd66067e..022c9d1557 100644
 +     # copybara:strip_end
 + ]
 diff --git a/third_party/tsl/third_party/llvm/build.patch b/third_party/tsl/third_party/llvm/build.patch
-index 479e08cde8..33f585b709 100644
+index 479e08cde..33f585b70 100644
 --- a/third_party/tsl/third_party/llvm/build.patch
 +++ b/third_party/tsl/third_party/llvm/build.patch
 @@ -44,3 +44,24 @@ index 7770284e5543..0b45127495dc 100644
@@ -305,7 +305,7 @@ index 479e08cde8..33f585b709 100644
 +   if (failed(reader.parseVarInt(version)))
 diff --git a/third_party/tsl/third_party/llvm/spirv.patch b/third_party/tsl/third_party/llvm/spirv.patch
 new file mode 100644
-index 0000000000..8643e91813
+index 000000000..8643e9181
 --- /dev/null
 +++ b/third_party/tsl/third_party/llvm/spirv.patch
 @@ -0,0 +1,76 @@
@@ -386,7 +386,7 @@ index 0000000000..8643e91813
 +   // canonicalization pass that enables other optimizations. As a result,
 +   // LoopSink pass needs to be a very late IR pass to avoid undoing LICM
 diff --git a/third_party/tsl/third_party/llvm/workspace.bzl b/third_party/tsl/third_party/llvm/workspace.bzl
-index c2853e0ea0..b45511c17c 100644
+index c2853e0ea..b45511c17 100644
 --- a/third_party/tsl/third_party/llvm/workspace.bzl
 +++ b/third_party/tsl/third_party/llvm/workspace.bzl
 @@ -17,6 +17,7 @@ def repo(name):
@@ -398,7 +398,7 @@ index c2853e0ea0..b45511c17c 100644
              "//third_party/llvm:build.patch",
              "//third_party/llvm:mathextras.patch",
 diff --git a/third_party/tsl/workspace2.bzl b/third_party/tsl/workspace2.bzl
-index e23dcc3a4c..aaaf22ed81 100644
+index e23dcc3a4..aaaf22ed8 100644
 --- a/third_party/tsl/workspace2.bzl
 +++ b/third_party/tsl/workspace2.bzl
 @@ -348,6 +348,7 @@ def _tf_repositories():
@@ -410,7 +410,7 @@ index e23dcc3a4c..aaaf22ed81 100644
          system_link_files = {
              "//third_party/systemlibs:BUILD": "bazel/BUILD",
 diff --git a/xla/backends/profiler/plugin/BUILD b/xla/backends/profiler/plugin/BUILD
-index 8d6292ffd5..28c2b79b31 100644
+index 8d6292ffd..28c2b79b3 100644
 --- a/xla/backends/profiler/plugin/BUILD
 +++ b/xla/backends/profiler/plugin/BUILD
 @@ -63,6 +63,9 @@ cc_library(
@@ -424,7 +424,7 @@ index 8d6292ffd5..28c2b79b31 100644
          "@tsl//tsl/profiler/lib:profiler_collection",
          "@tsl//tsl/profiler/lib:profiler_factory",
 diff --git a/xla/pjrt/c/pjrt_c_api_gpu_internal.cc b/xla/pjrt/c/pjrt_c_api_gpu_internal.cc
-index bcd1a44108..988f3ee72e 100644
+index bcd1a4410..988f3ee72 100644
 --- a/xla/pjrt/c/pjrt_c_api_gpu_internal.cc
 +++ b/xla/pjrt/c/pjrt_c_api_gpu_internal.cc
 @@ -51,7 +51,7 @@ limitations under the License.
@@ -437,7 +437,7 @@ index bcd1a44108..988f3ee72e 100644
  PJRT_Error* PJRT_Client_Create(PJRT_Client_Create_Args* args) {
    PJRT_RETURN_IF_ERROR(ActualStructSizeIsGreaterOrEqual(
 diff --git a/xla/pjrt/event_pool.cc b/xla/pjrt/event_pool.cc
-index fb33649179..923efc3b88 100644
+index fb3364917..923efc3b8 100644
 --- a/xla/pjrt/event_pool.cc
 +++ b/xla/pjrt/event_pool.cc
 @@ -53,8 +53,11 @@ absl::StatusOr<EventPool::Handle> EventPool::AllocateEvent(
@@ -454,7 +454,7 @@ index fb33649179..923efc3b88 100644
  }
  
 diff --git a/xla/pjrt/gpu/BUILD b/xla/pjrt/gpu/BUILD
-index f87161ea63..bbc70e005f 100644
+index f87161ea6..bbc70e005 100644
 --- a/xla/pjrt/gpu/BUILD
 +++ b/xla/pjrt/gpu/BUILD
 @@ -41,6 +41,7 @@ cc_library(
@@ -466,7 +466,7 @@ index f87161ea63..bbc70e005f 100644
          ":gpu_metrics",
          ":gpu_topology",
 diff --git a/xla/pjrt/gpu/gpu_helpers.cc b/xla/pjrt/gpu/gpu_helpers.cc
-index efd5fbf8c1..056137dd52 100644
+index efd5fbf8c..056137dd5 100644
 --- a/xla/pjrt/gpu/gpu_helpers.cc
 +++ b/xla/pjrt/gpu/gpu_helpers.cc
 @@ -37,11 +37,12 @@ namespace xla {
@@ -505,7 +505,7 @@ index efd5fbf8c1..056137dd52 100644
  
  }  // namespace xla
 diff --git a/xla/pjrt/gpu/se_gpu_pjrt_client.cc b/xla/pjrt/gpu/se_gpu_pjrt_client.cc
-index 3c2c8f4dd2..bb59a54632 100644
+index 3c2c8f4dd..bb59a5463 100644
 --- a/xla/pjrt/gpu/se_gpu_pjrt_client.cc
 +++ b/xla/pjrt/gpu/se_gpu_pjrt_client.cc
 @@ -83,6 +83,8 @@ limitations under the License.
@@ -536,7 +536,7 @@ index 3c2c8f4dd2..bb59a54632 100644
    auto pjrt_platform_name = xla::CudaName();
  #endif  // TENSORFLOW_USE_ROCM
 diff --git a/xla/pjrt/pjrt_compiler.h b/xla/pjrt/pjrt_compiler.h
-index f947690936..e902a059e9 100644
+index f94769093..e902a059e 100644
 --- a/xla/pjrt/pjrt_compiler.h
 +++ b/xla/pjrt/pjrt_compiler.h
 @@ -48,6 +48,10 @@ inline const char* TpuName() {
@@ -562,7 +562,7 @@ index f947690936..e902a059e9 100644
  class PjRtCompiler;
  class PjRtClient;
 diff --git a/xla/service/BUILD b/xla/service/BUILD
-index b67b73e059..280fe566a8 100644
+index b67b73e05..280fe566a 100644
 --- a/xla/service/BUILD
 +++ b/xla/service/BUILD
 @@ -20,6 +20,10 @@ load(
@@ -595,7 +595,7 @@ index b67b73e059..280fe566a8 100644
          "@com_google_absl//absl/memory",
          "@com_google_absl//absl/strings",
 diff --git a/xla/service/algebraic_simplifier.h b/xla/service/algebraic_simplifier.h
-index 8acdeb1021..50c7efe11b 100644
+index 8acdeb102..50c7efe11 100644
 --- a/xla/service/algebraic_simplifier.h
 +++ b/xla/service/algebraic_simplifier.h
 @@ -27,6 +27,7 @@ limitations under the License.
@@ -618,7 +618,7 @@ index 8acdeb1021..50c7efe11b 100644
  
   protected:
 diff --git a/xla/service/computation_placer.cc b/xla/service/computation_placer.cc
-index b896c7d10c..02c5a642a8 100644
+index b896c7d10..02c5a642a 100644
 --- a/xla/service/computation_placer.cc
 +++ b/xla/service/computation_placer.cc
 @@ -31,6 +31,7 @@ limitations under the License.
@@ -639,7 +639,7 @@ index b896c7d10c..02c5a642a8 100644
  }
  static bool module_initialized = InitModule();
 diff --git a/xla/service/dump.cc b/xla/service/dump.cc
-index 5adf5957d5..90f5518d4d 100644
+index 5adf5957d..90f5518d4 100644
 --- a/xla/service/dump.cc
 +++ b/xla/service/dump.cc
 @@ -625,6 +625,8 @@ void DumpToFileInDirOrStdout(const HloModule& module, string_view file_prefix,
@@ -652,7 +652,7 @@ index 5adf5957d5..90f5518d4d 100644
    if (file_prefix == "lmhlo") {
      print_flags.enableDebugInfo(/*enable=*/true,
 diff --git a/xla/service/float8_fnuz_ir_emitter.cc b/xla/service/float8_fnuz_ir_emitter.cc
-index 5d338a3522..d125142d2d 100644
+index 5d338a352..d125142d2 100644
 --- a/xla/service/float8_fnuz_ir_emitter.cc
 +++ b/xla/service/float8_fnuz_ir_emitter.cc
 @@ -19,6 +19,7 @@ limitations under the License.
@@ -683,7 +683,7 @@ index 5d338a3522..d125142d2d 100644
  
    // Check for NaN, since it's a special case.
 diff --git a/xla/service/gpu/BUILD b/xla/service/gpu/BUILD
-index bf76601c85..4af3c2c848 100644
+index bf76601c8..92008ed8e 100644
 --- a/xla/service/gpu/BUILD
 +++ b/xla/service/gpu/BUILD
 @@ -44,6 +44,7 @@ load(
@@ -694,17 +694,16 @@ index bf76601c85..4af3c2c848 100644
  
  package(
      # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-@@ -316,7 +317,8 @@ cc_library(
+@@ -316,7 +317,7 @@ cc_library(
          ":launch_dimensions",
          ":matmul_utils",
          ":nccl_api",
 -        ":nccl_collective_thunks",
 +        # ":nccl_collective_thunks",
-+        "@intel_extension_for_openxla//xla/service/gpu:ccl_collective_thunks",
          ":parallel_loop_emitter",
          ":thunk",
          ":triton_call",
-@@ -342,9 +344,9 @@ cc_library(
+@@ -342,9 +343,9 @@ cc_library(
          "//xla/service/gpu/fusions:thunk_util",
          "//xla/service/gpu/kernels:custom_kernel",
          "//xla/service/gpu/kernels:topk_custom_kernel",
@@ -717,7 +716,7 @@ index bf76601c85..4af3c2c848 100644
          "//xla/service/gpu/runtime:conditional_thunk",
          "//xla/service/gpu/runtime:convolution_thunk",
          "//xla/service/gpu/runtime:copy_thunk",
-@@ -354,9 +356,8 @@ cc_library(
+@@ -354,9 +355,8 @@ cc_library(
          "//xla/service/gpu/runtime:gemm_thunk",
          "//xla/service/gpu/runtime:infeed_thunk",
          "//xla/service/gpu/runtime:kernel_thunk",
@@ -729,9 +728,12 @@ index bf76601c85..4af3c2c848 100644
          "//xla/service/gpu/runtime:norm_thunk",
          "//xla/service/gpu/runtime:outfeed_thunk",
          "//xla/service/gpu/runtime:replica_id_thunk",
-@@ -402,13 +403,11 @@ cc_library(
+@@ -401,14 +401,14 @@ cc_library(
+         "@tsl//tsl/platform:human_readable_json",
          "@tsl//tsl/platform:statusor",
          "@tsl//tsl/protobuf:dnn_proto_cc",
++        "@intel_extension_for_openxla//xla/service/gpu:ccl_collective_thunks",
++        "@intel_extension_for_openxla//xla/service/gpu:sycl_custom_call",
      ] + if_gpu_is_configured([
 -        ":ir_emitter_triton",
 +        # ":ir_emitter_triton",
@@ -745,7 +747,7 @@ index bf76601c85..4af3c2c848 100644
      ]),
  )
  
-@@ -927,55 +926,70 @@ cc_library(
+@@ -927,55 +927,70 @@ cc_library(
  # have `if_nccl` and `if_gpu_configured` that do not compose. NCCL header included directly in
  # :nccl_api target and all other targets should use this header to launch collective operations.
  # This allows to minimize the spreading of #ifdef all over the XLA code base.
@@ -862,7 +864,7 @@ index bf76601c85..4af3c2c848 100644
      compatible_with = get_compatible_with_portable(),
      deps = [
          ":nccl_clique_key",
-@@ -983,6 +997,8 @@ cc_library(
+@@ -983,6 +998,8 @@ cc_library(
          "//xla:xla_data_proto_cc",
          "//xla/service:collective_ops_utils",
          "//xla/stream_executor",
@@ -871,7 +873,7 @@ index bf76601c85..4af3c2c848 100644
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/status:statusor",
          "@com_google_absl//absl/types:span",
-@@ -997,6 +1013,7 @@ cc_library(
+@@ -997,6 +1014,7 @@ cc_library(
      hdrs = ["nccl_clique_key.h"],
      compatible_with = get_compatible_with_portable(),
      deps = [
@@ -879,12 +881,11 @@ index bf76601c85..4af3c2c848 100644
          "//xla/service:global_device_id",
          "@com_google_absl//absl/algorithm:container",
          "@com_google_absl//absl/container:btree",
-@@ -1291,6 +1308,8 @@ cc_library(
+@@ -1291,6 +1309,7 @@ cc_library(
          "@tsl//tsl/platform:statusor",
          "@tsl//tsl/profiler/lib:scoped_annotation",
          "@tsl//tsl/profiler/lib:traceme",
 +        "@intel_extension_for_openxla//xla/service/gpu:xetla_gpu_fused_mha_runner",
-+        "@intel_extension_for_openxla//xla/service/gpu:onednn_gpu_conv_runner",
      ] + if_gpu_is_configured([
          ":make_batch_pointers",
      ]) + if_cuda_is_configured([
@@ -976,7 +977,7 @@ index bf76601c85..4af3c2c848 100644
      name = "gpu_aot_compilation_test",
      srcs = if_gpu_is_configured([
 diff --git a/xla/service/gpu/buffer_sharing.cc b/xla/service/gpu/buffer_sharing.cc
-index abfcefdd3f..4041bdd1ca 100644
+index abfcefdd3..4041bdd1c 100644
 --- a/xla/service/gpu/buffer_sharing.cc
 +++ b/xla/service/gpu/buffer_sharing.cc
 @@ -215,6 +215,15 @@ std::optional<bool> CanShareBufferHint(const HloInstruction* user,
@@ -997,7 +998,7 @@ index abfcefdd3f..4041bdd1ca 100644
          return user_index.size() == 1 && user_index[0] == 0;
 diff --git a/xla/service/gpu/ccl_api.cc b/xla/service/gpu/ccl_api.cc
 new file mode 100644
-index 0000000000..e2d72235ca
+index 000000000..e2d72235c
 --- /dev/null
 +++ b/xla/service/gpu/ccl_api.cc
 @@ -0,0 +1,299 @@
@@ -1302,7 +1303,7 @@ index 0000000000..e2d72235ca
 +}  // namespace xla::gpu
 diff --git a/xla/service/gpu/ccl_api.h b/xla/service/gpu/ccl_api.h
 new file mode 100644
-index 0000000000..40b5596e8d
+index 000000000..40b5596e8
 --- /dev/null
 +++ b/xla/service/gpu/ccl_api.h
 @@ -0,0 +1,114 @@
@@ -1421,7 +1422,7 @@ index 0000000000..40b5596e8d
 +}  // namespace xla::gpu
 +#endif  // XLA_SERVICE_GPU_CCL_API_H_
 diff --git a/xla/service/gpu/cudnn_fused_conv_rewriter.cc b/xla/service/gpu/cudnn_fused_conv_rewriter.cc
-index dca7a07a8d..58b2cbf7ab 100644
+index dca7a07a8..58b2cbf7a 100644
 --- a/xla/service/gpu/cudnn_fused_conv_rewriter.cc
 +++ b/xla/service/gpu/cudnn_fused_conv_rewriter.cc
 @@ -846,6 +846,13 @@ absl::StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
@@ -1439,7 +1440,7 @@ index dca7a07a8d..58b2cbf7ab 100644
                          MakeGetTupleElementHlo(new_conv, 0));
      TF_RETURN_IF_ERROR(comp->ReplaceInstruction(instr, new_instr));
 diff --git a/xla/service/gpu/cudnn_fused_mha_rewriter.cc b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
-index 04fe02e376..0eb7aa21d4 100644
+index 04fe02e37..0eb7aa21d 100644
 --- a/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 +++ b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 @@ -235,12 +235,14 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
@@ -1625,7 +1626,7 @@ index 04fe02e376..0eb7aa21d4 100644
          if (matched_bwd_result.bmm_1_grad_1_need_canonicalization) {
            TF_ASSIGN_OR_RETURN(
 diff --git a/xla/service/gpu/cusolver_context.cc b/xla/service/gpu/cusolver_context.cc
-index 4343fec8b1..dd90199231 100644
+index 4343fec8b..dd9019923 100644
 --- a/xla/service/gpu/cusolver_context.cc
 +++ b/xla/service/gpu/cusolver_context.cc
 @@ -42,6 +42,7 @@ limitations under the License.
@@ -1657,7 +1658,7 @@ index 4343fec8b1..dd90199231 100644
  }  // namespace gpu
  }  // namespace xla
 diff --git a/xla/service/gpu/cusolver_context.h b/xla/service/gpu/cusolver_context.h
-index d72228ec21..19d4728361 100644
+index d72228ec2..19d472836 100644
 --- a/xla/service/gpu/cusolver_context.h
 +++ b/xla/service/gpu/cusolver_context.h
 @@ -28,6 +28,12 @@ limitations under the License.
@@ -1785,7 +1786,7 @@ index d72228ec21..19d4728361 100644
  }  // namespace xla
  
 diff --git a/xla/service/gpu/cusolver_rewriter.cc b/xla/service/gpu/cusolver_rewriter.cc
-index fbf01f2f90..12a35d92e6 100644
+index fbf01f2f9..12a35d92e 100644
 --- a/xla/service/gpu/cusolver_rewriter.cc
 +++ b/xla/service/gpu/cusolver_rewriter.cc
 @@ -70,6 +70,7 @@ absl::StatusOr<HloInstruction*> CreateCholesky(GpuSolverContext* context,
@@ -1853,7 +1854,7 @@ index fbf01f2f90..12a35d92e6 100644
  
  // Tries to rewrite a single convolution into a call to cudnn.
 diff --git a/xla/service/gpu/elemental_ir_emitter.cc b/xla/service/gpu/elemental_ir_emitter.cc
-index 51296c7146..245761aaa2 100644
+index 51296c714..245761aaa 100644
 --- a/xla/service/gpu/elemental_ir_emitter.cc
 +++ b/xla/service/gpu/elemental_ir_emitter.cc
 @@ -326,6 +326,7 @@ absl::StatusOr<llvm::Value*> GpuElementalIrEmitter::EmitCbrt(
@@ -1873,7 +1874,7 @@ index 51296c7146..245761aaa2 100644
  }
  
 diff --git a/xla/service/gpu/fusions/copy.cc b/xla/service/gpu/fusions/copy.cc
-index eaa7a515cf..caee1660c5 100644
+index eaa7a515c..caee1660c 100644
 --- a/xla/service/gpu/fusions/copy.cc
 +++ b/xla/service/gpu/fusions/copy.cc
 @@ -23,6 +23,10 @@ limitations under the License.
@@ -1888,7 +1889,7 @@ index eaa7a515cf..caee1660c5 100644
  namespace gpu {
  
 diff --git a/xla/service/gpu/fusions/fusion_emitter.cc b/xla/service/gpu/fusions/fusion_emitter.cc
-index 42026cec27..e71170a998 100644
+index 42026cec2..e71170a99 100644
 --- a/xla/service/gpu/fusions/fusion_emitter.cc
 +++ b/xla/service/gpu/fusions/fusion_emitter.cc
 @@ -64,6 +64,10 @@ limitations under the License.
@@ -1929,7 +1930,7 @@ index 42026cec27..e71170a998 100644
    // kernels makes sense.
  
 diff --git a/xla/service/gpu/fusions/reduction.cc b/xla/service/gpu/fusions/reduction.cc
-index 02e89bccf4..786be5acd3 100644
+index 02e89bccf..786be5acd 100644
 --- a/xla/service/gpu/fusions/reduction.cc
 +++ b/xla/service/gpu/fusions/reduction.cc
 @@ -106,6 +106,7 @@ constexpr int kRowMinorReducedDimension = 2;
@@ -2374,7 +2375,7 @@ index 02e89bccf4..786be5acd3 100644
        tiling, reduction_dimensions.is_row_reduction, reduction_is_race_free,
        GroupDisjointReductions(analysis), hero_reduction);
 diff --git a/xla/service/gpu/fusions/transpose.cc b/xla/service/gpu/fusions/transpose.cc
-index 80c0b93915..6dce724dd0 100644
+index 80c0b9391..6dce724dd 100644
 --- a/xla/service/gpu/fusions/transpose.cc
 +++ b/xla/service/gpu/fusions/transpose.cc
 @@ -47,6 +47,7 @@ limitations under the License.
@@ -2622,7 +2623,7 @@ index 80c0b93915..6dce724dd0 100644
            }
            return absl::OkStatus();
 diff --git a/xla/service/gpu/gemm_rewriter.cc b/xla/service/gpu/gemm_rewriter.cc
-index 8a3919a758..a69632e96e 100644
+index 8a3919a75..a69632e96 100644
 --- a/xla/service/gpu/gemm_rewriter.cc
 +++ b/xla/service/gpu/gemm_rewriter.cc
 @@ -566,6 +566,7 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
@@ -2708,7 +2709,7 @@ index 8a3919a758..a69632e96e 100644
                          MatrixIsColumnMajor(instr, gemm_backend_config));
  
 diff --git a/xla/service/gpu/gpu_compiler.cc b/xla/service/gpu/gpu_compiler.cc
-index 33de4453f6..6d4b3c6d2a 100644
+index 33de4453f..6d4b3c6d2 100644
 --- a/xla/service/gpu/gpu_compiler.cc
 +++ b/xla/service/gpu/gpu_compiler.cc
 @@ -258,6 +258,8 @@ limitations under the License.
@@ -2862,7 +2863,7 @@ index 33de4453f6..6d4b3c6d2a 100644
    }
  
 diff --git a/xla/service/gpu/gpu_executable.cc b/xla/service/gpu/gpu_executable.cc
-index 92609b6f44..7cfe1e7f70 100644
+index 92609b6f4..7cfe1e7f7 100644
 --- a/xla/service/gpu/gpu_executable.cc
 +++ b/xla/service/gpu/gpu_executable.cc
 @@ -209,7 +209,9 @@ absl::Status GpuExecutable::CheckCompatibilityWithServiceExecutableRunOptions(
@@ -2938,7 +2939,7 @@ index 92609b6f44..7cfe1e7f70 100644
  
      if (info.allocation_index != -1) {
 diff --git a/xla/service/gpu/gpu_executable.h b/xla/service/gpu/gpu_executable.h
-index fb79d6c133..8cc127fc99 100644
+index fb79d6c13..8cc127fc9 100644
 --- a/xla/service/gpu/gpu_executable.h
 +++ b/xla/service/gpu/gpu_executable.h
 @@ -57,6 +57,25 @@ namespace gpu {
@@ -2968,7 +2969,7 @@ index fb79d6c133..8cc127fc99 100644
  //
  // Launches the given GPU kernel via the StreamExecutor.
 diff --git a/xla/service/gpu/gpu_fused_mha_runner.cc b/xla/service/gpu/gpu_fused_mha_runner.cc
-index 889d2e5bcb..a59e092d24 100644
+index 889d2e5bc..a59e092d2 100644
 --- a/xla/service/gpu/gpu_fused_mha_runner.cc
 +++ b/xla/service/gpu/gpu_fused_mha_runner.cc
 @@ -155,6 +155,8 @@ void AssignScale(GpufMHAConfig &config,
@@ -2981,7 +2982,7 @@ index 889d2e5bcb..a59e092d24 100644
      case CudnnfMHAKind::kScaleBiasMaskSoftmaxDropout:
      case CudnnfMHAKind::kScaleMaskSoftmax:
 diff --git a/xla/service/gpu/gpu_fusible.cc b/xla/service/gpu/gpu_fusible.cc
-index 0b3a343795..c6b7230a79 100644
+index 0b3a34379..c6b7230a7 100644
 --- a/xla/service/gpu/gpu_fusible.cc
 +++ b/xla/service/gpu/gpu_fusible.cc
 @@ -440,6 +440,13 @@ FusionDecision IsProducerConsumerFusible(const HloInstruction& producer,
@@ -2999,7 +3000,7 @@ index 0b3a343795..c6b7230a79 100644
               ->config()
               .debug_options()
 diff --git a/xla/service/gpu/gpu_layout_assignment.cc b/xla/service/gpu/gpu_layout_assignment.cc
-index c69d218c68..a0c242f94a 100644
+index c69d218c6..a0c242f94 100644
 --- a/xla/service/gpu/gpu_layout_assignment.cc
 +++ b/xla/service/gpu/gpu_layout_assignment.cc
 @@ -86,7 +86,7 @@ HeuristicLayoutAssignment(const HloInstruction* instr,
@@ -3012,7 +3013,7 @@ index c69d218c68..a0c242f94a 100644
  
    // Integer convolution must use NHWC or NCHW_VECT_C.
 diff --git a/xla/service/gpu/gpu_sanitize_constant_names.cc b/xla/service/gpu/gpu_sanitize_constant_names.cc
-index c8ef2d60b1..f2d518c01b 100644
+index c8ef2d60b..f2d518c01 100644
 --- a/xla/service/gpu/gpu_sanitize_constant_names.cc
 +++ b/xla/service/gpu/gpu_sanitize_constant_names.cc
 @@ -40,7 +40,7 @@ absl::StatusOr<bool> GpuSanitizeConstantNames::Run(
@@ -3025,7 +3026,7 @@ index c8ef2d60b1..f2d518c01b 100644
    }
  
 diff --git a/xla/service/gpu/gpu_transfer_manager.cc b/xla/service/gpu/gpu_transfer_manager.cc
-index b890c8b63c..dcbc0c1132 100644
+index b890c8b63..dcbc0c113 100644
 --- a/xla/service/gpu/gpu_transfer_manager.cc
 +++ b/xla/service/gpu/gpu_transfer_manager.cc
 @@ -46,6 +46,7 @@ limitations under the License.
@@ -3058,7 +3059,7 @@ index b890c8b63c..dcbc0c1132 100644
  }
  
 diff --git a/xla/service/gpu/ir_emission_utils.cc b/xla/service/gpu/ir_emission_utils.cc
-index c6349da06a..f182d0441c 100644
+index c6349da06..f182d0441 100644
 --- a/xla/service/gpu/ir_emission_utils.cc
 +++ b/xla/service/gpu/ir_emission_utils.cc
 @@ -116,11 +116,11 @@ bool IsMatrixMultiplication(const HloInstruction& dot) {
@@ -3076,7 +3077,7 @@ index c6349da06a..f182d0441c 100644
         rhs_shape.element_type() == S8);
    bool shapes_are_valid =
 diff --git a/xla/service/gpu/ir_emitter_context.cc b/xla/service/gpu/ir_emitter_context.cc
-index 81eaef0ebe..4630d4caea 100644
+index 81eaef0eb..4630d4cae 100644
 --- a/xla/service/gpu/ir_emitter_context.cc
 +++ b/xla/service/gpu/ir_emitter_context.cc
 @@ -58,6 +58,8 @@ void IrEmitterContext::emit_constant(int64_t num_elements,
@@ -3128,7 +3129,7 @@ index 81eaef0ebe..4630d4caea 100644
  
    info.symbol_name.assign(symbol_name);
 diff --git a/xla/service/gpu/ir_emitter_nested.cc b/xla/service/gpu/ir_emitter_nested.cc
-index c888aff308..0fd7254d91 100644
+index c888aff30..0fd7254d9 100644
 --- a/xla/service/gpu/ir_emitter_nested.cc
 +++ b/xla/service/gpu/ir_emitter_nested.cc
 @@ -38,6 +38,11 @@ limitations under the License.
@@ -3231,7 +3232,7 @@ index c888aff308..0fd7254d91 100644
    // Extract the memory value returned from atomicCAS and store it as
    // cas_old_output.
 diff --git a/xla/service/gpu/ir_emitter_unnested.cc b/xla/service/gpu/ir_emitter_unnested.cc
-index 86426953af..3df630e1cf 100644
+index 86426953a..620f092c7 100644
 --- a/xla/service/gpu/ir_emitter_unnested.cc
 +++ b/xla/service/gpu/ir_emitter_unnested.cc
 @@ -1,4 +1,6 @@
@@ -3355,7 +3356,7 @@ index 86426953af..3df630e1cf 100644
  
    return absl::OkStatus();
  }
-@@ -609,10 +605,35 @@ absl::Status IrEmitterUnnested::EmitConvolutionThunk(
+@@ -609,10 +605,36 @@ absl::Status IrEmitterUnnested::EmitConvolutionThunk(
                                    instr->convolution_dimension_numbers(),
                                    instr->feature_group_count()};
  
@@ -3380,6 +3381,7 @@ index 86426953af..3df630e1cf 100644
 +  }
 +
 +  // SYCL: use descriptor for sycl conv
++  // TODO: After SYCL support FFI convolution, below change should be removed
 +  // TF_ASSIGN_OR_RETURN(GpuConvConfig config, GetGpuConvConfig(descriptor, ""));
 +  thunks.push_back(std::make_unique<ConvolutionThunk>(
 +      Thunk::ThunkInfo::WithProfileAnnotation(instr), std::move(descriptor),
@@ -3394,7 +3396,7 @@ index 86426953af..3df630e1cf 100644
    return OkStatus();
  }
  
-@@ -649,7 +670,7 @@ absl::Status IrEmitterUnnested::EmitGemmThunk(
+@@ -649,7 +671,7 @@ absl::Status IrEmitterUnnested::EmitGemmThunk(
    return absl::OkStatus();
  }
  
@@ -3403,7 +3405,7 @@ index 86426953af..3df630e1cf 100644
  
  absl::Status IrEmitterUnnested::EmitCublasLtMatmulThunk(
      const HloCustomCallInstruction* instr) {
-@@ -716,206 +737,7 @@ absl::Status IrEmitterUnnested::EmitCublasLtMatmulThunk(
+@@ -716,206 +738,7 @@ absl::Status IrEmitterUnnested::EmitCublasLtMatmulThunk(
    return absl::OkStatus();
  }
  
@@ -3611,7 +3613,7 @@ index 86426953af..3df630e1cf 100644
  
  absl::Status IrEmitterUnnested::EmitFusedMHAThunk(
      const HloCustomCallInstruction* instr) {
-@@ -1163,6 +985,205 @@ absl::Status IrEmitterUnnested::EmitFusedMHABackwardThunk(
+@@ -1163,6 +986,205 @@ absl::Status IrEmitterUnnested::EmitFusedMHABackwardThunk(
    return absl::OkStatus();
  }
  
@@ -3817,7 +3819,7 @@ index 86426953af..3df630e1cf 100644
  #endif  // GOOGLE_CUDA
  
  absl::StatusOr<BufferAllocation::Slice>
-@@ -1172,8 +1193,8 @@ IrEmitterUnnested::GetAllocationSliceForHlo(const HloInstruction* instr,
+@@ -1172,8 +1194,8 @@ IrEmitterUnnested::GetAllocationSliceForHlo(const HloInstruction* instr,
                                        instr, index);
  }
  
@@ -3828,7 +3830,7 @@ index 86426953af..3df630e1cf 100644
  absl::Status IrEmitterUnnested::EmitCubDeviceRadixSort(
      const HloCustomCallInstruction* instr) {
    if (instr->operand_count() != 1 && instr->operand_count() != 2) {
-@@ -1214,7 +1235,7 @@ absl::Status IrEmitterUnnested::EmitCubDeviceRadixSort(
+@@ -1214,7 +1236,7 @@ absl::Status IrEmitterUnnested::EmitCubDeviceRadixSort(
    AddThunkToThunkSequence(std::move(thunk));
    return absl::OkStatus();
  }
@@ -3837,7 +3839,7 @@ index 86426953af..3df630e1cf 100644
  absl::Status IrEmitterUnnested::EmitCholeskyThunk(const HloInstruction* instr) {
    TF_ASSIGN_OR_RETURN(CholeskyOptions options,
                        instr->backend_config<CholeskyOptions>());
-@@ -1262,7 +1283,7 @@ absl::Status IrEmitterUnnested::EmitCholeskyThunk(const HloInstruction* instr) {
+@@ -1262,10 +1284,11 @@ absl::Status IrEmitterUnnested::EmitCholeskyThunk(const HloInstruction* instr) {
  
    return absl::OkStatus();
  }
@@ -3846,7 +3848,145 @@ index 86426953af..3df630e1cf 100644
  
  // Converts MLIR dictionary attribute attached to a custom call operation to a
  // custom call thunk attributes that are forwarded to the FFI handler.
-@@ -1496,7 +1517,7 @@ absl::Status IrEmitterUnnested::EmitFftThunk(const HloFftInstruction* instr) {
++#ifndef TENSORFLOW_USE_SYCL
+ static absl::StatusOr<CustomCallThunk::AttributesMap> BuildAttributesMap(
+     mlir::DictionaryAttr dict) {
+   CustomCallThunk::AttributesMap attributes;
+@@ -1314,6 +1337,103 @@ static absl::StatusOr<CustomCallThunk::AttributesMap> BuildAttributesMap(
+   }
+   return attributes;
+ }
++#else
++static absl::StatusOr<CustomCallThunk::AttributesMap> BuildAttributesMap(
++    const HloCustomCallInstruction* instr) {
++  // After 0.4.26, ffi support absl::span.
++  // Below attrs can be refine to absl::span for reducing key-value
++  CustomCallThunk::AttributesMap attrs;
++  attrs["backend_config_str"] = instr->raw_backend_config_string();
++  if (IsCustomCallToDnnConvolution(*instr)) {
++    TF_ASSIGN_OR_RETURN(CudnnConvKind kind, GetCudnnConvKind(instr));
++    const Window& window = instr->window();
++    const ConvolutionDimensionNumbers& dnums =
++        instr->convolution_dimension_numbers();
++    const int num_dimensions = window.dimensions_size();
++    const Shape& operand0_shape = instr->operand(0)->shape();
++    const Shape& operand1_shape = instr->operand(1)->shape();
++    const Shape& result_shape = instr->shape().tuple_shapes(0);
++
++    attrs["window_ShortDebugString"] = window.ShortDebugString();
++    attrs["window_num_dimensions"] = window.dimensions_size();
++    for (int i = 0; i < window.dimensions_size(); ++i) {
++      attrs["window_padding_low_" + std::to_string(i)] =
++          window.dimensions(i).padding_low();
++      attrs["window_padding_high_" + std::to_string(i)] =
++          window.dimensions(i).padding_high();
++      attrs["window_stride_" + std::to_string(i)] =
++          window.dimensions(i).stride();
++      attrs["window_dilation_" + std::to_string(i)] =
++          window.dimensions(i).window_dilation();
++    }
++
++    attrs["dnums_ShortDebugString"] = dnums.ShortDebugString();
++    attrs["input_feature_dimension"] = dnums.input_feature_dimension();
++    attrs["input_batch_dimension"] = dnums.input_batch_dimension();
++    attrs["output_feature_dimension"] = dnums.output_feature_dimension();
++    attrs["kernel_input_feature_dimension"] =
++        dnums.kernel_input_feature_dimension();
++    attrs["kernel_output_feature_dimension"] =
++        dnums.kernel_output_feature_dimension();
++    for (int i = 0; i < num_dimensions; ++i) {
++      attrs["input_spatial_dimensions_" + std::to_string(i)] =
++          dnums.input_spatial_dimensions(i);
++      attrs["output_spatial_dimensions_" + std::to_string(i)] =
++          dnums.output_spatial_dimensions(i);
++      attrs["kernel_spatial_dimensions_" + std::to_string(i)] =
++          dnums.kernel_spatial_dimensions(i);
++      attrs["kernel_spatial_dimensions_" + std::to_string(i)] =
++          dnums.kernel_spatial_dimensions(i);
++    }
++    stream_executor::dnn::DataLayout input_dl;
++    stream_executor::dnn::FilterLayout filter_dl;
++    stream_executor::dnn::DataLayout output_dl;
++    if (kind == CudnnConvKind::kForward ||
++        kind == CudnnConvKind::kForwardActivation) {
++      TF_ASSIGN_OR_RETURN(
++          std::tie(input_dl, filter_dl, output_dl),
++          XlaConvShapesToStreamExecutorLayouts(dnums, operand0_shape,
++                                               operand1_shape, result_shape));
++    } else if (kind == CudnnConvKind::kBackwardInput) {
++      TF_ASSIGN_OR_RETURN(
++          std::tie(input_dl, filter_dl, output_dl),
++          XlaConvShapesToStreamExecutorLayouts(dnums, result_shape,
++                                               operand1_shape, operand0_shape));
++    } else if (kind == CudnnConvKind::kBackwardFilter) {
++      TF_ASSIGN_OR_RETURN(
++          std::tie(input_dl, filter_dl, output_dl),
++          XlaConvShapesToStreamExecutorLayouts(dnums, operand0_shape,
++                                               result_shape, operand1_shape));
++    } else {
++      return Internal("Unkown convolution kind");
++    }
++    attrs["input_dl"] = static_cast<int32_t>(input_dl);
++    attrs["filter_dl"] = static_cast<int32_t>(filter_dl);
++    attrs["output_dl"] = static_cast<int32_t>(output_dl);
++  } else if (IsLegacyCublasMatmul(*instr) || IsCublasLtMatmul(*instr)) {
++    const Shape& lhs_shape = instr->operand(0)->shape();
++    const Shape& rhs_shape = instr->operand(1)->shape();
++    const Shape& output_shape = instr->shape().IsTuple()
++                                    ? instr->shape().tuple_shapes(0)
++                                    : instr->shape();
++    for (int i = 0; i < lhs_shape.layout().minor_to_major().size(); ++i) {
++      attrs["lhs_minor_to_major_" + std::to_string(i)] =
++          lhs_shape.layout().minor_to_major()[i];
++    }
++    for (int i = 0; i < rhs_shape.layout().minor_to_major().size(); ++i) {
++      attrs["rhs_minor_to_major_" + std::to_string(i)] =
++          rhs_shape.layout().minor_to_major()[i];
++    }
++    for (int i = 0; i < output_shape.layout().minor_to_major().size(); ++i) {
++      attrs["output_minor_to_major_" + std::to_string(i)] =
++          output_shape.layout().minor_to_major()[i];
++    }
++  } else {
++    return absl::InternalError("Unknown CustomCall To SYCL FFI Call");
++  }
++  return attrs;
++}
++#endif  // TENSORFLOW_USE_SYCL
+ 
+ absl::Status IrEmitterUnnested::EmitCustomCallThunk(
+     const HloCustomCallInstruction* instr) {
+@@ -1433,6 +1553,7 @@ absl::Status IrEmitterUnnested::EmitCustomCallThunk(
+   }
+ 
+   auto& backend_config_str = instr->raw_backend_config_string();
++
+   switch (instr->api_version()) {
+     case CustomCallApiVersion::API_VERSION_ORIGINAL:
+     case CustomCallApiVersion::API_VERSION_STATUS_RETURNING:
+@@ -1443,6 +1564,12 @@ absl::Status IrEmitterUnnested::EmitCustomCallThunk(
+       break;
+ 
+     case CustomCallApiVersion::API_VERSION_TYPED_FFI:
++#ifdef TENSORFLOW_USE_SYCL
++    {
++      TF_ASSIGN_OR_RETURN(attributes, BuildAttributesMap(instr));
++      break;
++    }
++#else
+       if (!backend_config_str.empty()) {
+         mlir::Attribute attr = mlir::parseAttribute(
+             backend_config_str, ir_emitter_context_->mlir_context());
+@@ -1455,7 +1582,7 @@ absl::Status IrEmitterUnnested::EmitCustomCallThunk(
+             "dictionary attribute");
+       }
+       break;
+-
++#endif  // TENSORFLOW_USE_SYCL
+     default:
+       return Internal("Unknown custom-call API version enum value: %d",
+                       instr->api_version());
+@@ -1496,7 +1623,7 @@ absl::Status IrEmitterUnnested::EmitFftThunk(const HloFftInstruction* instr) {
    return absl::OkStatus();
  }
  
@@ -3855,7 +3995,7 @@ index 86426953af..3df630e1cf 100644
  
  absl::Status IrEmitterUnnested::EmitTriangularSolveCustomCall(
      const HloInstruction* instr) {
-@@ -1576,7 +1597,7 @@ absl::Status IrEmitterUnnested::EmitTriangularSolveCustomCall(
+@@ -1576,7 +1703,7 @@ absl::Status IrEmitterUnnested::EmitTriangularSolveCustomCall(
    }
    return absl::OkStatus();
  }
@@ -3864,7 +4004,7 @@ index 86426953af..3df630e1cf 100644
  
  absl::Status IrEmitterUnnested::EmitTopKCustomCall(
      const HloCustomCallInstruction* instr) {
-@@ -2602,33 +2623,33 @@ absl::Status IrEmitterUnnested::EmitCopyStartThunk(
+@@ -2602,33 +2729,33 @@ absl::Status IrEmitterUnnested::EmitCopyStartThunk(
  }
  
  absl::Status IrEmitterUnnested::EmitSendThunk(const HloSendInstruction* instr) {
@@ -3924,7 +4064,7 @@ index 86426953af..3df630e1cf 100644
  
    return absl::OkStatus();
  }
-@@ -2650,33 +2671,33 @@ absl::Status IrEmitterUnnested::EmitSendDoneThunk(
+@@ -2650,33 +2777,33 @@ absl::Status IrEmitterUnnested::EmitSendDoneThunk(
  }
  
  absl::Status IrEmitterUnnested::EmitRecvThunk(const HloRecvInstruction* instr) {
@@ -3984,9 +4124,17 @@ index 86426953af..3df630e1cf 100644
  
    return absl::OkStatus();
  }
-@@ -2800,11 +2821,17 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
+@@ -2798,13 +2925,31 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
+     case HloOpcode::kCustomCall: {
+       auto* custom_call = Cast<HloCustomCallInstruction>(instr);
        if (IsLegacyCublasMatmul(*instr)) {
++#if TENSORFLOW_USE_SYCL
++        const_cast<HloCustomCallInstruction*>(custom_call)
++            ->set_api_version(CustomCallApiVersion::API_VERSION_TYPED_FFI);
++        return EmitCustomCallThunk(custom_call);
++#else
          return EmitGemmThunk(custom_call);
++#endif
        }
 -#if GOOGLE_CUDA || TF_HIPBLASLT
 +      if (IsFwdCustomCallTofMHA(*instr)) {
@@ -3997,14 +4145,20 @@ index 86426953af..3df630e1cf 100644
 +      }
 +#if GOOGLE_CUDA || TF_HIPBLASLT || TENSORFLOW_USE_SYCL
        if (IsCublasLtMatmul(*instr)) {
++#if TENSORFLOW_USE_SYCL
++        const_cast<HloCustomCallInstruction*>(custom_call)
++            ->set_api_version(CustomCallApiVersion::API_VERSION_TYPED_FFI);
++        return EmitCustomCallThunk(custom_call);
++#else
          return EmitCublasLtMatmulThunk(custom_call);
++#endif
        }
 -#endif  // GOOGLE_CUDA || TF_HIPBLASLT
 +#endif  // GOOGLE_CUDA || TF_HIPBLASLT || TENSORFLOW_USE_SYCL
  #if GOOGLE_CUDA
        if (IsCublasLtMatmulF8(*instr)) {
          return EmitCublasLtMatmulThunkF8(custom_call);
-@@ -2815,12 +2842,6 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
+@@ -2815,30 +2960,32 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
        if (IsCustomCallToDnnNorm(*instr)) {
          return EmitNormThunk(custom_call);
        }
@@ -4017,9 +4171,15 @@ index 86426953af..3df630e1cf 100644
  #endif  // GOOGLE_CUDA
        if (IsCustomCallToTopK(*instr)) {
          return EmitTopKCustomCall(custom_call);
-@@ -2828,17 +2849,19 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
+       }
        if (IsCustomCallToDnnConvolution(*instr)) {
++#ifdef TENSORFLOW_USE_SYCL
++        const_cast<HloCustomCallInstruction*>(custom_call)
++            ->set_api_version(CustomCallApiVersion::API_VERSION_TYPED_FFI);
++        return EmitCustomCallThunk(custom_call);
++#else
          return EmitConvolutionThunk(custom_call);
++#endif
        }
 -#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 +#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM || TENSORFLOW_USE_SYCL
@@ -4040,7 +4200,7 @@ index 86426953af..3df630e1cf 100644
          return EmitPadToStatic(custom_call);
        }
 diff --git a/xla/service/gpu/ir_emitter_unnested.h b/xla/service/gpu/ir_emitter_unnested.h
-index 0650f83749..b3279f4d91 100644
+index 0650f8374..b3279f4d9 100644
 --- a/xla/service/gpu/ir_emitter_unnested.h
 +++ b/xla/service/gpu/ir_emitter_unnested.h
 @@ -1,4 +1,6 @@
@@ -4103,7 +4263,7 @@ index 0650f83749..b3279f4d91 100644
    absl::Status EmitTritonCustomCall(const HloCustomCallInstruction* instr);
  
 diff --git a/xla/service/gpu/kernels/BUILD b/xla/service/gpu/kernels/BUILD
-index 8d6a48346e..28eb55e3fe 100644
+index 8d6a48346..28eb55e3f 100644
 --- a/xla/service/gpu/kernels/BUILD
 +++ b/xla/service/gpu/kernels/BUILD
 @@ -147,26 +147,27 @@ cc_library(
@@ -4167,7 +4327,7 @@ index 8d6a48346e..28eb55e3fe 100644
  
  xla_test(
 diff --git a/xla/service/gpu/launch_dimensions.cc b/xla/service/gpu/launch_dimensions.cc
-index 741e2dd343..1e032c0257 100644
+index 741e2dd34..1e032c025 100644
 --- a/xla/service/gpu/launch_dimensions.cc
 +++ b/xla/service/gpu/launch_dimensions.cc
 @@ -94,6 +94,9 @@ struct BlockSizes {
@@ -4189,7 +4349,7 @@ index 741e2dd343..1e032c0257 100644
    int64_t threads_per_block_row_vectorized =
        ThreadsPerBlockRowVectorized(shape, gpu_device_info, dim_config);
 diff --git a/xla/service/gpu/llvm_gpu_backend/BUILD b/xla/service/gpu/llvm_gpu_backend/BUILD
-index 24449c5842..bb63105a2e 100644
+index 24449c584..bb63105a2 100644
 --- a/xla/service/gpu/llvm_gpu_backend/BUILD
 +++ b/xla/service/gpu/llvm_gpu_backend/BUILD
 @@ -4,6 +4,10 @@ load(
@@ -4221,7 +4381,7 @@ index 24449c5842..bb63105a2e 100644
  )
  
 diff --git a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
-index 37373041e8..b07ab2f902 100644
+index 37373041e..b07ab2f90 100644
 --- a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
 +++ b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.cc
 @@ -59,6 +59,7 @@ limitations under the License.
@@ -4375,7 +4535,7 @@ index 37373041e8..b07ab2f902 100644
  }  // namespace gpu
  }  // namespace xla
 diff --git a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
-index b774daac3e..0e2bce0950 100644
+index b774daac3..0e2bce095 100644
 --- a/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
 +++ b/xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h
 @@ -66,6 +66,12 @@ absl::StatusOr<std::vector<uint8_t>> CompileToHsaco(
@@ -4392,7 +4552,7 @@ index b774daac3e..0e2bce0950 100644
  }  // namespace xla
  
 diff --git a/xla/service/gpu/make_batch_pointers.cc b/xla/service/gpu/make_batch_pointers.cc
-index 027b128f41..7578436272 100644
+index 027b128f4..757843627 100644
 --- a/xla/service/gpu/make_batch_pointers.cc
 +++ b/xla/service/gpu/make_batch_pointers.cc
 @@ -44,6 +44,7 @@ namespace make_batch_pointers {
@@ -4419,7 +4579,7 @@ index 027b128f41..7578436272 100644
  
  }  // namespace xla::gpu
 diff --git a/xla/service/gpu/make_batch_pointers.h b/xla/service/gpu/make_batch_pointers.h
-index 1be4994ec5..b0eeb058e7 100644
+index 1be4994ec..b0eeb058e 100644
 --- a/xla/service/gpu/make_batch_pointers.h
 +++ b/xla/service/gpu/make_batch_pointers.h
 @@ -50,11 +50,16 @@ namespace xla::gpu {
@@ -4443,7 +4603,7 @@ index 1be4994ec5..b0eeb058e7 100644
 -#endif  // XLA_SERVICE_GPU_MAKE_BATCH_POINTERS_H_
 +#endif  // XLA_SERVICE_GPU_PRECOMPILED_KERNELS_H_
 diff --git a/xla/service/gpu/matmul_utils.h b/xla/service/gpu/matmul_utils.h
-index 8141706fd1..2ebe8dd4a7 100644
+index 8141706fd..2ebe8dd4a 100644
 --- a/xla/service/gpu/matmul_utils.h
 +++ b/xla/service/gpu/matmul_utils.h
 @@ -39,6 +39,23 @@ limitations under the License.
@@ -4471,7 +4631,7 @@ index 8141706fd1..2ebe8dd4a7 100644
  namespace gpu {
  
 diff --git a/xla/service/gpu/model/gpu_performance_model_base.cc b/xla/service/gpu/model/gpu_performance_model_base.cc
-index 40bb1ff69b..9d91129962 100644
+index 40bb1ff69..9d9112996 100644
 --- a/xla/service/gpu/model/gpu_performance_model_base.cc
 +++ b/xla/service/gpu/model/gpu_performance_model_base.cc
 @@ -76,7 +76,11 @@ int GetCoalescingWasteFactor(PrimitiveType element_type) {
@@ -4500,7 +4660,7 @@ index 40bb1ff69b..9d91129962 100644
    return LaunchDimensions(num_blocks, block_size);
  }
 diff --git a/xla/service/gpu/model/gpu_performance_model_base.h b/xla/service/gpu/model/gpu_performance_model_base.h
-index 7d08a0c68a..8c2a4f4e9d 100644
+index 7d08a0c68..8c2a4f4e9 100644
 --- a/xla/service/gpu/model/gpu_performance_model_base.h
 +++ b/xla/service/gpu/model/gpu_performance_model_base.h
 @@ -122,7 +122,11 @@ class GpuPerformanceModelBase {
@@ -4516,7 +4676,7 @@ index 7d08a0c68a..8c2a4f4e9d 100644
        absl::Microseconds(5);
    static constexpr float kL2CacheSpeedup = 2.5;
 diff --git a/xla/service/gpu/nccl_api.h b/xla/service/gpu/nccl_api.h
-index 6294b0bfda..66c781a05d 100644
+index 6294b0bfd..66c781a05 100644
 --- a/xla/service/gpu/nccl_api.h
 +++ b/xla/service/gpu/nccl_api.h
 @@ -145,6 +145,10 @@ class NcclApi {
@@ -4531,7 +4691,7 @@ index 6294b0bfda..66c781a05d 100644
    //
    // This API doesn't have a corresponding API in NCCL and implemented as
 diff --git a/xla/service/gpu/nccl_clique.cc b/xla/service/gpu/nccl_clique.cc
-index 84156ac58f..f2b7382b81 100644
+index 84156ac58..f2b7382b8 100644
 --- a/xla/service/gpu/nccl_clique.cc
 +++ b/xla/service/gpu/nccl_clique.cc
 @@ -73,8 +73,11 @@ absl::StatusOr<const NcclCliqueIdCallback*> GetNcclCliqueIdCallback(
@@ -4558,7 +4718,7 @@ index 84156ac58f..f2b7382b81 100644
      std::vector<NcclApi::DeviceRank> ranks;
      ranks.reserve(args.size());
 diff --git a/xla/service/gpu/nccl_clique.h b/xla/service/gpu/nccl_clique.h
-index 3275ba5b62..b1f357a62f 100644
+index 3275ba5b6..b1f357a62 100644
 --- a/xla/service/gpu/nccl_clique.h
 +++ b/xla/service/gpu/nccl_clique.h
 @@ -29,6 +29,8 @@ limitations under the License.
@@ -4571,7 +4731,7 @@ index 3275ba5b62..b1f357a62f 100644
  #include "xla/service/gpu/nccl_clique_key.h"
  #include "xla/service/lockable.h"
 diff --git a/xla/service/gpu/nccl_clique_key.h b/xla/service/gpu/nccl_clique_key.h
-index 15e6e6692d..db8ebb0e11 100644
+index 15e6e6692..db8ebb0e1 100644
 --- a/xla/service/gpu/nccl_clique_key.h
 +++ b/xla/service/gpu/nccl_clique_key.h
 @@ -26,6 +26,7 @@ limitations under the License.
@@ -4593,18 +4753,10 @@ index 15e6e6692d..db8ebb0e11 100644
  }  // namespace xla::gpu
  
 diff --git a/xla/service/gpu/runtime/BUILD b/xla/service/gpu/runtime/BUILD
-index 4f298bbe01..464ee909a2 100644
+index 4f298bbe0..39b81b2c7 100644
 --- a/xla/service/gpu/runtime/BUILD
 +++ b/xla/service/gpu/runtime/BUILD
-@@ -322,6 +322,7 @@ cc_library(
-         "@com_google_absl//absl/container:flat_hash_map",
-         "@com_google_absl//absl/container:inlined_vector",
-         "@com_google_absl//absl/status",
-+        "@intel_extension_for_openxla//xla/service/gpu:onednn_gpu_conv_runner",
-     ],
- )
- 
-@@ -427,6 +428,7 @@ cc_library(
+@@ -427,6 +427,7 @@ cc_library(
          "//xla/service/gpu:thunk",
          "//xla/stream_executor",
          "@com_google_absl//absl/container:flat_hash_map",
@@ -4612,24 +4764,8 @@ index 4f298bbe01..464ee909a2 100644
      ],
  )
  
-@@ -441,6 +443,7 @@ cc_library(
-         "//xla/service/gpu:thunk",
-         "//xla/stream_executor:device_memory",
-         "@com_google_absl//absl/status",
-+        "@intel_extension_for_openxla//xla/service/gpu:onednn_matmul_utils",
-         "@tsl//tsl/platform:logging",
-     ],
- )
-@@ -459,6 +462,7 @@ cc_library(
-         "//xla:status",
-         "//xla/stream_executor:device_memory",
-         "//xla/stream_executor",
-+        "@intel_extension_for_openxla//xla/service/gpu:onednn_matmul_utils",
-         "@tsl//tsl/platform:logging",
-     ]),
- )
 diff --git a/xla/service/gpu/runtime/cholesky_thunk.cc b/xla/service/gpu/runtime/cholesky_thunk.cc
-index b91be4449d..1f8d8c9647 100644
+index b91be4449..1f8d8c964 100644
 --- a/xla/service/gpu/runtime/cholesky_thunk.cc
 +++ b/xla/service/gpu/runtime/cholesky_thunk.cc
 @@ -38,13 +38,12 @@ namespace xla {
@@ -4669,7 +4805,7 @@ index b91be4449d..1f8d8c9647 100644
  
  template <typename T>
 diff --git a/xla/service/gpu/runtime/cholesky_thunk.h b/xla/service/gpu/runtime/cholesky_thunk.h
-index e56c01a7fa..678d0b1917 100644
+index e56c01a7f..678d0b191 100644
 --- a/xla/service/gpu/runtime/cholesky_thunk.h
 +++ b/xla/service/gpu/runtime/cholesky_thunk.h
 @@ -18,6 +18,7 @@ limitations under the License.
@@ -4700,19 +4836,10 @@ index e56c01a7fa..678d0b1917 100644
  }  // namespace gpu
  }  // namespace xla
 diff --git a/xla/service/gpu/runtime/convolution_thunk.cc b/xla/service/gpu/runtime/convolution_thunk.cc
-index 1d33eca1ac..1f5033568e 100644
+index 1d33eca1a..c6a29c397 100644
 --- a/xla/service/gpu/runtime/convolution_thunk.cc
 +++ b/xla/service/gpu/runtime/convolution_thunk.cc
-@@ -25,11 +25,20 @@ limitations under the License.
- #include "xla/stream_executor/stream_executor.h"
- #include "xla/util.h"
- 
-+#if TENSORFLOW_USE_SYCL
-+#include "xla/service/gpu/onednn_gpu_conv_runner.h"
-+#include "xla/stream_executor/scratch_allocator.h"
-+#endif
-+
- namespace xla {
+@@ -29,7 +29,11 @@ namespace xla {
  namespace gpu {
  
  ConvolutionThunk::ConvolutionThunk(
@@ -4724,7 +4851,7 @@ index 1d33eca1ac..1f5033568e 100644
      std::vector<BufferAllocation::Slice> operand_slices,
      std::vector<BufferAllocation::Slice> result_slices,
      BufferAllocation::Slice scratch_slice)
-@@ -37,8 +46,13 @@ ConvolutionThunk::ConvolutionThunk(
+@@ -37,8 +41,13 @@ ConvolutionThunk::ConvolutionThunk(
        operand_buffers_(std::move(operand_slices)),
        result_buffers_(std::move(result_slices)),
        scratch_buffer_(scratch_slice),
@@ -4738,7 +4865,7 @@ index 1d33eca1ac..1f5033568e 100644
  GenericConvRunner& ConvolutionThunk::GetOrCreateRunner(
      const stream_executor::Stream* stream) {
    absl::MutexLock lock(&mu_);
-@@ -50,6 +64,7 @@ GenericConvRunner& ConvolutionThunk::GetOrCreateRunner(
+@@ -50,6 +59,7 @@ GenericConvRunner& ConvolutionThunk::GetOrCreateRunner(
    }
    return *it->second;
  }
@@ -4746,22 +4873,12 @@ index 1d33eca1ac..1f5033568e 100644
  
  absl::Status ConvolutionThunk::ExecuteOnStream(const ExecuteParams& params) {
    const auto& buffer_allocations = *params.buffer_allocations;
-@@ -68,13 +83,26 @@ absl::Status ConvolutionThunk::ExecuteOnStream(const ExecuteParams& params) {
+@@ -68,13 +78,16 @@ absl::Status ConvolutionThunk::ExecuteOnStream(const ExecuteParams& params) {
    se::DeviceMemoryBase scratch =
        buffer_allocations.GetDeviceAddress(scratch_buffer_);
  
 +#if TENSORFLOW_USE_SYCL
-+  auto stream = params.stream;
-+  se::OwningScratchAllocator<2> scratch_allocator(
-+      buffer_allocations.device_ordinal(),
-+      buffer_allocations.memory_allocator());
-+  TF_ASSIGN_OR_RETURN(auto conv_primitive,
-+                      GetOrCreateOneDnnConvPrimitive(stream, descriptor_, operand_se_buffers,
-+                                                     result_se_buffers[0], params, &scratch_allocator));
-+
-+  TF_RETURN_IF_ERROR(RunGpuConv(conv_primitive, descriptor_,
-+                                absl::MakeSpan(operand_se_buffers),
-+                                result_se_buffers[0], params));
++  return absl::InternalError("After SYCL support FFI convolution, EmitConvolutionThunk should not be use.");
 +#else
    RunConvOptions opts;
    opts.runner_cache = &GetOrCreateRunner(params.stream);
@@ -4775,7 +4892,7 @@ index 1d33eca1ac..1f5033568e 100644
    // populate it as no one should be reading from the tuple directly.
    if (!params.stream->ok()) {
 diff --git a/xla/service/gpu/runtime/convolution_thunk.h b/xla/service/gpu/runtime/convolution_thunk.h
-index 02aecd464f..df9213bae2 100644
+index 02aecd464..df9213bae 100644
 --- a/xla/service/gpu/runtime/convolution_thunk.h
 +++ b/xla/service/gpu/runtime/convolution_thunk.h
 @@ -37,7 +37,12 @@ class ConvolutionThunk : public Thunk {
@@ -4805,7 +4922,7 @@ index 02aecd464f..df9213bae2 100644
    absl::flat_hash_map<const stream_executor::Stream*,
                        std::unique_ptr<GenericConvRunner>>
 diff --git a/xla/service/gpu/runtime/custom_call_thunk.cc b/xla/service/gpu/runtime/custom_call_thunk.cc
-index 28a7dcebfc..08fc0c812e 100644
+index 28a7dcebf..4c8727f6b 100644
 --- a/xla/service/gpu/runtime/custom_call_thunk.cc
 +++ b/xla/service/gpu/runtime/custom_call_thunk.cc
 @@ -36,7 +36,7 @@ limitations under the License.
@@ -4840,8 +4957,19 @@ index 28a7dcebfc..08fc0c812e 100644
  }
  
  absl::Status CustomCallThunk::ExecuteFfiHandler(const ExecuteParams& params) {
+@@ -139,6 +139,10 @@ absl::Status CustomCallThunk::ExecuteFfiHandler(const ExecuteParams& params) {
+   // execution context, as apparently it's not easily accessible from Thunk.
+   ExecutableRunOptions run_options;
+   run_options.set_stream(params.stream);
++#ifdef TENSORFLOW_USE_SYCL
++  run_options.set_device_ordinal(params.buffer_allocations->device_ordinal());
++  run_options.set_allocator(params.buffer_allocations->memory_allocator());
++#endif
+   ServiceExecutableRunOptions service_run_options(run_options);
+ 
+   CallOptions options = {&service_run_options, called_computation_};
 diff --git a/xla/service/gpu/runtime/custom_call_thunk.h b/xla/service/gpu/runtime/custom_call_thunk.h
-index 5fa1dce328..e75b61636a 100644
+index 5fa1dce32..e75b61636 100644
 --- a/xla/service/gpu/runtime/custom_call_thunk.h
 +++ b/xla/service/gpu/runtime/custom_call_thunk.h
 @@ -35,7 +35,7 @@ limitations under the License.
@@ -4869,7 +4997,7 @@ index 5fa1dce328..e75b61636a 100644
    using CustomCallTarget = std::function<void(Stream, void**, const char*,
                                                size_t, XlaCustomCallStatus*)>;
 diff --git a/xla/service/gpu/runtime/fft_thunk.cc b/xla/service/gpu/runtime/fft_thunk.cc
-index 728c36752a..fccde57939 100644
+index 728c36752..fccde5793 100644
 --- a/xla/service/gpu/runtime/fft_thunk.cc
 +++ b/xla/service/gpu/runtime/fft_thunk.cc
 @@ -67,6 +67,7 @@ std::string FftTypeToString(se::fft::Type type) {
@@ -4889,7 +5017,7 @@ index 728c36752a..fccde57939 100644
  
  FftThunk::FftThunk(ThunkInfo thunk_info, FftType fft_type,
 diff --git a/xla/service/gpu/runtime/fused_mha_thunk.cc b/xla/service/gpu/runtime/fused_mha_thunk.cc
-index 03978f0d1f..002ff55024 100644
+index 03978f0d1..002ff5502 100644
 --- a/xla/service/gpu/runtime/fused_mha_thunk.cc
 +++ b/xla/service/gpu/runtime/fused_mha_thunk.cc
 @@ -21,6 +21,10 @@ limitations under the License.
@@ -4947,21 +5075,10 @@ index 03978f0d1f..002ff55024 100644
      return Internal("FusedMHABackwardThunk::ExecuteOnStream failed.");
    }
 diff --git a/xla/service/gpu/runtime/gemm_thunk.cc b/xla/service/gpu/runtime/gemm_thunk.cc
-index cc74707c84..c81288a677 100644
+index cc74707c8..4071f18a7 100644
 --- a/xla/service/gpu/runtime/gemm_thunk.cc
 +++ b/xla/service/gpu/runtime/gemm_thunk.cc
-@@ -24,6 +24,10 @@ limitations under the License.
- #include "xla/stream_executor/device_memory.h"
- #include "tsl/platform/logging.h"
- 
-+#if TENSORFLOW_USE_SYCL
-+#include "xla/service/gpu/onednn_matmul_utils.h"
-+#endif
-+
- namespace xla {
- namespace gpu {
- 
-@@ -41,6 +45,7 @@ GemmThunk::GemmThunk(ThunkInfo thunk_info, GemmConfig config,
+@@ -41,6 +41,7 @@ GemmThunk::GemmThunk(ThunkInfo thunk_info, GemmConfig config,
        workspace_(workspace),
        deterministic_(deterministic) {}
  
@@ -4969,86 +5086,38 @@ index cc74707c84..c81288a677 100644
  absl::Status GemmThunk::ExecuteOnStream(const ExecuteParams& params) {
    VLOG(3) << "Running GEMM thunk";
    const BufferAllocations& allocs = *params.buffer_allocations;
-@@ -57,6 +62,26 @@ absl::Status GemmThunk::ExecuteOnStream(const ExecuteParams& params) {
+@@ -57,6 +58,12 @@ absl::Status GemmThunk::ExecuteOnStream(const ExecuteParams& params) {
                   allocs.GetDeviceAddress(output_buffer_), workspace,
                   deterministic_, stream);
  }
 +#else // !TENSORFLOW_USE_SYCL
 +Status GemmThunk::ExecuteOnStream(const ExecuteParams& params) {
-+  VLOG(3) << "Running GEMM thunk";
-+  const BufferAllocations& allocs = *params.buffer_allocations;
-+  se::DeviceMemoryBase lhs_data = allocs.GetDeviceAddress(lhs_buffer_);
-+  se::DeviceMemoryBase rhs_data = allocs.GetDeviceAddress(rhs_buffer_);
-+  se::DeviceMemoryBase output_data = allocs.GetDeviceAddress(output_buffer_);
-+  se::DeviceMemoryBase add_data;
-+  se::DeviceMemoryBase bias_data;
-+
-+  auto& buffer_allocations = *params.buffer_allocations;
-+  se::OwningScratchAllocator<> scratch_allocator(
-+      buffer_allocations.device_ordinal(),
-+      buffer_allocations.memory_allocator());
-+
-+  se::gpu::BlasLt::Epilogue epilogue = se::gpu::BlasLt::Epilogue::kDefault;
-+  return RunGemm(config_, lhs_data, rhs_data, add_data, output_data, bias_data,
-+                 params.stream, epilogue, &scratch_allocator);
++  return absl::InternalError(
++      "After SYCL support FFI Gemm, EmitGemmThunk should not be use.");
 +}
 +#endif // !TENSORFLOW_USE_SYCL
  
  absl::Status GemmThunk::Initialize(const InitializeParams& params) {
    if (!params.executor->AsBlas()) {
 diff --git a/xla/service/gpu/runtime/gpublas_lt_matmul_thunk.cc b/xla/service/gpu/runtime/gpublas_lt_matmul_thunk.cc
-index 14cc314916..e23b849acd 100644
+index 14cc31491..024f98955 100644
 --- a/xla/service/gpu/runtime/gpublas_lt_matmul_thunk.cc
 +++ b/xla/service/gpu/runtime/gpublas_lt_matmul_thunk.cc
-@@ -24,6 +24,10 @@ limitations under the License.
- #include "xla/stream_executor/scratch_allocator.h"
- #include "tsl/platform/logging.h"
- 
-+#if TENSORFLOW_USE_SYCL
-+#include "xla/service/gpu/onednn_matmul_utils.h"
-+#endif
-+
- namespace xla {
- namespace gpu {
- 
-@@ -52,6 +56,36 @@ CublasLtMatmulThunk::CublasLtMatmulThunk(
+@@ -52,6 +52,13 @@ CublasLtMatmulThunk::CublasLtMatmulThunk(
        d_scale_buffer_(d_scale),
        d_amax_buffer_(d_amax) {}
  
 +#if TENSORFLOW_USE_SYCL
 +absl::Status CublasLtMatmulThunk::ExecuteOnStream(const ExecuteParams& params) {
-+  VLOG(3) << "Running cublas_lt matmul thunk";
-+  const BufferAllocations& allocs = *params.buffer_allocations;
-+
-+  se::DeviceMemoryBase a, b, c, d;
-+  if (a_buffer_.allocation() != nullptr) {
-+    a = allocs.GetDeviceAddress(a_buffer_);
-+  }
-+  if (b_buffer_.allocation() != nullptr) {
-+    b = allocs.GetDeviceAddress(b_buffer_);
-+  }
-+  if (c_buffer_.allocation() != nullptr) {
-+    c = allocs.GetDeviceAddress(c_buffer_);
-+  }
-+  if (d_buffer_.allocation() != nullptr) {
-+    d = allocs.GetDeviceAddress(d_buffer_);
-+  }
-+
-+  se::DeviceMemoryBase bias, a_scale, b_scale, c_scale, d_scale, d_amax;
-+  if (bias_buffer_.allocation() != nullptr) {
-+    bias = allocs.GetDeviceAddress(bias_buffer_);
-+  }
-+
-+  se::OwningScratchAllocator<> scratch_allocator(allocs.device_ordinal(),
-+                                                 allocs.memory_allocator());
-+  return RunGemm(gemm_config_, a, b, c, d, bias, params.stream, epilogue_,
-+                 &scratch_allocator);
++  return absl::InternalError(
++      "After SYCL support FFI Matmul, EmitCublasLtMatmulThunk should not be "
++      "use.");
 +}
 +#else  // TENSORFLOW_USE_SYCL
  absl::Status CublasLtMatmulThunk::ExecuteOnStream(const ExecuteParams& params) {
    TF_ASSIGN_OR_RETURN(auto plan, GetMatmulPlan(params.stream));
    TF_ASSIGN_OR_RETURN(auto algorithm, GetMatmulAlgorithm(plan));
-@@ -118,6 +152,6 @@ CublasLtMatmulThunk::GetMatmulAlgorithm(
+@@ -118,6 +125,6 @@ CublasLtMatmulThunk::GetMatmulAlgorithm(
    }
    return it->second;
  }
@@ -5057,7 +5126,7 @@ index 14cc314916..e23b849acd 100644
  }  // namespace gpu
  }  // namespace xla
 diff --git a/xla/service/gpu/runtime/gpublas_lt_matmul_thunk.h b/xla/service/gpu/runtime/gpublas_lt_matmul_thunk.h
-index ca80a7bbd6..49138c92a3 100644
+index ca80a7bbd..49138c92a 100644
 --- a/xla/service/gpu/runtime/gpublas_lt_matmul_thunk.h
 +++ b/xla/service/gpu/runtime/gpublas_lt_matmul_thunk.h
 @@ -45,6 +45,7 @@ class CublasLtMatmulThunk : public Thunk {
@@ -5079,7 +5148,7 @@ index ca80a7bbd6..49138c92a3 100644
    int64_t algorithm_idx_;
 diff --git a/xla/service/gpu/spir_compiler.cc b/xla/service/gpu/spir_compiler.cc
 new file mode 100644
-index 0000000000..93711c700a
+index 000000000..93711c700
 --- /dev/null
 +++ b/xla/service/gpu/spir_compiler.cc
 @@ -0,0 +1,281 @@
@@ -5366,7 +5435,7 @@ index 0000000000..93711c700a
 +}  // namespace xla
 diff --git a/xla/service/gpu/spir_compiler.h b/xla/service/gpu/spir_compiler.h
 new file mode 100644
-index 0000000000..f620a79047
+index 000000000..f620a7904
 --- /dev/null
 +++ b/xla/service/gpu/spir_compiler.h
 @@ -0,0 +1,70 @@
@@ -5442,7 +5511,7 @@ index 0000000000..f620a79047
 +#endif  // XLA_SERVICE_GPU_SPIR_COMPILER_H_
 diff --git a/xla/service/gpu/spir_compiler_registration.cc b/xla/service/gpu/spir_compiler_registration.cc
 new file mode 100644
-index 0000000000..a397ae7a17
+index 000000000..a397ae7a1
 --- /dev/null
 +++ b/xla/service/gpu/spir_compiler_registration.cc
 @@ -0,0 +1,27 @@
@@ -5474,7 +5543,7 @@ index 0000000000..a397ae7a17
 +}
 +static bool compiler_module_initialized = InitCompilerModule();
 diff --git a/xla/service/gpu/stream_executor_util.cc b/xla/service/gpu/stream_executor_util.cc
-index aace5768ac..caf671d5d7 100644
+index aace5768a..caf671d5d 100644
 --- a/xla/service/gpu/stream_executor_util.cc
 +++ b/xla/service/gpu/stream_executor_util.cc
 @@ -145,6 +145,13 @@ StreamExecutorConvLayoutsToXlaLayouts(const ConvolutionDimensionNumbers& dnums,
@@ -5510,7 +5579,7 @@ index aace5768ac..caf671d5d7 100644
      return Internal(
          "Invalid filter layout %s for conv with dnums %s, expected one of (%s, "
 diff --git a/xla/service/gpu/target_constants.h b/xla/service/gpu/target_constants.h
-index 13190ae690..574a4120d7 100644
+index 13190ae69..574a4120d 100644
 --- a/xla/service/gpu/target_constants.h
 +++ b/xla/service/gpu/target_constants.h
 @@ -67,7 +67,7 @@ inline const char* DataLayout() {
@@ -5523,7 +5592,7 @@ index 13190ae690..574a4120d7 100644
  }
  }  // namespace spir
 diff --git a/xla/service/hlo_dataflow_analysis.cc b/xla/service/hlo_dataflow_analysis.cc
-index cf4f665fd7..2dce44cd6f 100644
+index cf4f665fd..2dce44cd6 100644
 --- a/xla/service/hlo_dataflow_analysis.cc
 +++ b/xla/service/hlo_dataflow_analysis.cc
 @@ -1819,37 +1819,6 @@ bool HloDataflowAnalysis::DoesNotUseOperandBuffer(
@@ -5584,7 +5653,7 @@ index cf4f665fd7..2dce44cd6f 100644
 +
  }  // namespace xla
 diff --git a/xla/service/hlo_dataflow_analysis.h b/xla/service/hlo_dataflow_analysis.h
-index 2b2c456a43..1f1456ab4b 100644
+index 2b2c456a4..1f1456ab4 100644
 --- a/xla/service/hlo_dataflow_analysis.h
 +++ b/xla/service/hlo_dataflow_analysis.h
 @@ -369,6 +369,26 @@ class HloDataflowAnalysis {
@@ -5615,7 +5684,7 @@ index 2b2c456a43..1f1456ab4b 100644
  
  #endif  // XLA_SERVICE_HLO_DATAFLOW_ANALYSIS_H_
 diff --git a/xla/service/hlo_verifier.cc b/xla/service/hlo_verifier.cc
-index e182a6e193..c8331a080b 100644
+index e182a6e19..c8331a080 100644
 --- a/xla/service/hlo_verifier.cc
 +++ b/xla/service/hlo_verifier.cc
 @@ -1235,15 +1235,19 @@ Status ShapeVerifier::HandleFusion(HloInstruction* fusion) {
@@ -5673,7 +5742,7 @@ index e182a6e193..c8331a080b 100644
    return OkStatus();
  }
 diff --git a/xla/service/instruction_fusion.cc b/xla/service/instruction_fusion.cc
-index a36681f055..c4f4540f09 100644
+index a36681f05..c4f4540f0 100644
 --- a/xla/service/instruction_fusion.cc
 +++ b/xla/service/instruction_fusion.cc
 @@ -900,12 +900,10 @@ bool IsSafeToFuseSliceIntoDusFusion(const HloInstruction* producer,
@@ -5752,7 +5821,7 @@ index a36681f055..c4f4540f09 100644
        auto dus_ops =
            ExtractInstructions(consumer, HloOpcode::kDynamicUpdateSlice);
 diff --git a/xla/service/llvm_ir/kernel_support_library.cc b/xla/service/llvm_ir/kernel_support_library.cc
-index 7d72be76a0..568b7e3ecf 100644
+index 7d72be76a..568b7e3ec 100644
 --- a/xla/service/llvm_ir/kernel_support_library.cc
 +++ b/xla/service/llvm_ir/kernel_support_library.cc
 @@ -38,7 +38,7 @@ Status KernelSupportLibrary::ForWithStatus(
@@ -5765,7 +5834,7 @@ index 7d72be76a0..568b7e3ecf 100644
            return for_body_generator(indvar, b_->getInt1(is_first_iteration));
          });
 diff --git a/xla/service/llvm_ir/llvm_util.cc b/xla/service/llvm_ir/llvm_util.cc
-index 3a9ab3bb6f..e818a7f5f3 100644
+index 3a9ab3bb6..e818a7f5f 100644
 --- a/xla/service/llvm_ir/llvm_util.cc
 +++ b/xla/service/llvm_ir/llvm_util.cc
 @@ -544,6 +544,7 @@ void SetDereferenceableMetadataForLoad(llvm::LoadInst* load,
@@ -5785,7 +5854,7 @@ index 3a9ab3bb6f..e818a7f5f3 100644
  }
  
 diff --git a/xla/service/spmd/BUILD b/xla/service/spmd/BUILD
-index 843bdce9b4..aab03ce676 100644
+index 843bdce9b..aab03ce67 100644
 --- a/xla/service/spmd/BUILD
 +++ b/xla/service/spmd/BUILD
 @@ -48,6 +48,7 @@ cc_library(
@@ -5805,7 +5874,7 @@ index 843bdce9b4..aab03ce676 100644
          "@com_google_absl//absl/types:span",
          "@com_google_absl//absl/utility",
 diff --git a/xla/service/spmd/custom_call_handler.cc b/xla/service/spmd/custom_call_handler.cc
-index f1cb7277c6..a36fa4c739 100644
+index f1cb7277c..a36fa4c73 100644
 --- a/xla/service/spmd/custom_call_handler.cc
 +++ b/xla/service/spmd/custom_call_handler.cc
 @@ -15,28 +15,43 @@ limitations under the License.
@@ -5890,7 +5959,7 @@ index f1cb7277c6..a36fa4c739 100644
  }
  
 diff --git a/xla/service/spmd/spmd_partitioner_test.cc b/xla/service/spmd/spmd_partitioner_test.cc
-index db8222c7ac..39febfb3d0 100644
+index db8222c7a..39febfb3d 100644
 --- a/xla/service/spmd/spmd_partitioner_test.cc
 +++ b/xla/service/spmd/spmd_partitioner_test.cc
 @@ -13948,6 +13948,36 @@ ENTRY %entry {
@@ -5931,7 +6000,7 @@ index db8222c7ac..39febfb3d0 100644
    absl::string_view hlo_string = R"(
  HloModule module
 diff --git a/xla/stream_executor/blas.h b/xla/stream_executor/blas.h
-index 07a5dadc68..02111d5e28 100644
+index 07a5dadc6..02111d5e2 100644
 --- a/xla/stream_executor/blas.h
 +++ b/xla/stream_executor/blas.h
 @@ -137,6 +137,8 @@ constexpr AlgorithmType kDefaultBlasGemm = -2;
@@ -5944,7 +6013,7 @@ index 07a5dadc68..02111d5e28 100644
  // blas uses -1 to represent the default algorithm. This happens to match up
  // with the CUBLAS_GEMM_DFALT constant, so cuda_blas.cc is using static_cast
 diff --git a/xla/stream_executor/build_defs.bzl b/xla/stream_executor/build_defs.bzl
-index a937a57edc..57544af795 100644
+index a937a57ed..57544af79 100644
 --- a/xla/stream_executor/build_defs.bzl
 +++ b/xla/stream_executor/build_defs.bzl
 @@ -1,7 +1,8 @@
@@ -5974,7 +6043,7 @@ index a937a57edc..57544af795 100644
  # nvlink is not available via the pip wheels, disable it since it will create
  # unnecessary dependency
 diff --git a/xla/stream_executor/cuda/cuda_driver.cc b/xla/stream_executor/cuda/cuda_driver.cc
-index f73448ce52..0830cd560c 100644
+index f73448ce5..0830cd560 100644
 --- a/xla/stream_executor/cuda/cuda_driver.cc
 +++ b/xla/stream_executor/cuda/cuda_driver.cc
 @@ -1418,6 +1418,14 @@ struct BitPatternToValue {
@@ -5993,7 +6062,7 @@ index f73448ce52..0830cd560c 100644
      GpuContext* context, CUdeviceptr location, uint8_t value, size_t size) {
    ScopedActivateContext activation(context);
 diff --git a/xla/stream_executor/cuda/cuda_executor.cc b/xla/stream_executor/cuda/cuda_executor.cc
-index 370538721f..c76588673c 100644
+index 370538721..c76588673 100644
 --- a/xla/stream_executor/cuda/cuda_executor.cc
 +++ b/xla/stream_executor/cuda/cuda_executor.cc
 @@ -209,6 +209,12 @@ absl::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,
@@ -6010,7 +6079,7 @@ index 370538721f..c76588673c 100644
                                      Kernel* kernel) {
    GpuKernel* cuda_kernel = AsGpuKernel(kernel);
 diff --git a/xla/stream_executor/gpu/BUILD b/xla/stream_executor/gpu/BUILD
-index 3d9af873d4..71cfb0815b 100644
+index 3d9af873d..71cfb0815 100644
 --- a/xla/stream_executor/gpu/BUILD
 +++ b/xla/stream_executor/gpu/BUILD
 @@ -27,6 +27,10 @@ load(
@@ -6043,7 +6112,7 @@ index 3d9af873d4..71cfb0815b 100644
  )
  
 diff --git a/xla/stream_executor/gpu/gpu_driver.h b/xla/stream_executor/gpu/gpu_driver.h
-index 9046cbdbb6..dabc1b0d01 100644
+index 9046cbdbb..dabc1b0d0 100644
 --- a/xla/stream_executor/gpu/gpu_driver.h
 +++ b/xla/stream_executor/gpu/gpu_driver.h
 @@ -634,6 +634,9 @@ class GpuDriver {
@@ -6057,7 +6126,7 @@ index 9046cbdbb6..dabc1b0d01 100644
    // Retrieves a named kernel from a loaded module, and places the resulting
    // handle into function (outparam) on success. Neither kernel_name nor
 diff --git a/xla/stream_executor/gpu/gpu_executor.h b/xla/stream_executor/gpu/gpu_executor.h
-index d90880d9da..eb5b666266 100644
+index d90880d9d..eb5b66626 100644
 --- a/xla/stream_executor/gpu/gpu_executor.h
 +++ b/xla/stream_executor/gpu/gpu_executor.h
 @@ -354,6 +354,11 @@ class GpuExecutor : public internal::StreamExecutorInterface {
@@ -6073,7 +6142,7 @@ index d90880d9da..eb5b666266 100644
                        const BlockDim& block_dims,
                        const std::optional<ClusterDim>& cluster_dims,
 diff --git a/xla/stream_executor/gpu/gpu_helpers.h b/xla/stream_executor/gpu/gpu_helpers.h
-index c86f49140a..5560795dd4 100644
+index c86f49140..5560795dd 100644
 --- a/xla/stream_executor/gpu/gpu_helpers.h
 +++ b/xla/stream_executor/gpu/gpu_helpers.h
 @@ -53,14 +53,18 @@ T* GpuMemoryMutable(DeviceMemory<T>* mem) {
@@ -6096,7 +6165,7 @@ index c86f49140a..5560795dd4 100644
  // Type traits to get CUDA complex types from std::complex<>.
  
 diff --git a/xla/stream_executor/gpu/gpu_timer.cc b/xla/stream_executor/gpu/gpu_timer.cc
-index ecd3f40c67..048ac6d492 100644
+index ecd3f40c6..048ac6d49 100644
 --- a/xla/stream_executor/gpu/gpu_timer.cc
 +++ b/xla/stream_executor/gpu/gpu_timer.cc
 @@ -57,10 +57,10 @@ absl::Duration RandomDuration() {
@@ -6113,7 +6182,7 @@ index ecd3f40c67..048ac6d492 100644
                                            GpuDriver::EventFlags::kDefault));
    CHECK(start_event != nullptr && stop_event != nullptr);
 diff --git a/xla/stream_executor/gpu/gpu_types.h b/xla/stream_executor/gpu/gpu_types.h
-index c8d6266b35..05d29efe79 100644
+index c8d6266b3..05d29efe7 100644
 --- a/xla/stream_executor/gpu/gpu_types.h
 +++ b/xla/stream_executor/gpu/gpu_types.h
 @@ -18,7 +18,17 @@ limitations under the License.
@@ -6172,7 +6241,7 @@ index c8d6266b35..05d29efe79 100644
  using GpuContextHandle = hipCtx_t;
  using GpuStreamHandle = hipStream_t;
 diff --git a/xla/stream_executor/gpu/redzone_allocator.cc b/xla/stream_executor/gpu/redzone_allocator.cc
-index 5f08f84c2d..6ea38951d1 100644
+index 5f08f84c2..6ea38951d 100644
 --- a/xla/stream_executor/gpu/redzone_allocator.cc
 +++ b/xla/stream_executor/gpu/redzone_allocator.cc
 @@ -317,6 +317,7 @@ static absl::StatusOr<RedzoneCheckStatus> CheckRedzonesForBuffer(
@@ -6192,7 +6261,7 @@ index 5f08f84c2d..6ea38951d1 100644
  std::string RedzoneCheckStatus::RedzoneFailureMsg() const {
    return absl::StrFormat(
 diff --git a/xla/stream_executor/kernel_spec.h b/xla/stream_executor/kernel_spec.h
-index fa02d7206b..096f4e1859 100644
+index fa02d7206..096f4e185 100644
 --- a/xla/stream_executor/kernel_spec.h
 +++ b/xla/stream_executor/kernel_spec.h
 @@ -190,9 +190,12 @@ class CudaCubinInMemory : public KernelLoaderSpec {
@@ -6209,7 +6278,7 @@ index fa02d7206b..096f4e1859 100644
    CudaCubinInMemory(const CudaCubinInMemory &) = delete;
    void operator=(const CudaCubinInMemory &) = delete;
 diff --git a/xla/stream_executor/rocm/rocm_driver.cc b/xla/stream_executor/rocm/rocm_driver.cc
-index 2d075f06cd..4d7af5def7 100644
+index 2d075f06c..4d7af5def 100644
 --- a/xla/stream_executor/rocm/rocm_driver.cc
 +++ b/xla/stream_executor/rocm/rocm_driver.cc
 @@ -1147,6 +1147,14 @@ struct BitPatternToValue {
@@ -6228,7 +6297,7 @@ index 2d075f06cd..4d7af5def7 100644
      GpuContext* context, hipDeviceptr_t location, uint8 value, size_t size) {
    ScopedActivateContext activation{context};
 diff --git a/xla/stream_executor/rocm/rocm_executor.cc b/xla/stream_executor/rocm/rocm_executor.cc
-index c55a8c9eb7..6ca74a7247 100644
+index c55a8c9eb..6ca74a724 100644
 --- a/xla/stream_executor/rocm/rocm_executor.cc
 +++ b/xla/stream_executor/rocm/rocm_executor.cc
 @@ -462,6 +462,11 @@ absl::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,

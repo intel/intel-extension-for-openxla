@@ -1,5 +1,6 @@
 cc_binary(
     name = "pjrt_plugin_xpu.so",
+    linkopts = ["-Wl,-rpath,$$ORIGIN/../intel_extension_for_openxla/service/gpu"],
     linkshared = True,
     visibility = ["//visibility:public"],
     deps = [
