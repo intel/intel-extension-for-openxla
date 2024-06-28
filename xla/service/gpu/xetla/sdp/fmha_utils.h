@@ -207,11 +207,12 @@ struct group_row_reduce_t {
   }
 };
 
+// Set default load type to block_2d because only the block_2d load/store will
+// ensure boundary safety.
 template <typename scalar_t, typename tile_desc_t, typename mem_desc_t>
 void store_tile(subgroup::tile_t<scalar_t, tile_desc_t>* src, mem_desc_t dst) {
-  using store_t = subgroup::mem_payload_t<
-      mem_desc_t, tile_desc_t,
-      subgroup::msg_type_v<tile_desc_t, mem_desc_t::space>, gpu_arch::Xe>;
+  using store_t = subgroup::mem_payload_t<mem_desc_t, tile_desc_t,
+                                          msg_type::block_2d, gpu_arch::Xe>;
   store_t store(dst);
   subgroup::tile_store(*src, store);
 }
@@ -219,9 +220,8 @@ void store_tile(subgroup::tile_t<scalar_t, tile_desc_t>* src, mem_desc_t dst) {
 template <typename scalar_t, typename tile_desc_t, typename mem_desc_t>
 void store_tile(subgroup::tile_t<scalar_t, tile_desc_t>* src, mem_desc_t dst,
                 int32_t tile_offset_x, int32_t tile_offset_y) {
-  using store_t = subgroup::mem_payload_t<
-      mem_desc_t, tile_desc_t,
-      subgroup::msg_type_v<tile_desc_t, mem_desc_t::space>, gpu_arch::Xe>;
+  using store_t = subgroup::mem_payload_t<mem_desc_t, tile_desc_t,
+                                          msg_type::block_2d, gpu_arch::Xe>;
   dst.update_coord(tile_offset_x, tile_offset_y);
   store_t store(dst);
   subgroup::tile_store(*src, store);
@@ -229,9 +229,8 @@ void store_tile(subgroup::tile_t<scalar_t, tile_desc_t>* src, mem_desc_t dst,
 
 template <typename scalar_t, typename tile_desc_t, typename mem_desc_t>
 void load_tile(subgroup::tile_t<scalar_t, tile_desc_t>* dst, mem_desc_t src) {
-  using load_t = subgroup::mem_payload_t<
-      mem_desc_t, tile_desc_t,
-      subgroup::msg_type_v<tile_desc_t, mem_desc_t::space>, gpu_arch::Xe>;
+  using load_t = subgroup::mem_payload_t<mem_desc_t, tile_desc_t,
+                                         msg_type::block_2d, gpu_arch::Xe>;
   load_t load(src);
   subgroup::tile_load(*dst, load);
 }
@@ -239,9 +238,8 @@ void load_tile(subgroup::tile_t<scalar_t, tile_desc_t>* dst, mem_desc_t src) {
 template <typename scalar_t, typename tile_desc_t, typename mem_desc_t>
 void load_tile(subgroup::tile_t<scalar_t, tile_desc_t>* dst, mem_desc_t src,
                int32_t tile_offset_x, int32_t tile_offset_y) {
-  using load_t = subgroup::mem_payload_t<
-      mem_desc_t, tile_desc_t,
-      subgroup::msg_type_v<tile_desc_t, mem_desc_t::space>, gpu_arch::Xe>;
+  using load_t = subgroup::mem_payload_t<mem_desc_t, tile_desc_t,
+                                         msg_type::block_2d, gpu_arch::Xe>;
   src.update_coord(tile_offset_x, tile_offset_y);
   load_t load(src);
   subgroup::tile_load(*dst, load);

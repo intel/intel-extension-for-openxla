@@ -518,6 +518,17 @@ class fmha_backward_t {
       bias_op(*rP, ctx.mem_desc_Bij.coord, bias_args);
     }
 
+    // Mask the logits of the QK matrix that exceed the sequence length of K by
+    // setting them to -inf. This ensures that the attention scores for these
+    // logits will be 0.
+    using tile_mask = tile_mask_t<tile_P_t>;
+    uint32_t sg_startT = ctx.startT + tile_offset_x;
+    uint32_t remainT =
+        std::max(static_cast<int>(args.uT) - static_cast<int>(sg_startT), 0);
+    if (remainT < kSgBc) {
+      tile_mask::padding_mask(*rP, remainT);
+    }
+
     subgroup::tile_broadcast_op<subgroup::tile_minus, tile_P_t>(*rP,
                                                                 l_load.reg);
     rP->reg = xetla_exp<accum_t>(rP->reg);
@@ -868,9 +879,9 @@ void fmha_backward_impl(sycl::queue& q, T* query, T* key, T* value, T* out,
     cgh.parallel_for<
         class FmhaBackwardDotDOO<fmha_policy, T, kUseBias, kIsDropout>>(
         NdRange0, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          sycl::nd_item<3> ei(item);
-          fmha_bwd_dot_do_op_t fmha_bwd_dot_do_o_op;
-          fmha_bwd_dot_do_o_op(ei, args);
+      sycl::nd_item<3> ei(item);
+      fmha_bwd_dot_do_op_t fmha_bwd_dot_do_o_op;
+      fmha_bwd_dot_do_o_op(ei, args);
         });
   });
 
@@ -882,9 +893,9 @@ void fmha_backward_impl(sycl::queue& q, T* query, T* key, T* value, T* out,
     cgh.parallel_for<
         class FmhaBackwardKernel<fmha_policy, T, kUseBias, kIsDropout>>(
         NdRange1, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          sycl::nd_item<3> ei(item);
-          fmha_backward_op_t fmha_bwd_op;
-          fmha_bwd_op(ei, args);
+      sycl::nd_item<3> ei(item);
+      fmha_backward_op_t fmha_bwd_op;
+      fmha_bwd_op(ei, args);
         });
   });
 
@@ -896,9 +907,9 @@ void fmha_backward_impl(sycl::queue& q, T* query, T* key, T* value, T* out,
     cgh.parallel_for<
         class FmhaBackwardConvertDQ<fmha_policy, T, kUseBias, kIsDropout>>(
         NdRange2, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-          sycl::nd_item<3> ei(item);
-          fmha_bwd_convert_dq_op_t fmha_bwd_convert_dq_op;
-          fmha_bwd_convert_dq_op(ei, args);
+      sycl::nd_item<3> ei(item);
+      fmha_bwd_convert_dq_op_t fmha_bwd_convert_dq_op;
+      fmha_bwd_convert_dq_op(ei, args);
         });
   });
 }
