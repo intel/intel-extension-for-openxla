@@ -5148,10 +5148,10 @@ index ca80a7bbd..49138c92a 100644
    int64_t algorithm_idx_;
 diff --git a/xla/service/gpu/spir_compiler.cc b/xla/service/gpu/spir_compiler.cc
 new file mode 100644
-index 000000000..93711c700
+index 000000000..2938a70fe
 --- /dev/null
 +++ b/xla/service/gpu/spir_compiler.cc
-@@ -0,0 +1,281 @@
+@@ -0,0 +1,290 @@
 +/* Copyright (c) 2023 Intel Corporation
 +
 +Licensed under the Apache License, Version 2.0 (the "License");
@@ -5326,6 +5326,15 @@ index 000000000..93711c700
 +  auto cuda_compute_capability = std::get<se::CudaComputeCapability>(
 +      gpu_target_config.device_description.gpu_compute_capability());
 +
++  // For frontend debugging.
++  FrontendAttributes frontend_attributes;
++  if (IsXeHPC(nullptr)) {
++    frontend_attributes.mutable_map()->emplace("IsXeHPC", "True");
++  }
++  if (HasXMX(nullptr)) {
++    frontend_attributes.mutable_map()->emplace("HasXMX", "True");
++  }
++  hlo_module->add_frontend_attributes(frontend_attributes);
 +  bool use_mha = true;
 +  TF_CHECK_OK(tsl::ReadBoolFromEnvVar("MHA", true, &use_mha));
 +  if (use_mha && IsXetlaHardwareSupport()) {
