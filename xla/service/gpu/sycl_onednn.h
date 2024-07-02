@@ -21,12 +21,6 @@ limitations under the License.
 
 namespace xla {
 namespace gpu {
-
-absl::Status GetBackendDict(
-    const ffi::Dictionary& dict,
-    absl::flat_hash_map<std::string, std::string>& backend_dict,
-    std::string& config_name);
-
 absl::Status RunGpuConvCustomCall(
     se::Stream* stream, se::ScratchAllocator* scratch_allocator,
     std::vector<ffi::BufferBase>& operand_se_buffers,
@@ -38,7 +32,7 @@ absl::Status RunGemmCustomCall(
     ffi::BufferBase* add, ffi::BufferBase* output,
     ffi::BufferBase* bias, se::Stream* stream,
     const ffi::Dictionary& dict,
-    absl::flat_hash_map<std::string, std::string>& backend_dict,
+    SYCLGemm::GemmBackendEpilogue epilogue,
     se::ScratchAllocator* scratch_allocator = nullptr);
 
 }  // namespace gpu

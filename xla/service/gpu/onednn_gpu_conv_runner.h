@@ -53,7 +53,6 @@ typedef struct OneDnnConvPrimitive {
 
 absl::StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
     se::Stream*, const ffi::Dictionary& dict,
-    absl::flat_hash_map<std::string, std::string>& backend_dict,
     const std::vector<ffi::BufferBase>& operand_se_buffers,
     const ffi::BufferBase& result_buffer,
     se::ScratchAllocator* scratch_allocator, CudnnConvKind conv_kind);

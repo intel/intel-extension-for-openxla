@@ -154,11 +154,8 @@ static absl::Status SyclGemm(const ServiceExecutableRunOptions* run_options,
   ffi::BufferBase lhs = *args.get<ffi::BufferBase>(0);
   ffi::BufferBase rhs = *args.get<ffi::BufferBase>(1);
   ffi::BufferBase output = *args.get<ffi::BufferBase>(2);
-  std::string config_name("gemm_backend_config");
-  absl::flat_hash_map<std::string, std::string> backend_dict;
-  GetBackendDict(dict, backend_dict, config_name);
   return RunGemmCustomCall(&lhs, &rhs, /*add*/ nullptr, &output,
-                           /*bias*/ nullptr, stream, dict, backend_dict,
+                           /*bias*/ nullptr, stream, dict, SYCLGemm::GemmBackendEpilogue::DEFAULT,
                            &scratch_allocator);
 }
 
@@ -168,17 +165,15 @@ static absl::Status SyclLtMatmul(const ServiceExecutableRunOptions* run_options,
   auto stream = run_options->stream();
   se::OwningScratchAllocator<2> scratch_allocator(run_options->device_ordinal(),
                                                   run_options->allocator());
-  std::string config_name("gemm_backend_config");
-  absl::flat_hash_map<std::string, std::string> backend_dict;
-  GetBackendDict(dict, backend_dict, config_name);
-
-  float beta = std::stof(backend_dict["beta"]);
+  int32_t epilogue = *dict.get<int32_t>("epilogue");
+  auto epilogue_cuda = static_cast<xla::gpu::GemmBackendConfig_Epilogue>(epilogue);
   TF_ASSIGN_OR_RETURN(SYCLGemm::GemmBackendEpilogue epilogue_sycl,
-                      SYCLGemm::EpilogueCast(backend_dict["epilogue"]));
-
+                      SYCLGemm::AsSYCLEpilogue(epilogue_cuda));
   TF_ASSIGN_OR_RETURN(bool has_vector_bias,
                       SYCLGemm::EpilogueAddsVectorBias(epilogue_sycl));
-  bool has_matrix_bias = beta != 0;
+  int64_t gemm_config_ptr = *dict.get<int64_t>("gemm_config_ptr");
+  GemmConfig gemm_config = *reinterpret_cast<GemmConfig*>(gemm_config_ptr);
+  bool has_matrix_bias = gemm_config.beta != 0;
   TF_ASSIGN_OR_RETURN(bool has_aux_output,
                       SYCLGemm::EpilogueHasAuxiliaryOutput(epilogue_sycl));
 
@@ -199,10 +194,10 @@ static absl::Status SyclLtMatmul(const ServiceExecutableRunOptions* run_options,
   if (has_vector_bias) {
     bias = *args.get<ffi::BufferBase>(has_matrix_bias ? 3 : 2);
     return RunGemmCustomCall(&lhs, &rhs, &add, &output, &bias, stream, dict,
-                             backend_dict, &scratch_allocator);
+                      epilogue_sycl, &scratch_allocator);
   } else {
     return RunGemmCustomCall(&lhs, &rhs, &add, &output, /*bias*/ nullptr,
-                             stream, dict, backend_dict, &scratch_allocator);
+                      stream, dict, epilogue_sycl, &scratch_allocator);
   }
 }
 

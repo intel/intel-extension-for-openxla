@@ -66,7 +66,6 @@ int64_t GetVectCSize(FilterLayout layout) {
 absl::Status CreateOneDnnPrimitive(
     OneDnnConvPrimitive* onednn_primitive,  // NOLINT
     const ffi::Dictionary& dict,
-    absl::flat_hash_map<std::string, std::string>& backend_dict,
     absl::Span<const ffi::BufferBase> operand_buffers,
     ffi::BufferBase result_buffer, se::Stream* stream,
     se::ScratchAllocator* scratch_allocator, CudnnConvKind conv_kind) {
@@ -89,7 +88,7 @@ absl::Status CreateOneDnnPrimitive(
   void* bias_data = nullptr;
   void* side_input_data = nullptr;
 
-  float conv_result_scale = std::stof(backend_dict["conv_result_scale"]);
+  float conv_result_scale = *dict.get<float>("conv_result_scale");
   bool conv_result_scale_one = (fabs(conv_result_scale - 1.0f) < 1e-6);
 
   switch (conv_kind) {
@@ -139,7 +138,7 @@ absl::Status CreateOneDnnPrimitive(
     bias_data = const_cast<void*>(operand_buffers[2].data.opaque());
     if (operand_buffers.size() >= 4) {
       side_input_data = const_cast<void*>(operand_buffers[3].data.opaque());
-      side_input_scale = std::stof(backend_dict["side_input_scale"]);
+      side_input_scale = *dict.get<float>("side_input_scale");
       side_input_scale_zero = (fabs(side_input_scale - 0.0f) < 1e-6);
     }
   }
@@ -457,22 +456,30 @@ absl::Status CreateOneDnnPrimitive(
            onednn_primitive->bias_memory});
     }
     if (conv_kind == CudnnConvKind::kForwardActivation) {
-      if (backend_dict["activation_mode"] == "kNone") {
-      } else if (backend_dict["activation_mode"] == "kSigmoid") {
-        po.append_eltwise(dnnl::algorithm::eltwise_logistic, 1, 0);
-      } else if (backend_dict["activation_mode"] == "kRelu") {
-        po.append_eltwise(dnnl::algorithm::eltwise_relu, 0, 0);
-      } else if (backend_dict["activation_mode"] == "kRelu6") {
-        po.append_eltwise(dnnl::algorithm::eltwise_clip_v2, 0, 6);
-      } else if (backend_dict["activation_mode"] == "kTanh") {
-        po.append_eltwise(dnnl::algorithm::eltwise_tanh, 0, 0);
-      } else if (backend_dict["activation_mode"] == "kElu") {
-        po.append_eltwise(dnnl::algorithm::eltwise_elu, 1, 0);
-      } else if (backend_dict["activation_mode"] == "kLeakyRelu") {
-        float leakyrelu_alpha = std::stof(backend_dict["leakyrelu_alpha"]);
-        po.append_eltwise(dnnl::algorithm::eltwise_relu, leakyrelu_alpha, 0);
-      } else {
-        return Internal("Unsupported Activation mode");
+      auto activation_mode = static_cast<stream_executor::dnn::ActivationMode>(*dict.get<int32_t>("activation_mode"));
+      switch (activation_mode) {
+        case stream_executor::dnn::kSigmoid:
+          po.append_eltwise(dnnl::algorithm::eltwise_logistic, 1, 0);
+          break;
+        case stream_executor::dnn::kRelu:
+          po.append_eltwise(dnnl::algorithm::eltwise_relu, 0, 0);
+          break;
+        case stream_executor::dnn::kRelu6:
+          po.append_eltwise(dnnl::algorithm::eltwise_clip_v2, 0, 6);
+          break;
+        case stream_executor::dnn::kTanh:
+          po.append_eltwise(dnnl::algorithm::eltwise_tanh, 0, 0);
+          break;
+        case stream_executor::dnn::kElu:
+          po.append_eltwise(dnnl::algorithm::eltwise_elu, 1, 0);
+          break;
+        case stream_executor::dnn::kLeakyRelu:
+          po.append_eltwise(dnnl::algorithm::eltwise_relu, *dict.get<float>("leakyrelu_alpha"), 0);
+          break;
+        case stream_executor::dnn::kNone:
+          break;
+        default:
+          return Internal("Unsupported Activation mode");
       }
     }
     post_ops_attr.set_post_ops(po);
@@ -673,12 +680,11 @@ absl::Status CreateOneDnnPrimitive(
 
 absl::StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
     se::Stream* stream, const ffi::Dictionary& dict,
-    absl::flat_hash_map<std::string, std::string>& backend_dict,
     const std::vector<ffi::BufferBase>& operand_se_buffers,
     const ffi::BufferBase& result_buffer,
     se::ScratchAllocator* scratch_allocator, CudnnConvKind conv_kind) {
   OneDnnConvPrimitive primitive;
-  auto status = CreateOneDnnPrimitive(&primitive, dict, backend_dict,
+  auto status = CreateOneDnnPrimitive(&primitive, dict,
                                       absl::MakeSpan(operand_se_buffers),
                                       result_buffer, stream, scratch_allocator,
                                       conv_kind);
