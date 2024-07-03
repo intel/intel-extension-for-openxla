@@ -24,35 +24,37 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-namespace SYCLGemm{
-    enum class GemmBackendEpilogue{
-        DEFAULT,
-        RELU,
-        GELU,
-        BIAS,
-        BIAS_RELU,
-        BIAS_GELU,
-        GELU_AUX,
-        BIAS_GELU_AUX,
-    };
+namespace SYCLGemm {
+enum class GemmBackendEpilogue {
+  DEFAULT,
+  RELU,
+  GELU,
+  BIAS,
+  BIAS_RELU,
+  BIAS_GELU,
+  GELU_AUX,
+  BIAS_GELU_AUX,
+};
 
-    absl::StatusOr<GemmBackendEpilogue> EpilogueCast(std::string& epilogue);
+absl::StatusOr<GemmBackendEpilogue> EpilogueCast(std::string& epilogue);
 
-    absl::StatusOr<std::string> EpilogueCast(GemmBackendEpilogue epilogue);
+absl::StatusOr<std::string> EpilogueCast(GemmBackendEpilogue epilogue);
 
-    absl::StatusOr<bool> EpilogueAddsVectorBias(GemmBackendEpilogue epilogue);
+absl::StatusOr<bool> EpilogueAddsVectorBias(GemmBackendEpilogue epilogue);
 
-    absl::StatusOr<bool> EpilogueHasAuxiliaryOutput(GemmBackendEpilogue epilogue);
+absl::StatusOr<bool> EpilogueHasAuxiliaryOutput(GemmBackendEpilogue epilogue);
 
-    absl::StatusOr<GemmBackendEpilogue> AsSYCLEpilogue(GemmBackendConfig_Epilogue epilogue);
-}
+absl::StatusOr<GemmBackendEpilogue> AsSYCLEpilogue(
+    GemmBackendConfig_Epilogue epilogue);
+}  // namespace SYCLGemm
 
 absl::Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
-               se::DeviceMemoryBase rhs_buffer, se::DeviceMemoryBase add_buffer,
-               se::DeviceMemoryBase output_buffer,
-               se::DeviceMemoryBase bias_buffer, se::Stream* stream,
-               SYCLGemm::GemmBackendEpilogue epilogue,
-               se::ScratchAllocator* scratch_allocator = nullptr);
+                     se::DeviceMemoryBase rhs_buffer,
+                     se::DeviceMemoryBase add_buffer,
+                     se::DeviceMemoryBase output_buffer,
+                     se::DeviceMemoryBase bias_buffer, se::Stream* stream,
+                     SYCLGemm::GemmBackendEpilogue epilogue,
+                     se::ScratchAllocator* scratch_allocator = nullptr);
 
 }  // namespace gpu
 }  // namespace xla

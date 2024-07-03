@@ -618,7 +618,7 @@ index 8acdeb102..50c7efe11 100644
  
   protected:
 diff --git a/xla/service/computation_placer.cc b/xla/service/computation_placer.cc
-index b896c7d10..02c5a642a 100644
+index b896c7d10..bd5dcea2b 100644
 --- a/xla/service/computation_placer.cc
 +++ b/xla/service/computation_placer.cc
 @@ -31,6 +31,7 @@ limitations under the License.
@@ -629,7 +629,19 @@ index b896c7d10..02c5a642a 100644
  #include "xla/types.h"
  #include "xla/util.h"
  #include "tsl/platform/errors.h"
-@@ -216,6 +217,8 @@ static bool InitModule() {
+@@ -164,6 +165,11 @@ absl::StatusOr<DeviceAssignment> ComputationPlacer::AssignDevices(
+   absl::MutexLock lock(&ComputationPlacer::platform_computation_placer_mutex_);
+   auto* computation_placers = GetPlatformComputationPlacers();
+   if (computation_placers->find(platform_id) != computation_placers->end()) {
++    // FIXME(intel): Temporarily skip the registry to avoid linking warning.
++    // Will reopen this check once refine oneDNN custom call code.
++#ifdef TENSORFLOW_USE_SYCL
++    return;
++#endif
+     // TODO(b/282059652): Consider logging the platform name using
+     // PlatformManager::PlatformWithId(). No doing that for now to avoid
+     // introducing unwanted dependency.
+@@ -216,6 +222,8 @@ static bool InitModule() {
        stream_executor::cuda::kCudaPlatformId, &CreateComputationPlacer);
    xla::ComputationPlacer::RegisterComputationPlacer(
        stream_executor::rocm::kROCmPlatformId, &CreateComputationPlacer);

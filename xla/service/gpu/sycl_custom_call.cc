@@ -19,7 +19,6 @@ limitations under the License.
 #include "xla/ffi/ffi.h"
 #include "xla/ffi/ffi_api.h"
 #include "xla/service/gpu/sycl_onednn.h"
-#include "xla/service/onednn_util.h"
 #include "xla/stream_executor/scratch_allocator.h"
 
 #define PLATFORM "SYCL"
@@ -155,7 +154,8 @@ static absl::Status SyclGemm(const ServiceExecutableRunOptions* run_options,
   ffi::BufferBase rhs = *args.get<ffi::BufferBase>(1);
   ffi::BufferBase output = *args.get<ffi::BufferBase>(2);
   return RunGemmCustomCall(&lhs, &rhs, /*add*/ nullptr, &output,
-                           /*bias*/ nullptr, stream, dict, SYCLGemm::GemmBackendEpilogue::DEFAULT,
+                           /*bias*/ nullptr, stream, dict,
+                           SYCLGemm::GemmBackendEpilogue::DEFAULT,
                            &scratch_allocator);
 }
 
@@ -166,7 +166,8 @@ static absl::Status SyclLtMatmul(const ServiceExecutableRunOptions* run_options,
   se::OwningScratchAllocator<2> scratch_allocator(run_options->device_ordinal(),
                                                   run_options->allocator());
   int32_t epilogue = *dict.get<int32_t>("epilogue");
-  auto epilogue_cuda = static_cast<xla::gpu::GemmBackendConfig_Epilogue>(epilogue);
+  auto epilogue_cuda =
+      static_cast<xla::gpu::GemmBackendConfig_Epilogue>(epilogue);
   TF_ASSIGN_OR_RETURN(SYCLGemm::GemmBackendEpilogue epilogue_sycl,
                       SYCLGemm::AsSYCLEpilogue(epilogue_cuda));
   TF_ASSIGN_OR_RETURN(bool has_vector_bias,
@@ -194,10 +195,10 @@ static absl::Status SyclLtMatmul(const ServiceExecutableRunOptions* run_options,
   if (has_vector_bias) {
     bias = *args.get<ffi::BufferBase>(has_matrix_bias ? 3 : 2);
     return RunGemmCustomCall(&lhs, &rhs, &add, &output, &bias, stream, dict,
-                      epilogue_sycl, &scratch_allocator);
+                             epilogue_sycl, &scratch_allocator);
   } else {
     return RunGemmCustomCall(&lhs, &rhs, &add, &output, /*bias*/ nullptr,
-                      stream, dict, epilogue_sycl, &scratch_allocator);
+                             stream, dict, epilogue_sycl, &scratch_allocator);
   }
 }
 

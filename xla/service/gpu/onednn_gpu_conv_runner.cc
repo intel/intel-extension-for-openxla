@@ -18,10 +18,11 @@ limitations under the License.
 #include <string>
 
 #include "xla/service/gpu/scratch_allocator.h"
-#include "xla/service/gpu/stream_executor_util.h"
+#include "xla/service/onednn_util.h"
 
 namespace xla {
 namespace gpu {
+
 using se::DeviceMemory;
 using se::DeviceMemoryBase;
 using se::Stream;
@@ -38,6 +39,29 @@ using ConvFwdPd = dnnl::convolution_forward::primitive_desc;
 using ConvBwdInputPd = dnnl::convolution_backward_data::primitive_desc;
 using ConvBwdFilterPd = dnnl::convolution_backward_weights::primitive_desc;
 using ConvBwdFilterPrimitive = dnnl::convolution_backward_weights;
+
+typedef struct OneDnnConvPrimitive {
+  dnnl::memory src_memory;
+  dnnl::memory filter_memory;
+  dnnl::memory dst_memory;
+  dnnl::memory internal_filter_memory;
+  dnnl::memory scratchpad_memory;
+  dnnl::memory bias_memory;
+  dnnl::convolution_forward fwd_primitive;
+  dnnl::convolution_backward_data bwd_input_primitive;
+  dnnl::convolution_backward_weights bwd_filter_primitive;
+  dnnl::reorder filter_reorder_primitive;
+
+  std::unordered_map<int, dnnl::memory> fwd_primitives_args;
+  std::unordered_map<int, dnnl::memory> bwd_input_primitive_args;
+  std::unordered_map<int, dnnl::memory> bwd_filter_primitive_args;
+
+  std::unordered_map<int, dnnl::memory> reorder_args;
+
+  dnnl::engine engine;
+  dnnl::stream stream;
+  bool has_reorder = false;
+} OneDnnConvPrimitive;
 
 namespace {
 
@@ -67,7 +91,7 @@ absl::Status CreateOneDnnPrimitive(
     OneDnnConvPrimitive* onednn_primitive,  // NOLINT
     const ffi::Dictionary& dict,
     absl::Span<const ffi::BufferBase> operand_buffers,
-    ffi::BufferBase result_buffer, se::Stream* stream,
+    const ffi::BufferBase& result_buffer, se::Stream* stream,
     se::ScratchAllocator* scratch_allocator, CudnnConvKind conv_kind) {
   sycl::queue* dpcpp_stream = se::gpu::AsGpuStreamValue(stream);
   onednn_primitive->engine = FindOrCreateEngine(dpcpp_stream);
@@ -456,7 +480,8 @@ absl::Status CreateOneDnnPrimitive(
            onednn_primitive->bias_memory});
     }
     if (conv_kind == CudnnConvKind::kForwardActivation) {
-      auto activation_mode = static_cast<stream_executor::dnn::ActivationMode>(*dict.get<int32_t>("activation_mode"));
+      auto activation_mode = static_cast<stream_executor::dnn::ActivationMode>(
+          *dict.get<int32_t>("activation_mode"));
       switch (activation_mode) {
         case stream_executor::dnn::kSigmoid:
           po.append_eltwise(dnnl::algorithm::eltwise_logistic, 1, 0);
@@ -474,7 +499,8 @@ absl::Status CreateOneDnnPrimitive(
           po.append_eltwise(dnnl::algorithm::eltwise_elu, 1, 0);
           break;
         case stream_executor::dnn::kLeakyRelu:
-          po.append_eltwise(dnnl::algorithm::eltwise_relu, *dict.get<float>("leakyrelu_alpha"), 0);
+          po.append_eltwise(dnnl::algorithm::eltwise_relu,
+                            *dict.get<float>("leakyrelu_alpha"), 0);
           break;
         case stream_executor::dnn::kNone:
           break;
@@ -680,29 +706,34 @@ absl::Status CreateOneDnnPrimitive(
 
 absl::StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
     se::Stream* stream, const ffi::Dictionary& dict,
-    const std::vector<ffi::BufferBase>& operand_se_buffers,
+    absl::Span<const ffi::BufferBase> operand_buffers,
     const ffi::BufferBase& result_buffer,
     se::ScratchAllocator* scratch_allocator, CudnnConvKind conv_kind) {
   OneDnnConvPrimitive primitive;
-  auto status = CreateOneDnnPrimitive(&primitive, dict,
-                                      absl::MakeSpan(operand_se_buffers),
-                                      result_buffer, stream, scratch_allocator,
-                                      conv_kind);
+  auto status =
+      CreateOneDnnPrimitive(&primitive, dict, operand_buffers, result_buffer,
+                            stream, scratch_allocator, conv_kind);
   if (TF_PREDICT_FALSE(!status.ok())) {
     return status;
   }
   return primitive;
 }
 
-absl::Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
-                        const ffi::Dictionary& dict,
+absl::Status RunGpuConv(se::Stream* stream, const ffi::Dictionary& dict,
                         absl::Span<const ffi::BufferBase> operand_buffers,
-                        ffi::BufferBase result_buffer, CudnnConvKind conv_kind) {
+                        ffi::BufferBase& result_buffer,
+                        se::ScratchAllocator* allocator,
+                        CudnnConvKind conv_kind) {
   void* input_data;
   void* filter_data;
   void* output_data;
   void* bias_data = nullptr;
   void* side_input_data = nullptr;
+
+  TF_ASSIGN_OR_RETURN(
+      auto onednn_primitive,
+      GetOrCreateOneDnnConvPrimitive(stream, dict, operand_buffers,
+                                     result_buffer, allocator, conv_kind));
 
   switch (conv_kind) {
     case CudnnConvKind::kForward:

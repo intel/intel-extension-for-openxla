@@ -19,48 +19,16 @@ limitations under the License.
 #include <optional>
 
 #include "xla/ffi/ffi.h"
-#include "xla/ffi/ffi_api.h"
-#include "xla/service/gpu/gpu_conv_runner.h"
-#include "xla/service/gpu/thunk.h"
-#include "xla/service/onednn_util.h"
+#include "xla/service/gpu/cublas_cudnn.h"
+#include "xla/stream_executor/gpu/gpu_stream.h"
 
 namespace xla {
 
 namespace gpu {
 
-typedef struct OneDnnConvPrimitive {
-  dnnl::memory src_memory;
-  dnnl::memory filter_memory;
-  dnnl::memory dst_memory;
-  dnnl::memory internal_filter_memory;
-  dnnl::memory scratchpad_memory;
-  dnnl::memory bias_memory;
-  dnnl::convolution_forward fwd_primitive;
-  dnnl::convolution_backward_data bwd_input_primitive;
-  dnnl::convolution_backward_weights bwd_filter_primitive;
-  dnnl::reorder filter_reorder_primitive;
-
-  std::unordered_map<int, dnnl::memory> fwd_primitives_args;
-  std::unordered_map<int, dnnl::memory> bwd_input_primitive_args;
-  std::unordered_map<int, dnnl::memory> bwd_filter_primitive_args;
-
-  std::unordered_map<int, dnnl::memory> reorder_args;
-
-  dnnl::engine engine;
-  dnnl::stream stream;
-  bool has_reorder = false;
-} OneDnnConvPrimitive;
-
-absl::StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
-    se::Stream*, const ffi::Dictionary& dict,
-    const std::vector<ffi::BufferBase>& operand_se_buffers,
-    const ffi::BufferBase& result_buffer,
-    se::ScratchAllocator* scratch_allocator, CudnnConvKind conv_kind);
-
-absl::Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
-                        const ffi::Dictionary& dict,
-                        absl::Span<const ffi::BufferBase> operand_buffers,
-                        ffi::BufferBase result_buffer, CudnnConvKind conv_kind);
+absl::Status RunGpuConv(se::Stream*, const ffi::Dictionary&,
+                        absl::Span<const ffi::BufferBase>, ffi::BufferBase&,
+                        se::ScratchAllocator*, CudnnConvKind);
 
 }  // namespace gpu
 }  // namespace xla

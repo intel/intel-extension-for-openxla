@@ -28,13 +28,10 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "//xla/service:onednn_util",
-        "//xla/service/gpu:sycl_onednn",
-        "@xla//xla/ffi",
+        ":sycl_onednn_header",
+        "@xla//xla/ffi:ffi",
         "@xla//xla/ffi:ffi_api",
-        "@xla//xla/stream_executor",
         "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
     ],
     alwayslink = 1,
 )
@@ -56,7 +53,7 @@ cc_library(
     srcs = ["gemm_impl_picker.cc",],
     hdrs = ["gemm_impl_picker.h"],
     deps = [
-        ":sycl_onednn",
+        ":sycl_onednn_header",
         "//xla/stream_executor/sycl:hw_info",
         "@com_google_absl//absl/algorithm:container",
         "@tsl//tsl/platform:errors",
@@ -72,7 +69,6 @@ cc_library(
         "@xla//xla/stream_executor",
         "@xla//xla/stream_executor:device_description",
         "@xla//xla/stream_executor:device_memory_allocator",
-        "@xla//xla/stream_executor/gpu:gpu_stream",
         "@xla//xla/stream_executor/gpu:gpu_timer",
         "@xla//xla/service/gpu:ir_emission_utils",
         "@xla//xla/service/gpu:matmul_utils",
@@ -178,7 +174,7 @@ xpu_library(
 )
 
 cc_import(
-    name = "sycl_onednn",
+    name = "sycl_onednn_header",
     hdrs = [
         "sycl_onednn.h",
         "onednn_gpu_conv_runner.h",
@@ -188,9 +184,8 @@ cc_import(
     visibility = ["//visibility:public"],
     deps = [
         ":scratch_allocator",
-        "@xla//xla/service/gpu:gpu_conv_runner",
-        "@xla//xla/service/gpu:thunk",
         "@xla//xla/service/gpu:matmul_utils",
+        "@xla//xla/stream_executor/gpu:gpu_stream",
     ],
 )
 
@@ -216,11 +211,9 @@ cc_library(
     deps = [
         ":scratch_allocator",
         "//xla/service:onednn_util",
-        "@xla//xla/ffi",
-        "@xla//xla/ffi:ffi_api",
-        "@xla//xla/service/gpu:gpu_conv_runner",
-        "@xla//xla/service/gpu:stream_executor_util",
-        "@xla//xla/service/gpu:thunk",
+        "@xla//xla/ffi:ffi",
+        "@xla//xla/service/gpu:cublas_cudnn",
+        "@xla//xla/stream_executor/gpu:gpu_stream",
     ],
 )
 

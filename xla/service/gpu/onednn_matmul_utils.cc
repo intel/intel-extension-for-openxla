@@ -32,109 +32,109 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-namespace SYCLGemm{
-    absl::StatusOr<GemmBackendEpilogue> EpilogueCast(std::string& epilogue){
-        if(epilogue == "DEFAULT"){
-            return GemmBackendEpilogue::DEFAULT;
-        }else if(epilogue == "RELU"){
-            return GemmBackendEpilogue::RELU;
-        }else if(epilogue == "GELU"){
-            return GemmBackendEpilogue::GELU;
-        }else if(epilogue == "BIAS"){
-            return GemmBackendEpilogue::BIAS;
-        }else if(epilogue == "BIAS_RELU"){
-            return GemmBackendEpilogue::BIAS_RELU;
-        }else if(epilogue == "BIAS_GELU"){
-            return GemmBackendEpilogue::BIAS_GELU;
-        }else if(epilogue == "GELU_AUX"){
-            return GemmBackendEpilogue::GELU_AUX;
-        }else if(epilogue == "BIAS_GELU_AUX"){
-            return GemmBackendEpilogue::BIAS_GELU_AUX;
-        }else{
-            return Internal("Unknown Epilogue.");
-        }
-    }
-
-    absl::StatusOr<std::string> EpilogueCast(GemmBackendEpilogue epilogue){
-        if(epilogue == GemmBackendEpilogue::DEFAULT){
-            return "DEFAULT";
-        }else if(epilogue == GemmBackendEpilogue::RELU){
-            return "RELU";
-        }else if(epilogue == GemmBackendEpilogue::GELU){
-            return "GELU";
-        }else if(epilogue == GemmBackendEpilogue::BIAS){
-            return "BIAS";
-        }else if(epilogue == GemmBackendEpilogue::BIAS_RELU){
-            return "BIAS_RELU";
-        }else if(epilogue == GemmBackendEpilogue::BIAS_GELU){
-            return "BIAS_GELU";
-        }else if(epilogue == GemmBackendEpilogue::GELU_AUX){
-            return "GELU_AUX";
-        }else if(epilogue == GemmBackendEpilogue::BIAS_GELU_AUX){
-            return "BIAS_GELU_AUX";
-        }else{
-            return Internal("Unknown Epilogue.");
-        }
-    }
-
-    absl::StatusOr<bool> EpilogueAddsVectorBias(GemmBackendEpilogue epilogue) {
-        switch (epilogue) {
-            case GemmBackendEpilogue::DEFAULT:
-            case GemmBackendEpilogue::RELU:
-            case GemmBackendEpilogue::GELU:
-            case GemmBackendEpilogue::GELU_AUX:
-                return false;
-            case GemmBackendEpilogue::BIAS:
-            case GemmBackendEpilogue::BIAS_RELU:
-            case GemmBackendEpilogue::BIAS_GELU:
-            case GemmBackendEpilogue::BIAS_GELU_AUX:
-                return true;
-            default:
-                return Internal("Unknown Epilogue.");
-        }
-    }
-
-    absl::StatusOr<bool> EpilogueHasAuxiliaryOutput(GemmBackendEpilogue epilogue) {
-        switch (epilogue) {
-            case GemmBackendEpilogue::DEFAULT:
-            case GemmBackendEpilogue::RELU:
-            case GemmBackendEpilogue::GELU:
-            case GemmBackendEpilogue::BIAS:
-            case GemmBackendEpilogue::BIAS_RELU:
-            case GemmBackendEpilogue::BIAS_GELU:
-                return false;
-            case GemmBackendEpilogue::GELU_AUX:
-            case GemmBackendEpilogue::BIAS_GELU_AUX:
-                return true;
-            default:
-              return Internal("Unknown Epilogue.");
-        }
-    }
-
-    absl::StatusOr<GemmBackendEpilogue> AsSYCLEpilogue(
-        GemmBackendConfig_Epilogue epilogue) {
-          switch (epilogue) {
-            case GemmBackendConfig::DEFAULT:
-              return GemmBackendEpilogue::DEFAULT;
-            case GemmBackendConfig::RELU:
-              return GemmBackendEpilogue::RELU;
-            case GemmBackendConfig::GELU:
-              return GemmBackendEpilogue::GELU;
-            case GemmBackendConfig::GELU_AUX:
-              return GemmBackendEpilogue::GELU_AUX;
-            case GemmBackendConfig::BIAS:
-              return GemmBackendEpilogue::BIAS;
-            case GemmBackendConfig::BIAS_RELU:
-              return GemmBackendEpilogue::BIAS_RELU;
-            case GemmBackendConfig::BIAS_GELU:
-              return GemmBackendEpilogue::BIAS_GELU;
-            case GemmBackendConfig::BIAS_GELU_AUX:
-              return GemmBackendEpilogue::BIAS_GELU_AUX;
-            default:
-              return Internal("Unsupported Epilogue.");
-          }
-    }
+namespace SYCLGemm {
+absl::StatusOr<GemmBackendEpilogue> EpilogueCast(std::string& epilogue) {
+  if (epilogue == "DEFAULT") {
+    return GemmBackendEpilogue::DEFAULT;
+  } else if (epilogue == "RELU") {
+    return GemmBackendEpilogue::RELU;
+  } else if (epilogue == "GELU") {
+    return GemmBackendEpilogue::GELU;
+  } else if (epilogue == "BIAS") {
+    return GemmBackendEpilogue::BIAS;
+  } else if (epilogue == "BIAS_RELU") {
+    return GemmBackendEpilogue::BIAS_RELU;
+  } else if (epilogue == "BIAS_GELU") {
+    return GemmBackendEpilogue::BIAS_GELU;
+  } else if (epilogue == "GELU_AUX") {
+    return GemmBackendEpilogue::GELU_AUX;
+  } else if (epilogue == "BIAS_GELU_AUX") {
+    return GemmBackendEpilogue::BIAS_GELU_AUX;
+  } else {
+    return Internal("Unknown Epilogue.");
+  }
 }
+
+absl::StatusOr<std::string> EpilogueCast(GemmBackendEpilogue epilogue) {
+  if (epilogue == GemmBackendEpilogue::DEFAULT) {
+    return "DEFAULT";
+  } else if (epilogue == GemmBackendEpilogue::RELU) {
+    return "RELU";
+  } else if (epilogue == GemmBackendEpilogue::GELU) {
+    return "GELU";
+  } else if (epilogue == GemmBackendEpilogue::BIAS) {
+    return "BIAS";
+  } else if (epilogue == GemmBackendEpilogue::BIAS_RELU) {
+    return "BIAS_RELU";
+  } else if (epilogue == GemmBackendEpilogue::BIAS_GELU) {
+    return "BIAS_GELU";
+  } else if (epilogue == GemmBackendEpilogue::GELU_AUX) {
+    return "GELU_AUX";
+  } else if (epilogue == GemmBackendEpilogue::BIAS_GELU_AUX) {
+    return "BIAS_GELU_AUX";
+  } else {
+    return Internal("Unknown Epilogue.");
+  }
+}
+
+absl::StatusOr<bool> EpilogueAddsVectorBias(GemmBackendEpilogue epilogue) {
+  switch (epilogue) {
+    case GemmBackendEpilogue::DEFAULT:
+    case GemmBackendEpilogue::RELU:
+    case GemmBackendEpilogue::GELU:
+    case GemmBackendEpilogue::GELU_AUX:
+      return false;
+    case GemmBackendEpilogue::BIAS:
+    case GemmBackendEpilogue::BIAS_RELU:
+    case GemmBackendEpilogue::BIAS_GELU:
+    case GemmBackendEpilogue::BIAS_GELU_AUX:
+      return true;
+    default:
+      return Internal("Unknown Epilogue.");
+  }
+}
+
+absl::StatusOr<bool> EpilogueHasAuxiliaryOutput(GemmBackendEpilogue epilogue) {
+  switch (epilogue) {
+    case GemmBackendEpilogue::DEFAULT:
+    case GemmBackendEpilogue::RELU:
+    case GemmBackendEpilogue::GELU:
+    case GemmBackendEpilogue::BIAS:
+    case GemmBackendEpilogue::BIAS_RELU:
+    case GemmBackendEpilogue::BIAS_GELU:
+      return false;
+    case GemmBackendEpilogue::GELU_AUX:
+    case GemmBackendEpilogue::BIAS_GELU_AUX:
+      return true;
+    default:
+      return Internal("Unknown Epilogue.");
+  }
+}
+
+absl::StatusOr<GemmBackendEpilogue> AsSYCLEpilogue(
+    GemmBackendConfig_Epilogue epilogue) {
+  switch (epilogue) {
+    case GemmBackendConfig::DEFAULT:
+      return GemmBackendEpilogue::DEFAULT;
+    case GemmBackendConfig::RELU:
+      return GemmBackendEpilogue::RELU;
+    case GemmBackendConfig::GELU:
+      return GemmBackendEpilogue::GELU;
+    case GemmBackendConfig::GELU_AUX:
+      return GemmBackendEpilogue::GELU_AUX;
+    case GemmBackendConfig::BIAS:
+      return GemmBackendEpilogue::BIAS;
+    case GemmBackendConfig::BIAS_RELU:
+      return GemmBackendEpilogue::BIAS_RELU;
+    case GemmBackendConfig::BIAS_GELU:
+      return GemmBackendEpilogue::BIAS_GELU;
+    case GemmBackendConfig::BIAS_GELU_AUX:
+      return GemmBackendEpilogue::BIAS_GELU_AUX;
+    default:
+      return Internal("Unsupported Epilogue.");
+  }
+}
+}  // namespace SYCLGemm
 
 // Returns the xetla native type (eg, float) corresponding to the given template
 // parameter XLA primitive type (eg, F32).
@@ -395,7 +395,8 @@ absl::Status DoXetlaGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
                          const MatrixDescriptor& rhs, const MatrixDescriptor& c,
                          const MatrixDescriptor& output,
                          se::DeviceMemoryBase bias, float alpha, float beta,
-                         SYCLGemm::GemmBackendEpilogue epilogue, se::Stream* stream,
+                         SYCLGemm::GemmBackendEpilogue epilogue,
+                         se::Stream* stream,
                          std::optional<se::blas::AlgorithmType> algorithm,
                          se::ScratchAllocator* scratch_allocator,
                          se::blas::ComputePrecision compute_precision) {
