@@ -22,19 +22,24 @@ namespace gpu {
 
 absl::Status RunGpuConvCustomCall(
     se::Stream* stream, se::ScratchAllocator* scratch_allocator,
-    const std::vector<ffi::BufferBase>& operand_se_buffers,
+    std::vector<ffi::BufferBase>& operand_se_buffers,
     ffi::BufferBase& result_buffer, const ffi::Dictionary& dict,
     CudnnConvKind conv_kind) {
-  TF_RETURN_IF_ERROR(RunGpuConv(stream, dict,
-                                absl::MakeSpan(operand_se_buffers),
-                                result_buffer, scratch_allocator, conv_kind));
+  TF_ASSIGN_OR_RETURN(auto conv_primitive,
+                      GetOrCreateOneDnnConvPrimitive(
+                          stream, dict, operand_se_buffers,
+                          result_buffer, scratch_allocator, conv_kind));
+  TF_RETURN_IF_ERROR(RunGpuConv(
+      conv_primitive, dict, absl::MakeSpan(operand_se_buffers), result_buffer, conv_kind));
   return absl::OkStatus();
 }
 
-absl::Status RunGemmCustomCall(ffi::BufferBase* lhs, ffi::BufferBase* rhs,
-                               ffi::BufferBase* add, ffi::BufferBase* output,
-                               ffi::BufferBase* bias, se::Stream* stream,
-                               const ffi::Dictionary& dict,
+absl::Status RunGemmCustomCall(ffi::BufferBase* lhs,
+                               ffi::BufferBase* rhs,
+                               ffi::BufferBase* add,
+                               ffi::BufferBase* output,
+                               ffi::BufferBase* bias,
+                               se::Stream* stream, const ffi::Dictionary& dict,
                                SYCLGemm::GemmBackendEpilogue epilogue,
                                se::ScratchAllocator* scratch_allocator) {
   se::DeviceMemoryBase lhs_data = lhs->data;
@@ -42,13 +47,13 @@ absl::Status RunGemmCustomCall(ffi::BufferBase* lhs, ffi::BufferBase* rhs,
   se::DeviceMemoryBase output_data = output->data;
   se::DeviceMemoryBase add_data;
   se::DeviceMemoryBase bias_data;
-  if (add != nullptr) add_data = add->data;
-  if (bias != nullptr) bias_data = bias->data;
+  if(add != nullptr) add_data = add->data;
+  if(bias != nullptr) bias_data = bias->data;
 
   int64_t gemm_config_ptr = *dict.get<int64_t>("gemm_config_ptr");
   GemmConfig gemm_config = *reinterpret_cast<GemmConfig*>(gemm_config_ptr);
-  return RunGemm(gemm_config, lhs_data, rhs_data, add_data, output_data,
-                 bias_data, stream, epilogue, scratch_allocator);
+  return RunGemm(gemm_config, lhs_data, rhs_data, add_data, output_data, bias_data,
+                 stream, epilogue, scratch_allocator);
 }
 
 }  // namespace gpu

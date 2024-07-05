@@ -1,7 +1,4 @@
-datasets>=1.8.0
-jax==0.4.25
-jaxlib==0.4.25
-flax>=0.8.2
+datasets==2.20.0
 optax>=0.0.8
 transformers==4.38
 evaluate>=0.4.1

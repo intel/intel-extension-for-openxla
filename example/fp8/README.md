@@ -11,8 +11,11 @@ export KAGGLE_KEY=xxxxxxxx
 
 ## Package dependency
 
+Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```bash
-pip install keras keras_nlp kagglehub
+cd <WORKSPACE>/example/fp8/
+pip install keras-nlp==0.10.0 keras==3.3.2 kagglehub==0.2.5
+pip install -r ../../test/requirements.txt
 ```
 
 ## Dataset

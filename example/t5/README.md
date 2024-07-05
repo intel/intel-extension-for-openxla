@@ -33,12 +33,15 @@ For benchmarking, you could skip this step because our model script will downloa
 
 ## Installation
 
+Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```
+cd <WORKSPACE>/example/t5/
 git clone https://github.com/google-research/t5x.git
 bash install_xpu.sh
 pip install --upgrade intel-extension-for-openxla
-pip install jax==0.4.25 jaxlib==0.4.25
+pip install -r ../../test/requirements.txt
 ```
+
 ## Inference
 
 To fully utilize the hardware capabilities and achieve the best performance, you may consider setting the below ENV variables to enable our customized optimization strategies.

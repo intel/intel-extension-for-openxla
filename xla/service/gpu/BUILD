@@ -28,10 +28,13 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        ":sycl_onednn_header",
-        "@xla//xla/ffi:ffi",
+        "//xla/service:onednn_util",
+        "//xla/service/gpu:sycl_onednn",
+        "@xla//xla/ffi",
         "@xla//xla/ffi:ffi_api",
+        "@xla//xla/stream_executor",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
     ],
     alwayslink = 1,
 )
@@ -53,13 +56,13 @@ cc_library(
     srcs = ["gemm_impl_picker.cc",],
     hdrs = ["gemm_impl_picker.h"],
     deps = [
-        ":sycl_onednn_header",
+        ":sycl_onednn",
         "//xla/stream_executor/sycl:hw_info",
         "@com_google_absl//absl/algorithm:container",
         "@tsl//tsl/platform:errors",
         "@tsl//tsl/platform:logging",
         "@tsl//tsl/platform:statusor",
-        "@tsl//tsl/util:env_var",
+        "@xla//xla/tsl/util:env_var",
         "@xla//xla:literal",
         "@xla//xla:literal_util",
         "@xla//xla/hlo/ir:hlo",
@@ -69,6 +72,7 @@ cc_library(
         "@xla//xla/stream_executor",
         "@xla//xla/stream_executor:device_description",
         "@xla//xla/stream_executor:device_memory_allocator",
+        "@xla//xla/stream_executor/gpu:gpu_stream",
         "@xla//xla/stream_executor/gpu:gpu_timer",
         "@xla//xla/service/gpu:ir_emission_utils",
         "@xla//xla/service/gpu:matmul_utils",
@@ -81,6 +85,7 @@ xpu_library(
     name = "ccl_collective_thunks",
     srcs = [
         "ccl_all_to_all_thunk.cc",
+        "ccl_collective_broadcast_thunk.cc",
         "ccl_collective_permute_thunk.cc",
         "ccl_collective_thunk.cc",
         "ccl_p2p_thunk_common.cc",
@@ -89,6 +94,7 @@ xpu_library(
     ],
     hdrs = [
         "ccl_all_to_all_thunk.h",
+        "ccl_collective_broadcast_thunk.h",
         "ccl_collective_permute_thunk.h",
         "ccl_collective_thunk.h",
         "ccl_p2p_thunk_common.h",
@@ -100,10 +106,10 @@ xpu_library(
         "@xla//xla/service/gpu:buffer_allocations",
         "@xla//xla/service/gpu:gpu_executable_run_options",
         "@xla//xla/service/gpu:ir_emission_utils",
-        "@xla//xla/service/gpu:nccl_api",
+        "@xla//xla/service/gpu/runtime:nccl_api",
         "@xla//xla/service/gpu:nccl_clique",
         "@xla//xla/service/gpu:nccl_clique_key",
-        "@xla//xla/service/gpu:thunk",
+        "@xla//xla/service/gpu/runtime:thunk",
         "@xla//xla:shape_util",
         "@xla//xla:status",
         "@xla//xla:status_macros",
@@ -112,7 +118,6 @@ xpu_library(
         "@xla//xla:xla_data_proto_cc",
         "@xla//xla/hlo/ir:hlo",
         "@xla//xla/mlir_hlo:lhlo",
-        "@xla//xla/mlir_hlo:lhlo_gpu",
         "@xla//xla/service:buffer_assignment",
         "@xla//xla/service:collective_ops_utils",
         "@xla//xla/service:computation_placer",
@@ -174,7 +179,7 @@ xpu_library(
 )
 
 cc_import(
-    name = "sycl_onednn_header",
+    name = "sycl_onednn",
     hdrs = [
         "sycl_onednn.h",
         "onednn_gpu_conv_runner.h",
@@ -184,8 +189,9 @@ cc_import(
     visibility = ["//visibility:public"],
     deps = [
         ":scratch_allocator",
+        "@xla//xla/service/gpu:gpu_conv_runner",
+        "@xla//xla/service/gpu/runtime:thunk",
         "@xla//xla/service/gpu:matmul_utils",
-        "@xla//xla/stream_executor/gpu:gpu_stream",
     ],
 )
 
@@ -202,6 +208,7 @@ cc_binary(
     ],
 )
 
+
 cc_library(
     name = "onednn_gpu_conv_runner",
     srcs = [
@@ -211,9 +218,11 @@ cc_library(
     deps = [
         ":scratch_allocator",
         "//xla/service:onednn_util",
-        "@xla//xla/ffi:ffi",
-        "@xla//xla/service/gpu:cublas_cudnn",
-        "@xla//xla/stream_executor/gpu:gpu_stream",
+        "@xla//xla/ffi",
+        "@xla//xla/ffi:ffi_api",
+        "@xla//xla/service/gpu:gpu_conv_runner",
+        "@xla//xla/service/gpu:stream_executor_util",
+        "@xla//xla/service/gpu/runtime:thunk",
     ],
 )
 

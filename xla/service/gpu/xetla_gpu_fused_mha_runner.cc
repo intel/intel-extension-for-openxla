@@ -203,11 +203,15 @@ absl::Status RunXetlaGpuFMHA(
     std::optional<se::DeviceMemoryBase> mask_buffer,
     std::optional<se::DeviceMemoryBase> bias_buffer,
     std::optional<se::DeviceMemoryBase> activation_buffer, se::Stream* stream) {
+  // Add two params just for building, what do not be used
+  std::optional<se::DeviceMemoryBase> seqlen_q_buffer;
+  std::optional<se::DeviceMemoryBase> seqlen_k_buffer;
   TF_ASSIGN_OR_RETURN(
       GpufMHAParams params,
       GpufMHAParams::For(fmha_config, lhs_bmm1_buffer, rhs_bmm1_buffer,
                          rhs_bmm2_buffer, output_buffer, mask_buffer,
-                         bias_buffer, activation_buffer));
+                         bias_buffer, activation_buffer, seqlen_q_buffer,
+                         seqlen_k_buffer));
   PrimitiveType input_primitive_type = fmha_config.input_type;
   switch (input_primitive_type) {
     case F16:
@@ -454,6 +458,9 @@ absl::Status RunXetlaGpuFMHABackward(
     std::optional<se::DeviceMemoryBase> d_bias_buffer,
     std::optional<se::DeviceMemoryBase> fwd_output_buffer,
     std::optional<se::DeviceMemoryBase> bias_buffer, se::Stream* stream) {
+  // Add two params just for building, what do not be used
+  std::optional<se::DeviceMemoryBase> seqlen_q_buffer;
+  std::optional<se::DeviceMemoryBase> seqlen_k_buffer;
   TF_ASSIGN_OR_RETURN(
       GpufMHABackwardParams params,
       GpufMHABackwardParams::For(
@@ -461,7 +468,8 @@ absl::Status RunXetlaGpuFMHABackward(
           bmm2_grad_gemm1_lhs_buffer, bmm2_grad_gemm2_rhs_buffer,
           d_output_buffer, d_bmm1_lhs_buffer, d_bmm1_rhs_buffer,
           d_bmm2_rhs_buffer, d_s_buffer, softmax_sum_buffer, d_Q_accum_buffer,
-          mask_buffer, d_bias_buffer, fwd_output_buffer, bias_buffer));
+          mask_buffer, d_bias_buffer, fwd_output_buffer, bias_buffer,
+          seqlen_q_buffer, seqlen_k_buffer));
   PrimitiveType input_primitive_type = fmha_config.input_type;
   switch (input_primitive_type) {
     case F16:

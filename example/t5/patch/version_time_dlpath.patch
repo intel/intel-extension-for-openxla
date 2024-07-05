@@ -20,7 +20,7 @@ index 37238ba..5ee7b8a 100644
 -        'clu @ git+https://github.com/google/CommonLoopUtils#egg=clu',
 -        'flax @ git+https://github.com/google/flax#egg=flax',
 +        'clu == 0.0.9',
-+        'flax == 0.8.2',
++        'flax >= 0.8.2',
          'fiddle >= 0.2.5',
          'gin-config',
          f'jax >= {_jax_version}',

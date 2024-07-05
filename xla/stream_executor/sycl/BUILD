@@ -18,7 +18,7 @@ xpu_library(
     hdrs = ["sycl_gpu_runtime.h"],
     deps = [
         "@com_google_absl//absl/strings",
-        "@tsl//tsl/util:env_var",
+        "@xla//xla/tsl/util:env_var",
         "@local_config_sycl//sycl:sycl_headers",
         "@local_config_sycl//sycl:level_zero",
     ],
@@ -77,7 +77,6 @@ cc_library(
         "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/strings",
         "@xla//xla/stream_executor:stream_executor_headers",
-        "@xla//xla/stream_executor:device_options",
         "@xla//xla/stream_executor/gpu:gpu_driver_header",
         "@xla//xla/stream_executor/platform",
         "@xla//xla/stream_executor/platform:dso_loader",
@@ -124,7 +123,7 @@ cc_library(
             ":sycl_platform_id",
             "@xla//xla/stream_executor",  # buildcleaner: keep
             "@xla//xla/stream_executor:executor_cache",
-            "@xla//xla/stream_executor:multi_platform_manager",
+            "@xla//xla/stream_executor:platform_manager",
             "@xla//xla/stream_executor:stream_executor_headers",
             "@xla//xla/stream_executor/platform",
             "@xla//xla/stream_executor/gpu:gpu_executor_header",
@@ -136,7 +135,7 @@ cc_library(
             "@com_google_absl//absl/strings:str_format",
             "@com_google_absl//absl/synchronization",
         ],
-    alwayslink = True,  # Registers itself with the MultiPlatformManager.
+    alwayslink = True,  # Registers itself with the PlatformManager.
 )
 
 cc_library(

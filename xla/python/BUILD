@@ -10,6 +10,6 @@ tsl_pybind_extension(
         "@xla//xla/pjrt/c:pjrt_c_api_gpu_extension_hdrs",
         "@xla//xla/pjrt/c:pjrt_c_api_hdrs",
         "@xla//xla/pjrt/c:pjrt_c_api_helpers",
-        "@xla//xla/python:status_casters",
+        "@xla//xla/pjrt:status_casters",
     ],
 )

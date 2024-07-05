@@ -14,15 +14,15 @@ More details could be found in [Stability-AI/generative-models](https://github.c
 
 please got the [main page](https://github.com/intel/intel-extension-for-openxla/blob/main/README.md#build-and-install), and follow the instructions to build and install intel-extension-for-openxla.
 
-### 2. Install jax
-```bash
-pip install jax==0.4.25 jaxlib==0.4.25 flax==0.8.2
-```
-### 3. Install huggingface transformers
+### 2. Install packages
 
+Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```bash
-pip install transformers==4.38 diffusers==0.26.3 datasets==2.12.0 msgpack==1.0.7
+cd <WORKSPACE>/example/sdxl/
+pip install transformers==4.38 diffusers==0.26.3 datasets==2.20.0 msgpack==1.0.7
+pip install -r ../../test/requirements.txt
 ```
+
 ## Run
 
 ### 1. Environmental Variables

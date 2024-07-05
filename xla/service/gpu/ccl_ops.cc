@@ -246,6 +246,23 @@ void allreduce_dpcpp(se::gpu::GpuStreamHandle stream, size_t element_count,
 }
 
 template <typename T>
+struct BroadcastKernel;
+
+template <typename T>
+void broadcast_dpcpp(se::gpu::GpuStreamHandle stream, size_t element_count,
+                     std::vector<Participant>& participants, int root,
+                     int rank, int reduction_size) {
+  if (reduction_size <= MAX_RANK_SIZE) {
+    const T* in_ptr = static_cast<const T*>(participants[root].send);
+    T* out_ptr = static_cast<T*>(participants[rank].recv);
+    stream->memcpy(out_ptr, (const void*)in_ptr, element_count * sizeof(T));
+  } else {
+    LOG(FATAL) << "Reduction size " << reduction_size
+               << " is not supported in Broadcast.";
+  }
+}
+
+template <typename T>
 struct AllGatherKernel;
 
 template <typename T>
@@ -753,6 +770,113 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                << " is not supported in AllReduce.";
   }
 
+  gpu_stream
+      ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
+  {
+    tsl::mutex_lock lock(collective->mu);
+    collective->end_events.push_back(SYCLGetEventFromStream(gpu_stream));
+    if (collective->end_events.size() == comm->nranks) {
+      collective->done = true;
+      collective->cv.notify_all();
+    }
+
+    if (!collective->done) {
+      collective->cv.wait(lock);
+    }
+  }
+  // TODO(intel):uncomment this barrier once barrier bug is fixed.
+  // SYCLStreamDependOnEvents(gpu_stream, collective->end_events);
+}
+
+void sycl_broadcast(const void* send_buffer, void* recv_buffer,
+                    size_t element_count, PrimitiveType dtype,
+                    size_t root,
+                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+  CHECK_NE(comm->nranks, 1);
+  gpu_stream
+      ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
+  std::shared_ptr<Collective<Participant>> collective;
+  {
+    tsl::mutex_lock l(Manager::instance().mu);
+    if (Manager::instance().collectives.find(comm->id) ==
+        Manager::instance().collectives.end()) {
+      collective = std::make_shared<Collective<Participant>>();
+      collective->participants.push_back(
+          {gpu_stream, send_buffer, recv_buffer, comm->rank});
+      collective->begin_events.push_back(SYCLGetEventFromStream(gpu_stream));
+      Manager::instance().collectives[comm->id] = collective;
+    } else {
+      collective = Manager::instance().collectives[comm->id];
+      tsl::mutex_lock lock(collective->mu);
+      collective->participants.push_back(
+          {gpu_stream, send_buffer, recv_buffer, comm->rank});
+      collective->begin_events.push_back(SYCLGetEventFromStream(gpu_stream));
+      if (collective->participants.size() == comm->nranks) {
+        Manager::instance().collectives.erase(comm->id);
+        auto& p = collective->participants;
+        std::sort(p.begin(), p.end(),
+                  [](const Participant& a, const Participant& b)
+                      -> bool { return a.rank < b.rank; });
+        collective->ready_to_launch = true;
+        collective->cv.notify_all();
+      }
+    }
+  }
+
+  {
+    tsl::mutex_lock lock(collective->mu);
+    if (!collective->ready_to_launch) {
+      collective->cv.wait(lock);
+    }
+  }
+
+  auto& p = collective->participants;
+  // TODO(intel):uncomment this barrier once barrier bug is fixed.
+  // SYCLStreamDependOnEvents(gpu_stream, collective->begin_events);
+
+  if (dtype == PRED)
+    broadcast_dpcpp<bool>(gpu_stream, element_count, p, root, comm->rank,
+                         comm->nranks);
+  else if (dtype == BF16)
+    broadcast_dpcpp<bfloat16>(gpu_stream, element_count, p, root, comm->rank,
+                             comm->nranks);
+  else if (dtype == F16)
+    broadcast_dpcpp<float16>(gpu_stream, element_count, p, root, comm->rank,
+                            comm->nranks);
+  else if (dtype == F32 || dtype == C64)
+    broadcast_dpcpp<float>(gpu_stream, element_count, p, root, comm->rank,
+                          comm->nranks);
+  else if (dtype == F64 || dtype == C128)
+    broadcast_dpcpp<double>(gpu_stream, element_count, p, root, comm->rank,
+                           comm->nranks);
+  else if (dtype == S8)
+    broadcast_dpcpp<int8_t>(gpu_stream, element_count, p, root, comm->rank,
+                           comm->nranks);
+  else if (dtype == S16)
+    broadcast_dpcpp<int16_t>(gpu_stream, element_count, p, root, comm->rank,
+                            comm->nranks);
+  else if (dtype == S32)
+    broadcast_dpcpp<int32_t>(gpu_stream, element_count, p, root, comm->rank,
+                            comm->nranks);
+  else if (dtype == S64)
+    broadcast_dpcpp<int64_t>(gpu_stream, element_count, p, root, comm->rank,
+                            comm->nranks);
+  else if (dtype == U8)
+    broadcast_dpcpp<uint8_t>(gpu_stream, element_count, p, root, comm->rank,
+                            comm->nranks);
+  else if (dtype == U16)
+    broadcast_dpcpp<uint16_t>(gpu_stream, element_count, p, root, comm->rank,
+                             comm->nranks);
+  else if (dtype == U32)
+    broadcast_dpcpp<uint32_t>(gpu_stream, element_count, p, root, comm->rank,
+                             comm->nranks);
+  else if (dtype == U64)
+    broadcast_dpcpp<uint64_t>(gpu_stream, element_count, p, root, comm->rank,
+                             comm->nranks);
+  else
+    LOG(FATAL) << "PrimitiveType "
+               << primitive_util::LowercasePrimitiveTypeName(dtype)
+               << " is not supported in CollectiveBroadcast.";
   gpu_stream
       ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
   {

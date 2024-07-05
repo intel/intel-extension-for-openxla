@@ -13,8 +13,11 @@ export KAGGLE_KEY=xxxxxxxx
 
 ### Prerequisites
 
+Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```bash
-pip install jax==0.4.25 jaxlib==0.4.25 keras-nlp==0.10.0 keras==3.3.2
+cd <WORKSPACE>/example/gemma/
+pip install keras-nlp==0.10.0 keras==3.3.2
+pip install -r ../../test/requirements.txt
 ```
 
 ### Options

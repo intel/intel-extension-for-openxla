@@ -1,5 +1,5 @@
 # Quick Start for fine-tunes BERT on SQuAD
-Fine-tunes BERT model on SQuAD task by [Question Answering examples](https://github.com/huggingface/transformers/tree/v4.37.0/examples/flax/question-answering).
+Fine-tunes BERT model on SQuAD task by [Question Answering examples](https://github.com/huggingface/transformers/tree/v4.38.0/examples/flax/question-answering).
 This expample is referred from [HuggingFace Transformers](https://github.com/huggingface/transformers). See [Backup](#Backup) for modification details.
 
 ## Requirements
@@ -10,9 +10,9 @@ Please got the [main page](https://github.com/intel/intel-extension-for-openxla/
 ### 2. Install dependency
 Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```bash
-pip install jax==0.4.25 jaxlib==0.4.25 flax==0.8.2
 cd <WORKSPACE>/example/bert
 pip install -r requirements.txt
+pip install -r ../../test/requirements.txt
 ```
 
 ### 3. Download pre-trained model

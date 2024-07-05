@@ -21,7 +21,7 @@ limitations under the License.
 #include "xla/pjrt/c/pjrt_c_api.h"
 #include "xla/pjrt/c/pjrt_c_api_gpu_extension.h"
 #include "xla/pjrt/c/pjrt_c_api_helpers.h"
-#include "xla/python/status_casters.h"
+#include "xla/pjrt/status_casters.h"
 #include "xla/status.h"
 #include "xla/util.h"
 

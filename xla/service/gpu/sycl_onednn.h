@@ -21,16 +21,19 @@ limitations under the License.
 
 namespace xla {
 namespace gpu {
+
 absl::Status RunGpuConvCustomCall(
     se::Stream* stream, se::ScratchAllocator* scratch_allocator,
-    const std::vector<ffi::BufferBase>& operand_se_buffers,
+    std::vector<ffi::BufferBase>& operand_se_buffers,
     ffi::BufferBase& result_buffer, const ffi::Dictionary& dict,
     CudnnConvKind conv_kind);
 
 absl::Status RunGemmCustomCall(
-    ffi::BufferBase* lhs, ffi::BufferBase* rhs, ffi::BufferBase* add,
-    ffi::BufferBase* output, ffi::BufferBase* bias, se::Stream* stream,
-    const ffi::Dictionary& dict, SYCLGemm::GemmBackendEpilogue epilogue,
+    ffi::BufferBase* lhs, ffi::BufferBase* rhs,
+    ffi::BufferBase* add, ffi::BufferBase* output,
+    ffi::BufferBase* bias, se::Stream* stream,
+    const ffi::Dictionary& dict,
+    SYCLGemm::GemmBackendEpilogue epilogue,
     se::ScratchAllocator* scratch_allocator = nullptr);
 
 }  // namespace gpu

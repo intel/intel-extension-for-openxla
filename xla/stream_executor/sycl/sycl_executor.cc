@@ -36,12 +36,10 @@ limitations under the License.
 #include "tsl/platform/errors.h"
 #include "tsl/platform/numbers.h"
 #include "tsl/platform/statusor.h"
-#include "tsl/util/env_var.h"
+#include "xla/tsl/util/env_var.h"
 #include "tsl/platform/fingerprint.h"
-// #include "xla/stream_executor/kernel_cache_config.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/platform/initialize.h"
-// #include "xla/stream_executor/platform/logging.h"
 #include "xla/stream_executor/platform/port.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor_internal.h"
@@ -92,16 +90,14 @@ GpuExecutor::~GpuExecutor() {
   }
 }
 
-absl::Status GpuExecutor::Init(int device_ordinal,
-                              DeviceOptions device_options) {
+absl::Status GpuExecutor::Init(int device_ordinal) {
   device_ordinal_ = device_ordinal;
   auto status = GpuDriver::GetDevice(device_ordinal_, &device_);
   if (!status.ok()) {
     return status;
   }
 
-  return GpuDriver::CreateContext(device_ordinal_, device_, device_options,
-                                  &context_);
+  return GpuDriver::CreateContext(device_ordinal_, device_, &context_);
 }
 
 absl::Status GpuExecutor::LoadModuleFromCuBin(const char* cubin,
@@ -148,7 +144,7 @@ absl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
 
   if (spec.has_cuda_cubin_in_memory()) {
     kernel_name = spec.cuda_cubin_in_memory().kernel_name();
-    const char* spirv = spec.cuda_cubin_in_memory().bytes();
+    const char* spirv = reinterpret_cast<const char*>(spec.cuda_cubin_in_memory().cubin_bytes().data());
     int size = spec.cuda_cubin_in_memory().size();
     absl::MutexLock lock{&in_memory_modules_mu_};
     TF_RETURN_IF_ERROR(LoadModuleFromSpir(spirv, size, &module));
@@ -272,13 +268,14 @@ GpuExecutor::CreateOrShareConstant(Stream* stream,
                           content.size()));
     }
 
-    absl::Status status =
-        stream->ThenMemcpy(new_constant, content.data(), content.size())
-            .BlockHostUntilDone();
+    TF_RETURN_IF_ERROR(
+        stream->Memcpy(new_constant, content.data(), content.size()));
+    absl::Status status = stream->BlockHostUntilDone();
+
     if (!status.ok()) {
       Deallocate(new_constant);
       return absl::Status(absl::StatusCode::kInternal,
-                         absl::StrFormat("Memcpy to device address %p failed",
+                          absl::StrFormat("Memcpy to device address %p failed",
                                          new_constant->opaque()));
     }
 
@@ -696,8 +693,6 @@ std::unique_ptr<GpuCommandBuffer> GpuExecutor::CreateCommandBuffer(
   return std::make_unique<GpuCommandBuffer>(mode, /*parent=*/this, graph,
                                             is_owned_graph);
 }
-
-void* GpuExecutor::platform_specific_context() { return context_; }
 
 GpuContext* GpuExecutor::gpu_context() { return context_; }
 

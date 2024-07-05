@@ -23,7 +23,7 @@ limitations under the License.
 
 #include "dnnl.hpp"       // NOLINT(build/include_subdir)
 #include "dnnl_sycl.hpp"  // NOLINT(build/include_subdir)
-#include "tsl/util/env_var.h"
+#include "xla/tsl/util/env_var.h"
 #include "xla/stream_executor/gpu/gpu_types.h"
 
 namespace xla {

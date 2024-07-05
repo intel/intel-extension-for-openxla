@@ -24,7 +24,7 @@ limitations under the License.
 #include "absl/synchronization/mutex.h"
 #include "level_zero/ze_api.h"
 #include "tsl/platform/status.h"
-#include "tsl/util/env_var.h"
+#include "xla/tsl/util/env_var.h"
 
 namespace {
 

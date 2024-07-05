@@ -110,7 +110,6 @@ SyclPlatform::DescriptionForDevice(int ordinal) const {
 absl::StatusOr<StreamExecutor*> SyclPlatform::ExecutorForDevice(int ordinal) {
   StreamExecutorConfig config;
   config.ordinal = ordinal;
-  config.device_options = DeviceOptions::Default();
   return GetExecutor(config);
 }
 
@@ -130,7 +129,7 @@ absl::StatusOr<std::unique_ptr<StreamExecutor>>
 SyclPlatform::GetUncachedExecutor(const StreamExecutorConfig& config) {
   auto executor = std::make_unique<StreamExecutor>(
       this, std::make_unique<GpuExecutor>(), config.ordinal);
-  auto init_status = executor->Init(config.device_options);
+  auto init_status = executor->Init();
   if (!init_status.ok()) {
     return absl::Status(
         absl::StatusCode::kInternal,
@@ -145,7 +144,7 @@ SyclPlatform::GetUncachedExecutor(const StreamExecutorConfig& config) {
 }  // namespace gpu
 
 static void InitializeSyclPlatform() {
-  // Disabling leak checking, MultiPlatformManager does not destroy its
+  // Disabling leak checking, PlatformManager does not destroy its
   // registered platforms.
   std::unique_ptr<gpu::SyclPlatform> platform(new gpu::SyclPlatform);
   TF_CHECK_OK(PlatformManager::RegisterPlatform(std::move(platform)));

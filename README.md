@@ -13,9 +13,9 @@ This guide introduces the overview of OpenXLA high level integration structure a
 
 ## 1. Overview
 
- <p align="center">
-	 <img src="openxla_for_intel_gpu.jpg" width="50%">
- </p>
+<p align="center">
+    <img src="openxla_for_intel_gpu.jpg" width="50%">
+</p>
 
 * [JAX](https://jax.readthedocs.io/en/latest/) provides a familiar NumPy-style API, includes composable function transformations for compilation, batching, automatic differentiation, and parallelization, and the same code executes on multiple backends.
 * TensorFlow and PyTorch support is on the way.
@@ -37,8 +37,8 @@ Verified Hardware Platforms:
 * Ubuntu 22.04, SUSE Linux Enterprise Server(SLES) 15 SP4
   * Intel® Data Center GPU Max Series
 * Intel® oneAPI Base Toolkit 2024.1
-* Jax/Jaxlib 0.4.25
-* Python 3.9-3.11
+* Jax/Jaxlib 0.4.26
+* Python 3.9-3.12
 * pip 19.0 or later (requires manylinux2014 support)
 
 **NOTE: Since Jax has its own [platform limitation](https://jax.readthedocs.io/en/latest/installation.html#supported-platforms) (Ubuntu 20.04 or later), real software requirements is restricted when works with Jax.**
@@ -81,8 +81,9 @@ source /opt/intel/oneapi/mkl/2024.0/env/vars.sh
 ### Install Jax and Jaxlib
 
 ```bash
-pip install jax==0.4.25 jaxlib==0.4.25
+pip install -r test/requirements.txt
 ```
+Check [test/requirements.txt](test/requirements.txt) for more details.
 
 ## 3. Install
 
@@ -100,7 +101,7 @@ git clone https://github.com/intel/intel-extension-for-openxla.git
 ./configure        # Choose Yes for all.
 bazel build //xla/tools/pip_package:build_pip_package
 ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-pip install intel_extension_for_openxla-0.3.0-cp39-cp39-linux_x86_64.whl
+pip install intel_extension_for_openxla-0.4.0-cp39-cp39-linux_x86_64.whl
 ```
 
 **Aditional Build Option**:

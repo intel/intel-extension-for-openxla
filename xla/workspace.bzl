@@ -18,7 +18,7 @@ def workspace(path_prefix = "", tf_repo_name = ""):
 
     git_repository(
         name = "spir_headers",
-        commit = "1c6bb2743599e6eb6f37b2969acc0aef812e32e3",
+        commit = "4f7b471f1a66b6d06462cd4ba57628cc0cd087d7",
         remote = "https://github.com/KhronosGroup/SPIRV-Headers.git",
         verbose = True,
         patch_cmds = [
@@ -28,7 +28,7 @@ def workspace(path_prefix = "", tf_repo_name = ""):
 
     new_git_repository(
         name = "llvm_spir",
-        commit = "a31a0a6c73f7cf4745afc2d312819db643b8bd00",
+        commit = "98729ef13ca970b98a149c18318746df8d921f20",
         remote = "https://github.com/KhronosGroup/SPIRV-LLVM-Translator.git",
         build_file = "//third_party/llvm_spir:llvm_spir.BUILD",
         verbose = True,

@@ -110,8 +110,7 @@ static absl::Status InternalInit() { return absl::OkStatus(); }
 }
 
 /* static */ absl::Status GpuDriver::CreateContext(
-    int device_ordinal, sycl::device* device,
-    const DeviceOptions& device_options, GpuContext** context) {
+    int device_ordinal, sycl::device* device, GpuContext** context) {
   sycl::context* sycl_context;
   SYCLGetContext(&sycl_context);
   *context = new GpuContext(device, sycl_context);
