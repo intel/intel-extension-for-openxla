@@ -52,6 +52,7 @@ NUM_GPUS=1      # Number of GPUs (1, 2, 4, 8)
 BSIZE_PER_GPU=1 # Batch size per GPU (varies with model size)
 T5_NAME=flan-t5-$MODEL_SIZE
 GIN_FILE="${T5X_DIR}/../xl_infer.gin"
+REF_FILE="${T5X_DIR}/../reference.json"
 MODEL_PATH=${MODEL_DIR}/checkpoint_1138000
 
 if [ ${MODEL_SIZE} == "xxl" ];then
@@ -91,6 +92,7 @@ python3 -u ${T5X_DIR}/t5x/infer.py \
   --gin.utils.DatasetConfig.batch_size=${BSIZE} \
   --gin.INFER_OUTPUT_DIR=\"${T5X_DIR}/output\" \
   --gin.seqio.SentencePieceVocabulary.sentencepiece_model_file=\"${MODEL_DIR}/sentencepiece.model\" \
+  --gin.REFERENCE_FILE=\"${REF_FILE}\" \
   |& tee ${LOG_DIR}/${T5_NAME}_gpu_${NUM_GPUS}_${PREC}_gbs_${BSIZE}.log
 
 popd

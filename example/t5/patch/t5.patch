@@ -1,0 +1,467 @@
+diff --git a/setup.py b/setup.py
+index 37238ba..5ee7b8a 100644
+--- a/setup.py
++++ b/setup.py
+@@ -27,8 +27,8 @@ from version import __version__  # pylint: disable=g-import-not-at-top
+ with open('README.md') as fp:
+   _LONG_DESCRIPTION = fp.read()
+ 
+-_jax_version = '0.4.11'
+-_jaxlib_version = '0.4.11'
++_jax_version = '0.4.26'
++_jaxlib_version = '0.4.26'
+ 
+ setuptools.setup(
+     name='t5x',
+@@ -48,8 +48,8 @@ setuptools.setup(
+     install_requires=[
+         'absl-py',
+         'cached_property',
+-        'clu @ git+https://github.com/google/CommonLoopUtils#egg=clu',
+-        'flax @ git+https://github.com/google/flax#egg=flax',
++        'clu == 0.0.9',
++        'flax >= 0.8.2',
+         'fiddle >= 0.2.5',
+         'gin-config',
+         f'jax >= {_jax_version}',
+diff --git a/t5x/config_utils.py b/t5x/config_utils.py
+index abd3f8f..e6e1bd9 100644
+--- a/t5x/config_utils.py
++++ b/t5x/config_utils.py
+@@ -207,7 +207,7 @@ def run(main):
+     args = gin_utils.rewrite_gin_args(args)
+     return fdl_flags.flags_parser(args)
+ 
+-  jax.config.parse_flags_with_absl()
++  jax._src.config.parse_flags_with_absl()
+   if using_fdl():
+     app.run(main, flags_parser=flags_parser)
+   else:
+diff --git a/t5x/contrib/calm/models.py b/t5x/contrib/calm/models.py
+index d87922e..4332e4c 100644
+--- a/t5x/contrib/calm/models.py
++++ b/t5x/contrib/calm/models.py
+@@ -72,10 +72,16 @@ class DecodeFnCallable(typing_extensions.Protocol):
+   """Decoding function call signature."""
+ 
+   def __call__(
+-      self, *, inputs: jnp.ndarray, cache: Mapping[str, jnp.ndarray],
+-      tokens_to_logits: TokensIdsToLogitsCallable, eos_id: int,
+-      num_decodes: int, decode_rng: Optional[jax.random.KeyArray],
+-      cache_offset: int, **kwargs
++      self,
++      *,
++      inputs: jnp.ndarray,
++      cache: Mapping[str, jnp.ndarray],
++      tokens_to_logits: TokensIdsToLogitsCallable,
++      eos_id: int,
++      num_decodes: int,
++      decode_rng: Optional[jax.Array],
++      cache_offset: int,
++      **kwargs,
+   ) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
+     """Decoding function interface.
+ 
+@@ -790,7 +796,7 @@ class EncoderDecoderModel(models.EncoderDecoderModel):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      rng: Optional[jax.random.KeyArray] = None,
++      rng: Optional[jax.Array] = None,
+       decoder_params: Optional[MutableMapping[str, Any]] = None,
+       return_all_decodes: bool = False,
+       num_decodes: int = 1,
+diff --git a/t5x/contrib/gpu/scripts_gpu/tfds_pile.py b/t5x/contrib/gpu/scripts_gpu/tfds_pile.py
+index 77ef0d9..b641041 100644
+--- a/t5x/contrib/gpu/scripts_gpu/tfds_pile.py
++++ b/t5x/contrib/gpu/scripts_gpu/tfds_pile.py
+@@ -80,7 +80,8 @@ _CITATION = """
+ _DATASET_MODES = ["lm"]
+ 
+ _PILE_URL = 'https://the-eye.eu/public/AI/pile/train/{}.jsonl.zst'
+-_PILE_SPLITS = 30
++#_PILE_SPLITS = 30
++_PILE_SPLITS = 1
+ 
+ _URLS = {
+     'the_pile': {
+@@ -171,7 +172,21 @@ class ThePile(tfds.core.GeneratorBasedBuilder):
+     )
+ 
+   def _split_generators(self, dl_manager: tfds.download.DownloadManager):
++    dl_paths = {
++        'train': [
++            '/nfs2/yuqingding/datasets/ThePile/downloads/00.jsonl.zst'
++        ],
++        'test': '/nfs2/yuqingding/datasets/ThePile/downloads/test.jsonl.zst',
++        'validation': '/nfs2/yuqingding/datasets/ThePile/downloads/val.jsonl.zst',
++    }
++    return {
++            'train': self._generate_examples(dl_paths['train']),
++            'validation': self._generate_examples(dl_paths['validation']),
++            'test': self._generate_examples(dl_paths['test']),
++    }
++
+     dl_manager.verify_ssl = False
++    print(_URLS['the_pile'])
+     dl_paths = dl_manager.download(_URLS['the_pile'])
+     print(dl_paths)
+     return {
+diff --git a/t5x/contrib/gpu/t5/configs/runs/infer.gin b/t5x/contrib/gpu/t5/configs/runs/infer.gin
+index 0918d2f..57e7dbb 100644
+--- a/t5x/contrib/gpu/t5/configs/runs/infer.gin
++++ b/t5x/contrib/gpu/t5/configs/runs/infer.gin
+@@ -35,6 +35,7 @@ MIXTURE_OR_TASK_NAME = %gin.REQUIRED
+ TASK_FEATURE_LENGTHS = %gin.REQUIRED
+ CHECKPOINT_PATH = %gin.REQUIRED
+ INFER_OUTPUT_DIR = %gin.REQUIRED
++REFERENCE_FILE = %gin.REQUIRED
+ 
+ # DEPRECATED: Import the this module in your gin file.
+ MIXTURE_OR_TASK_MODULE = None
+@@ -49,6 +50,7 @@ infer_script.infer:
+   checkpoint_period = 100
+   shard_id = 0
+   num_shards = 1
++  ref_file = %REFERENCE_FILE
+ 
+ partitioning.PjitPartitioner:
+   num_partitions = 1
+diff --git a/t5x/contrib/moe/models.py b/t5x/contrib/moe/models.py
+index 51e5b1c..3bf7d74 100644
+--- a/t5x/contrib/moe/models.py
++++ b/t5x/contrib/moe/models.py
+@@ -116,7 +116,7 @@ class MoeEncoderDecoderModel(base_models.EncoderDecoderModel):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      rng: Optional[jax.random.KeyArray] = None,
++      rng: Optional[jax.Array] = None,
+       decoder_params: Optional[MutableMapping[str, Any]] = None,
+       return_all_decodes: bool = False,
+       num_decodes: int = 1,
+@@ -221,7 +221,7 @@ class MoeDecoderOnlyModel(base_models.DecoderOnlyModel):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      rng: Optional[jax.random.KeyArray] = None,
++      rng: Optional[jax.Array] = None,
+       *,
+       return_all_decodes: bool = False,
+       num_decodes: int = 1,
+diff --git a/t5x/decoding.py b/t5x/decoding.py
+index c445c88..ee5aebe 100644
+--- a/t5x/decoding.py
++++ b/t5x/decoding.py
+@@ -1072,7 +1072,8 @@ def beam_search(inputs: jnp.ndarray,
+ 
+     # If we're not at the max decode length, and the search hasn't terminated,
+     # continue looping.
+-    return not_at_end & (~search_terminated)  # pytype: disable=bad-return-type  # jax-devicearray
++    #return not_at_end & (~search_terminated)  # pytype: disable=bad-return-type  # jax-devicearray
++    return not_at_end # for debug
+ 
+   def beam_search_loop_body_fn(state: BeamState) -> BeamState:
+     """Beam search loop state update function."""
+diff --git a/t5x/infer.py b/t5x/infer.py
+index ee9f582..019c622 100644
+--- a/t5x/infer.py
++++ b/t5x/infer.py
+@@ -375,6 +375,8 @@ def infer(
+     file_extension: str = 'jsonl',
+     keep_aux_as_numpy: bool = False,
+     use_orbax: bool = False,
++    model_size: str = "xl",
++    ref_file: Optional[str] = None,
+ ):
+   """Infer function.
+ 
+@@ -524,6 +526,8 @@ def infer(
+           keep_aux_as_numpy=keep_aux_as_numpy,
+       ),
+       train_state=train_state,
++      model_size=model_size,
++      ref_file=ref_file,
+   )
+ 
+   def infer_task(task: seqio.Task):
+@@ -793,13 +797,16 @@ if __name__ == '__main__':
+             summary_writer=None,
+             step=0,
+         )
++      model_size = "xl"
++      if "xxl" in FLAGS.gin_file[0]:
++        model_size = "xxl"
+       if FLAGS.shard_id is not None:
+         # We fall back to this flag since XM does not support sweeps over flags
+         # with '.' in them (it treats them like nested dictionaries).
+         # TODO(adarob): Figure out a workaround so we can deprecate this flag.
+-        infer_using_gin(shard_id=FLAGS.shard_id)
++        infer_using_gin(shard_id=FLAGS.shard_id, model_size=model_size)
+       else:
+-        infer_using_gin()
++        infer_using_gin(model_size=model_size)
+ 
+ 
+   config_utils.run(main)
+diff --git a/t5x/models.py b/t5x/models.py
+index df07d24..9449d8d 100644
+--- a/t5x/models.py
++++ b/t5x/models.py
+@@ -78,7 +78,7 @@ class DecodeFnCallable(typing_extensions.Protocol):
+       tokens_to_logits: TokensIdsToLogitsCallable,
+       eos_id: int,
+       num_decodes: int,
+-      decode_rng: Optional[jax.random.KeyArray],
++      decode_rng: Optional[jax.Array],
+       cache_offset: int,
+       **kwargs,
+   ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+@@ -131,7 +131,7 @@ class BaseModel(abc.ABC):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      dropout_rng: Optional[jax.random.KeyArray],
++      dropout_rng: Optional[jax.Array],
+   ) -> Tuple[jnp.ndarray, MetricsMap]:
+     """Computes loss and metrics.
+ 
+@@ -175,7 +175,7 @@ class BaseModel(abc.ABC):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      rng: Optional[jax.random.KeyArray] = None,
++      rng: Optional[jax.Array] = None,
+   ) -> jnp.ndarray:
+     """Predicts a batch of outputs from the model.
+ 
+@@ -194,7 +194,7 @@ class BaseModel(abc.ABC):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      rng: Optional[jax.random.KeyArray] = None,
++      rng: Optional[jax.Array] = None,
+   ) -> Tuple[jnp.ndarray, Mapping[str, jnp.ndarray]]:
+     """Predict a batch from the modelwith auxiliary outputs.
+ 
+@@ -222,7 +222,7 @@ class BaseModel(abc.ABC):
+   @abc.abstractmethod
+   def get_initial_variables(
+       self,
+-      rng: jax.random.KeyArray,
++      rng: jax.Array,
+       input_shapes: Mapping[str, Array],
+       input_types: Optional[Mapping[str, jnp.dtype]] = None,
+   ) -> flax_scope.FrozenVariableDict:
+@@ -277,7 +277,7 @@ class BaseTransformerModel(BaseModel):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      dropout_rng: Optional[jax.random.KeyArray] = None,
++      dropout_rng: Optional[jax.Array] = None,
+   ) -> jnp.ndarray:
+     """Computes logits via a forward pass of the model."""
+     pass
+@@ -286,7 +286,7 @@ class BaseTransformerModel(BaseModel):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      dropout_rng: Optional[jax.random.KeyArray],
++      dropout_rng: Optional[jax.Array],
+   ) -> Tuple[jnp.ndarray, MetricsMap]:
+     """Loss function used for training with a cross-entropy loss."""
+     logits = self._compute_logits(params, batch, dropout_rng)
+@@ -390,7 +390,7 @@ class EncoderDecoderModel(BaseTransformerModel):
+ 
+   def get_initial_variables(
+       self,
+-      rng: jax.random.KeyArray,
++      rng: jax.Array,
+       input_shapes: Mapping[str, Array],
+       input_types: Optional[Mapping[str, jnp.dtype]] = None,
+   ) -> flax_scope.FrozenVariableDict:
+@@ -448,7 +448,7 @@ class EncoderDecoderModel(BaseTransformerModel):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      dropout_rng: Optional[jax.random.KeyArray] = None,
++      dropout_rng: Optional[jax.Array] = None,
+       mutable: flax_scope.CollectionFilter = False,
+       other_variables: Optional[PyTree] = None,
+   ) -> Union[jnp.ndarray, Tuple[jnp.ndarray, flax_scope.FrozenVariableDict]]:
+@@ -546,7 +546,7 @@ class EncoderDecoderModel(BaseTransformerModel):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      rng: Optional[jax.random.KeyArray] = None,
++      rng: Optional[jax.Array] = None,
+       decoder_params: Optional[MutableMapping[str, Any]] = None,
+       return_all_decodes: bool = False,
+       num_decodes: int = 1,
+@@ -805,7 +805,7 @@ class DecoderOnlyModel(BaseTransformerModel):
+ 
+   def get_initial_variables(
+       self,
+-      rng: jax.random.KeyArray,
++      rng: jax.Array,
+       input_shapes: Mapping[str, Array],
+       input_types: Optional[Mapping[str, jnp.dtype]] = None,
+   ) -> flax_scope.FrozenVariableDict:
+@@ -839,7 +839,7 @@ class DecoderOnlyModel(BaseTransformerModel):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      dropout_rng: Optional[jax.random.KeyArray] = None,
++      dropout_rng: Optional[jax.Array] = None,
+       mutable: flax_scope.CollectionFilter = False,
+       other_variables: Optional[PyTree] = None,
+   ) -> jnp.ndarray:
+@@ -1031,7 +1031,7 @@ class DecoderOnlyModel(BaseTransformerModel):
+       self,
+       params: PyTree,
+       batch: Mapping[str, jnp.ndarray],
+-      rng: Optional[jax.random.KeyArray] = None,
++      rng: Optional[jax.Array] = None,
+       *,
+       return_all_decodes: bool = False,
+       num_decodes: int = 1,
+diff --git a/t5x/partitioning.py b/t5x/partitioning.py
+index 20b0abb..b19ecc1 100644
+--- a/t5x/partitioning.py
++++ b/t5x/partitioning.py
+@@ -78,13 +78,13 @@ def bounds_from_last_device(last_device: jax.Device) -> HardwareMesh:
+   # Must be passed the device at the highest-coordinate corner of the
+   # relevant mesh, which is a requirement we know is satisfied by the last
+   # device in jax.devices().
+-  if hasattr(last_device, 'coords'):
+-    x, y, z = last_device.coords
+-    return x + 1, y + 1, z + 1, last_device.core_on_chip + 1
+-  else:
++  # if hasattr(last_device, 'coords'):
++  #   x, y, z = last_device.coords
++  #   return x + 1, y + 1, z + 1, last_device.core_on_chip + 1
++  # else:
+     # On non-TPU platforms, the "mesh" is hosts x devices per host in order
+     # to take advantage of faster within-host interconnect.
+-    return jax.host_count(), jax.local_device_count()
++  return jax.host_count(), jax.local_device_count()
+ 
+ 
+ def get_coords(device: jax.Device) -> HardwareMesh:
+diff --git a/t5x/utils.py b/t5x/utils.py
+index eb3f1aa..69cd5f9 100644
+--- a/t5x/utils.py
++++ b/t5x/utils.py
+@@ -24,6 +24,7 @@ import inspect
+ import os
+ import re
+ import time
++import json
+ import typing
+ from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple, Type, Union
+ import warnings
+@@ -1577,6 +1578,8 @@ def get_infer_fn(
+       ds: tf.data.Dataset,
+       train_state: train_state_lib.TrainState,
+       rng: Optional[jnp.ndarray] = None,
++      model_size: str = "xl",
++      ref_file: Optional[str] = None,
+   ):
+     ds_shapes = jax.tree_map(lambda x: jnp.array(x.shape), ds.element_spec)
+     multihost_assert_equal(
+@@ -1631,6 +1634,10 @@ def get_infer_fn(
+         per_shard_batch_size,
+     )
+ 
++    idx = 0
++    total_time = 0
++    total_step = 20
++    warmup_step = 10
+     # Run inference for each replica set.
+     batched_results, all_indices = [], []
+     for index, infer_batch in sharded_ds.as_numpy_iterator():
+@@ -1672,6 +1679,13 @@ def get_infer_fn(
+             )
+         )
+       else:
++        import time
++        import os
++        if idx == warmup_step - 1 and os.environ["DEVICE_TYPE"] == "CUDA" and os.environ["IS_PROFILE"]=="True":
++            jax.profiler.start_trace(os.environ["PROFILE_DIR"])
++        if idx == warmup_step - 1 and os.environ["DEVICE_TYPE"] == "XPU" and os.environ["IS_PROFILE"]=="True":
++            os.environ["PTI_ENABLE_COLLECTION"] = "1"
++        start_time = time.time()
+         batch_indices, batch_result = partitioned_infer_step(
+             train_state.params,
+             infer_batch,
+@@ -1679,7 +1693,69 @@ def get_infer_fn(
+             index,
+             train_state.flax_mutables,
+         )
+-        logging.info('Inference of batch %s done.', index)
++        batch_result.block_until_ready()
++        end_time = time.time()
++        if idx == warmup_step - 1 and os.environ["DEVICE_TYPE"] == "XPU" and os.environ["IS_PROFILE"]=="True":
++            os.environ["PTI_ENABLE_COLLECTION"] = "0"
++        if idx == warmup_step - 1 and os.environ["DEVICE_TYPE"] == "CUDA" and os.environ["IS_PROFILE"]=="True":
++            jax.profiler.stop_trace()
++        if True:
++            cur_time = (end_time - start_time)
++            throughput = batch_result.shape[0]/cur_time
++            info_str = ""
++            for k in infer_batch:
++                info_str = info_str + k + ":" + str(infer_batch[k].shape) + ","
++            info_str = info_str  + "batch_result:" + str(batch_result.shape) + ","
++            logging.info('%s', info_str)
++
++            info_str = "step:" + str(idx) + ","
++            info_str = info_str + "time:" + str(cur_time) + " s,"
++            info_str = info_str + "throughput:" + str(throughput) + " sentences/sencond,"
++            logging.info('%s', info_str)
++            if idx >= warmup_step:
++                total_time += cur_time
++            idx += 1
++            if idx >= total_step:
++              cur_time = total_time/(total_step - warmup_step)
++              throughput = batch_result.shape[0]/cur_time
++              info_str = "avg time:" + str(cur_time) + " s,"
++              info_str = info_str  + "avg throughput:" + str(throughput) + " sentences/sencond,"
++              logging.info('%s', info_str)
++              logging.info('check accuracy of the last output................')
++              last_result = np.asarray(batch_result)
++              input_shape = infer_batch["encoder_input_tokens"].shape
++              output_shape = infer_batch["decoder_target_tokens"].shape
++              input_len = input_shape[1]
++              output_len = output_shape[1]
++              if per_shard_batch_size != 1:
++                logging.warning('batch size is not 1, skip the accuracy check')
++                exit()
++              try:
++                with open(ref_file) as f:
++                  ref_json = json.load(f)
++              except FileNotFoundError:
++                logging.warning('reference.json not found, skip the accuracy check')
++                exit()
++              if model_size not in ref_json:
++                logging.warning(f'{model_size} not in reference.json, skip the accuracy check')
++                exit()
++              ref_json = ref_json[model_size]
++              if str(input_len) in ref_json:
++                input_refs = ref_json[str(input_len)]
++                if str(output_len) in input_refs:
++                  output_ref = input_refs[str(output_len)]
++                  ref_result = np.array(output_ref)
++                  ref_result = ref_result.reshape((per_shard_batch_size, output_len))
++                  np.testing.assert_equal(last_result, ref_result)
++                  if np.array_equal(last_result, ref_result):
++                      logging.info('accuracy check OK')
++                else:
++                  logging.warning(f'for input_len {input_len}, output_len {output_len} not in reference.json, skip the accuracy check')
++              else:
++                logging.warning(f'input_len {input_len} not in reference.json, skip the accuracy check')
++              exit()
++
++        #logging.info('Inference of batch %s done. %s', index, info_str)
+ 
+       def _copy_to_host_async(x):
+         if hasattr(x, 'addressable_data'):
