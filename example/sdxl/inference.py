@@ -127,6 +127,6 @@ def nrmse(source, target):
     return 1 - rmse / 255
 
 if args.accuracy:
-    source = np.array(Image.open("castle.png"))
+    source = np.array(images[0])
     target = np.array(Image.open("target.png"))
     print("RMSE accuracy is: {:.3f}".format(nrmse(source, target)), file=sys.stderr)
