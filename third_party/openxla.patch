@@ -1946,7 +1946,7 @@ index 0aa610fc9..3c4b34ace 100644
                          MatrixIsColumnMajor(instr, gemm_backend_config));
  
 diff --git a/xla/service/gpu/gpu_compiler.cc b/xla/service/gpu/gpu_compiler.cc
-index d0c20aa1c..f975f8122 100644
+index d0c20aa1c..2030ba0b1 100644
 --- a/xla/service/gpu/gpu_compiler.cc
 +++ b/xla/service/gpu/gpu_compiler.cc
 @@ -268,6 +268,8 @@ limitations under the License.
@@ -2012,8 +2012,14 @@ index d0c20aa1c..f975f8122 100644
    TF_RETURN_IF_ERROR(OptimizeHloConvolutionCanonicalization(
        hlo_module, gpu_version, dnn_version, options.device_allocator));
  
-@@ -1414,7 +1425,8 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
-     pipeline.AddPass<GemmRewriter>(gpu_version, /*f8_rewrite=*/true);
+@@ -1411,10 +1422,13 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
+ 
+     // Rewrite FP8 GEMMs ahead of Triton which currently lacks support for FP8
+     // and may rewrite quantized FP8 GEMMs as higher-precision GEMMs.
+-    pipeline.AddPass<GemmRewriter>(gpu_version, /*f8_rewrite=*/true);
++    // pipeline.AddPass<GemmRewriter>(gpu_version, /*f8_rewrite=*/true);
++    // SYCL doesn't support fp8 gemm yet.
++    pipeline.AddPass<GemmRewriter>(gpu_version, /*f8_rewrite=*/false);
      if (debug_options.xla_gpu_enable_triton_gemm() && cuda_cc != nullptr &&
          cuda_cc->IsAtLeast(se::CudaComputeCapability::AMPERE)) {
 -      pipeline.AddPass<GemmFusion>(gpu_version);
@@ -2022,7 +2028,7 @@ index d0c20aa1c..f975f8122 100644
      }
      // Rewrite non-FP8 GEMMs.
      pipeline.AddPass<GemmRewriter>(gpu_version, /*f8_rewrite=*/false);
-@@ -1436,8 +1448,9 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
+@@ -1436,8 +1450,9 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
      if (debug_options.xla_gpu_enable_triton_softmax_fusion() &&
          cuda_cc != nullptr &&
          cuda_cc->IsAtLeast(se::CudaComputeCapability::AMPERE)) {
@@ -2034,7 +2040,7 @@ index d0c20aa1c..f975f8122 100644
      }
  
      pipeline.AddPass<ReductionDimensionGrouper>();
-@@ -1770,6 +1783,11 @@ GpuCompiler::CompileSingleModule(const HloModuleConfig& module_config,
+@@ -1770,6 +1785,11 @@ GpuCompiler::CompileSingleModule(const HloModuleConfig& module_config,
  
    // Write PTX to IR dump directory, if IR dumping was requested.
    if (should_dump) {
@@ -2046,7 +2052,7 @@ index d0c20aa1c..f975f8122 100644
      absl::string_view ptx = result.asm_text;
      if (debug_module) {
        DumpToFileInDirOrStdout(*debug_module, "",
-@@ -2084,6 +2102,7 @@ absl::StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
+@@ -2084,6 +2104,7 @@ absl::StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
  absl::StatusOr<std::vector<std::unique_ptr<AotCompilationResult>>>
  GpuCompiler::CompileAheadOfTime(std::unique_ptr<HloModuleGroup> module_group,
                                  const AotCompilationOptions& options) {
@@ -2054,7 +2060,7 @@ index d0c20aa1c..f975f8122 100644
  #if GOOGLE_CUDA
    CHECK(options.PlatformId() == se::cuda::kCudaPlatformId);
  #elif TENSORFLOW_USE_ROCM
-@@ -2137,6 +2156,7 @@ GpuCompiler::CompileAheadOfTime(std::unique_ptr<HloModuleGroup> module_group,
+@@ -2137,6 +2158,7 @@ GpuCompiler::CompileAheadOfTime(std::unique_ptr<HloModuleGroup> module_group,
    }
  
    return std::move(results);
@@ -2062,7 +2068,7 @@ index d0c20aa1c..f975f8122 100644
  }
  
  HloCostAnalysis::ShapeSizeFunction GpuCompiler::ShapeSizeBytesFunction() const {
-@@ -2148,6 +2168,7 @@ HloCostAnalysis::ShapeSizeFunction GpuCompiler::ShapeSizeBytesFunction() const {
+@@ -2148,6 +2170,7 @@ HloCostAnalysis::ShapeSizeFunction GpuCompiler::ShapeSizeBytesFunction() const {
  
  absl::StatusOr<std::unique_ptr<AotCompilationResult>> GpuCompiler::Export(
      Executable* executable) const {
@@ -2070,7 +2076,7 @@ index d0c20aa1c..f975f8122 100644
    auto* gpu_executable = tensorflow::down_cast<GpuExecutable*>(executable);
    if (!gpu_executable) return Internal("GpuExecutable is null");
  
-@@ -2155,6 +2176,8 @@ absl::StatusOr<std::unique_ptr<AotCompilationResult>> GpuCompiler::Export(
+@@ -2155,6 +2178,8 @@ absl::StatusOr<std::unique_ptr<AotCompilationResult>> GpuCompiler::Export(
        &gpu_executable->module(), gpu_executable->buffer_assignment(),
        gpu_executable->text(), gpu_executable->binary(),
        gpu_executable->dnn_compiled_graphs());
@@ -2079,7 +2085,7 @@ index d0c20aa1c..f975f8122 100644
  }
  
  absl::Status GpuCompiler::RunPostSchedulingPipelines(
-@@ -2215,13 +2238,18 @@ absl::Status GpuCompiler::RunPostSchedulingPipelines(
+@@ -2215,13 +2240,18 @@ absl::Status GpuCompiler::RunPostSchedulingPipelines(
      auto driver_version = se::gpu::GpuDriver::GetDriverVersion();
  #if GOOGLE_CUDA
      constexpr int toolkit_version = CUDA_VERSION;
