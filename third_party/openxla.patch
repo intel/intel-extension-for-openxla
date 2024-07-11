@@ -568,7 +568,7 @@ index d624fd0cf..88409f0ac 100644
  }
  inline const char* TpuName() {
 diff --git a/xla/service/BUILD b/xla/service/BUILD
-index bcedb9890..b27f8c6aa 100644
+index bcedb9890..b985764c5 100644
 --- a/xla/service/BUILD
 +++ b/xla/service/BUILD
 @@ -8,6 +8,10 @@ load(
@@ -600,7 +600,27 @@ index bcedb9890..b27f8c6aa 100644
          "@com_google_absl//absl/container:flat_hash_map",
          "@com_google_absl//absl/memory",
          "@com_google_absl//absl/strings",
-@@ -7311,7 +7319,7 @@ cc_library(
+@@ -7236,6 +7244,19 @@ cc_library(
+     ],
+ )
+ 
++cc_library(
++    name = "scatter_promotion",
++    srcs = ["scatter_promotion.cc"],
++    hdrs = ["scatter_promotion.h"],
++    deps = [
++        ":hlo_creation_utils",
++        ":hlo_pass",
++        ":op_expander_pass",
++        "//xla:xla_data_proto_cc",
++        "//xla/hlo/ir:hlo",
++    ],
++)
++
+ cc_library(
+     name = "scatter_simplifier",
+     srcs = ["scatter_simplifier.cc"],
+@@ -7311,7 +7332,7 @@ cc_library(
      deps = [
          ":hlo_creation_utils",
          ":hlo_pass",
@@ -901,7 +921,7 @@ index 42c421b7e..d125142d2 100644
  
    // Check for NaN, since it's a special case.
 diff --git a/xla/service/gpu/BUILD b/xla/service/gpu/BUILD
-index 1fcb30d32..f7f4c4e50 100644
+index 1fcb30d32..be7e59fd4 100644
 --- a/xla/service/gpu/BUILD
 +++ b/xla/service/gpu/BUILD
 @@ -32,6 +32,7 @@ load(
@@ -1028,7 +1048,15 @@ index 1fcb30d32..f7f4c4e50 100644
          ":gpu_p2p_pipeliner",
          ":collective_permute_cycle_decomposer",
          ":address_computation_fusion_rewriter",
-@@ -3962,6 +3972,61 @@ xla_test(
+@@ -3645,6 +3655,7 @@ cc_library(
+         "//xla/service:result_caster",
+         "//xla/service:rng_bit_generator_expander",
+         "//xla/service:rng_expander",
++        "//xla/service:scatter_promotion",
+         "//xla/service:scatter_simplifier",
+         "//xla/service:sharding_propagation",
+         "//xla/service:sharding_remover",
+@@ -3962,6 +3973,61 @@ xla_test(
      ],
  )
  
@@ -1946,10 +1974,18 @@ index 0aa610fc9..3c4b34ace 100644
                          MatrixIsColumnMajor(instr, gemm_backend_config));
  
 diff --git a/xla/service/gpu/gpu_compiler.cc b/xla/service/gpu/gpu_compiler.cc
-index d0c20aa1c..2030ba0b1 100644
+index d0c20aa1c..86ac26006 100644
 --- a/xla/service/gpu/gpu_compiler.cc
 +++ b/xla/service/gpu/gpu_compiler.cc
-@@ -268,6 +268,8 @@ limitations under the License.
+@@ -209,6 +209,7 @@ limitations under the License.
+ #include "xla/service/rng_bit_generator_expander.h"
+ #include "xla/service/rng_expander.h"
+ #include "xla/service/scatter_expander.h"
++#include "xla/service/scatter_promotion.h"
+ #include "xla/service/scatter_simplifier.h"
+ #include "xla/service/sharding_propagation.h"
+ #include "xla/service/sharding_remover.h"
+@@ -268,6 +269,8 @@ limitations under the License.
  #include "xla/hlo/experimental/auto_sharding/auto_sharding.h"
  #endif  // PLATFORM_GOOGLE
  
@@ -1958,7 +1994,7 @@ index d0c20aa1c..2030ba0b1 100644
  namespace xla {
  namespace gpu {
  namespace {
-@@ -594,7 +596,9 @@ AlgebraicSimplifierOptions LayoutInsensitiveAlgebraicSimplifierOptions(
+@@ -594,7 +597,9 @@ AlgebraicSimplifierOptions LayoutInsensitiveAlgebraicSimplifierOptions(
    layout_insensitive_algsimp_opts
        .set_unconditionally_simplify_reduce_of_transpose_or_reshape(true);
  
@@ -1969,7 +2005,7 @@ index d0c20aa1c..2030ba0b1 100644
      layout_insensitive_algsimp_opts.set_enable_conv_operand_swap(false);
    }
    layout_insensitive_algsimp_opts
-@@ -654,9 +658,10 @@ absl::Status RunSPMDPasses(
+@@ -654,9 +659,10 @@ absl::Status RunSPMDPasses(
      spmd_simplify.AddPass<ScatterSimplifier>();
      spmd_simplify.AddPass<ScatterExpander>(
          ScatterExpander::kEliminateSimpleScatters);
@@ -1983,7 +2019,18 @@ index d0c20aa1c..2030ba0b1 100644
      spmd_simplify.AddPass<WhileLoopConstantSinking>();
      spmd_simplify.AddPass<WhileLoopSimplifier>();
  
-@@ -1016,6 +1021,10 @@ absl::Status RunLayoutAssignmentPasses(HloModule* hlo_module,
+@@ -847,6 +853,10 @@ absl::Status RunOptimizationPasses(
+ 
+     pipeline.AddPass<GatherSimplifier>();
+     pipeline.AddPass<GatherExpander>(GatherExpander::kEliminateSimpleGathers);
++    // promote 16 bit integer scatter to 32-bit to avoid 16-bit atomic.
++    const std::pair<PrimitiveType, PrimitiveType> ar_promoted_types[] = {
++        {F16, F32}, {BF16, F32}};
++    pipeline.AddPass<ScatterPromotion>(ar_promoted_types);
+     pipeline.AddPass<ScatterSimplifier>();
+     pipeline.AddPass<ScatterExpander>(
+         ScatterExpander::kEliminateSimpleScatters);
+@@ -1016,6 +1026,10 @@ absl::Status RunLayoutAssignmentPasses(HloModule* hlo_module,
    HloPassPipeline pipeline("layout assignment");
    // Layout assignment uses alias analysis, which requires the call graph to
    // be flattened.
@@ -1994,7 +2041,7 @@ index d0c20aa1c..2030ba0b1 100644
    pipeline.AddPass<FlattenCallGraph>();
    ChannelLayoutConstraints layout_constraints;
    pipeline.AddPass<GpuLayoutAssignment>(
-@@ -1239,6 +1248,8 @@ absl::Status GpuCompiler::OptimizeHloModule(
+@@ -1239,6 +1253,8 @@ absl::Status GpuCompiler::OptimizeHloModule(
    se::GpuComputeCapability gpu_version =
        gpu_target_config.device_description.gpu_compute_capability();
    se::dnn::VersionInfo dnn_version = gpu_target_config.dnn_version_info;
@@ -2003,7 +2050,7 @@ index d0c20aa1c..2030ba0b1 100644
    if (stream_exec != nullptr) {
      gpu_version = GetGpuVersion(stream_exec);
      se::dnn::DnnSupport* dnn = stream_exec->AsDnn();
-@@ -1249,7 +1260,7 @@ absl::Status GpuCompiler::OptimizeHloModule(
+@@ -1249,7 +1265,7 @@ absl::Status GpuCompiler::OptimizeHloModule(
      }
      TF_ASSIGN_OR_RETURN(dnn_version, dnn->GetVersion());
    }
@@ -2012,7 +2059,7 @@ index d0c20aa1c..2030ba0b1 100644
    TF_RETURN_IF_ERROR(OptimizeHloConvolutionCanonicalization(
        hlo_module, gpu_version, dnn_version, options.device_allocator));
  
-@@ -1411,10 +1422,13 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
+@@ -1411,10 +1427,13 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
  
      // Rewrite FP8 GEMMs ahead of Triton which currently lacks support for FP8
      // and may rewrite quantized FP8 GEMMs as higher-precision GEMMs.
@@ -2028,7 +2075,7 @@ index d0c20aa1c..2030ba0b1 100644
      }
      // Rewrite non-FP8 GEMMs.
      pipeline.AddPass<GemmRewriter>(gpu_version, /*f8_rewrite=*/false);
-@@ -1436,8 +1450,9 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
+@@ -1436,8 +1455,9 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
      if (debug_options.xla_gpu_enable_triton_softmax_fusion() &&
          cuda_cc != nullptr &&
          cuda_cc->IsAtLeast(se::CudaComputeCapability::AMPERE)) {
@@ -2040,7 +2087,7 @@ index d0c20aa1c..2030ba0b1 100644
      }
  
      pipeline.AddPass<ReductionDimensionGrouper>();
-@@ -1770,6 +1785,11 @@ GpuCompiler::CompileSingleModule(const HloModuleConfig& module_config,
+@@ -1770,6 +1790,11 @@ GpuCompiler::CompileSingleModule(const HloModuleConfig& module_config,
  
    // Write PTX to IR dump directory, if IR dumping was requested.
    if (should_dump) {
@@ -2052,7 +2099,7 @@ index d0c20aa1c..2030ba0b1 100644
      absl::string_view ptx = result.asm_text;
      if (debug_module) {
        DumpToFileInDirOrStdout(*debug_module, "",
-@@ -2084,6 +2104,7 @@ absl::StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
+@@ -2084,6 +2109,7 @@ absl::StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
  absl::StatusOr<std::vector<std::unique_ptr<AotCompilationResult>>>
  GpuCompiler::CompileAheadOfTime(std::unique_ptr<HloModuleGroup> module_group,
                                  const AotCompilationOptions& options) {
@@ -2060,7 +2107,7 @@ index d0c20aa1c..2030ba0b1 100644
  #if GOOGLE_CUDA
    CHECK(options.PlatformId() == se::cuda::kCudaPlatformId);
  #elif TENSORFLOW_USE_ROCM
-@@ -2137,6 +2158,7 @@ GpuCompiler::CompileAheadOfTime(std::unique_ptr<HloModuleGroup> module_group,
+@@ -2137,6 +2163,7 @@ GpuCompiler::CompileAheadOfTime(std::unique_ptr<HloModuleGroup> module_group,
    }
  
    return std::move(results);
@@ -2068,7 +2115,7 @@ index d0c20aa1c..2030ba0b1 100644
  }
  
  HloCostAnalysis::ShapeSizeFunction GpuCompiler::ShapeSizeBytesFunction() const {
-@@ -2148,6 +2170,7 @@ HloCostAnalysis::ShapeSizeFunction GpuCompiler::ShapeSizeBytesFunction() const {
+@@ -2148,6 +2175,7 @@ HloCostAnalysis::ShapeSizeFunction GpuCompiler::ShapeSizeBytesFunction() const {
  
  absl::StatusOr<std::unique_ptr<AotCompilationResult>> GpuCompiler::Export(
      Executable* executable) const {
@@ -2076,7 +2123,7 @@ index d0c20aa1c..2030ba0b1 100644
    auto* gpu_executable = tensorflow::down_cast<GpuExecutable*>(executable);
    if (!gpu_executable) return Internal("GpuExecutable is null");
  
-@@ -2155,6 +2178,8 @@ absl::StatusOr<std::unique_ptr<AotCompilationResult>> GpuCompiler::Export(
+@@ -2155,6 +2183,8 @@ absl::StatusOr<std::unique_ptr<AotCompilationResult>> GpuCompiler::Export(
        &gpu_executable->module(), gpu_executable->buffer_assignment(),
        gpu_executable->text(), gpu_executable->binary(),
        gpu_executable->dnn_compiled_graphs());
@@ -2085,7 +2132,7 @@ index d0c20aa1c..2030ba0b1 100644
  }
  
  absl::Status GpuCompiler::RunPostSchedulingPipelines(
-@@ -2215,13 +2240,18 @@ absl::Status GpuCompiler::RunPostSchedulingPipelines(
+@@ -2215,13 +2245,18 @@ absl::Status GpuCompiler::RunPostSchedulingPipelines(
      auto driver_version = se::gpu::GpuDriver::GetDriverVersion();
  #if GOOGLE_CUDA
      constexpr int toolkit_version = CUDA_VERSION;
@@ -5395,6 +5442,266 @@ index 332c36ddd..bdb0523d9 100644
    return inst;
  }
  
+diff --git a/xla/service/scatter_promotion.cc b/xla/service/scatter_promotion.cc
+new file mode 100644
+index 000000000..200845ff1
+--- /dev/null
++++ b/xla/service/scatter_promotion.cc
+@@ -0,0 +1,142 @@
++/* Copyright 2022 The OpenXLA Authors.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++
++#include "xla/service/scatter_promotion.h"
++
++#include <memory>
++#include <optional>
++#include <string>
++#include <utility>
++
++#include "xla/service/hlo_creation_utils.h"
++
++namespace xla {
++namespace {
++
++std::optional<PrimitiveType> Get16bitFloatOperandType(
++    const HloInstruction* instr) {
++  std::optional<PrimitiveType> type;
++  for (const HloInstruction* operand : instr->operands()) {
++    if (!type.has_value() && (operand->shape().element_type() == F16 ||
++                              operand->shape().element_type() == BF16)) {
++      type = operand->shape().element_type();
++    }
++  }
++  if (!type.has_value()) {
++    return std::nullopt;
++  }
++  return type;
++}
++
++bool IsScatter(const HloInstruction* inst) {
++  return inst->opcode() == HloOpcode::kScatter;
++}
++
++std::unique_ptr<HloInstruction> Clone16bitScatter(
++    const HloInstruction* inst, const Shape& shape,
++    absl::Span<HloInstruction* const> operands) {
++  // clone an scatter and also clone the attached computation to match the type.
++  std::unique_ptr<HloInstruction> new_inst =
++      inst->CloneWithNewOperands(shape, operands);
++  HloComputation* to_apply = new_inst->to_apply();
++  HloComputation* to_apply_promoted = [&]() {
++    PrimitiveType type = shape.element_type();
++    std::string name = absl::StrCat(to_apply->name(), "_promoted");
++    HloComputation::Builder promoted(name);
++    auto x = promoted.AddInstruction(HloInstruction::CreateParameter(
++        /*parameter_number=*/0, ShapeUtil::MakeShape(type, {}), "x"));
++    auto y = promoted.AddInstruction(HloInstruction::CreateParameter(
++        /*parameter_number=*/1, ShapeUtil::MakeShape(type, {}), "y"));
++    promoted.AddInstruction(HloInstruction::CreateBinary(
++        ShapeUtil::MakeShape(type, {}), to_apply->root_instruction()->opcode(),
++        x, y));
++    return inst->GetModule()->AddEmbeddedComputation(promoted.Build());
++  }();
++  new_inst->set_to_apply(to_apply_promoted);
++  return new_inst;
++}
++
++}  // namespace
++
++StatusOr<bool> ChangeMultiInputOpDataType::Run(
++    HloModule* module,
++    const absl::flat_hash_set<absl::string_view>& execution_threads) {
++  bool changed = false;
++  HloCloner default_cloner = [](const HloInstruction* inst, const Shape& shape,
++                                absl::Span<HloInstruction* const> operands) {
++    return inst->CloneWithNewOperands(shape, operands);
++  };
++  HloCloner cloner = cloner_ ? cloner_ : default_cloner;
++
++  for (HloComputation* comp :
++       module->MakeNonfusionComputations(execution_threads)) {
++    for (HloInstruction* instr : comp->MakeInstructionPostOrder()) {
++      std::optional<PrimitiveType> operand_type =
++          Get16bitFloatOperandType(instr);
++      if (!op_matcher_(instr) || !operand_type.has_value() ||
++          !instr->shape().IsArray() ||
++          instr->opcode() == HloOpcode::kParameter ||
++          (op_matcher_(instr) &&
++           instr->to_apply()->root_instruction()->operand_count() != 2)) {
++        continue;
++      }
++      const PrimitiveType from_type = *operand_type;
++      auto it = to_type_map_.find(from_type);
++      if (it == to_type_map_.end()) {
++        continue;
++      }
++
++      const PrimitiveType to_type = it->second;
++      absl::InlinedVector<HloInstruction*, 8> new_operands;
++
++      for (HloInstruction* operand : instr->mutable_operands()) {
++        const PrimitiveType cur_operand_type = operand->shape().element_type();
++        auto it = to_type_map_.find(cur_operand_type);
++        if (it == to_type_map_.end()) {
++          // Remain datatype of the operands which mismatch the types in
++          // from_ty.
++          new_operands.push_back(operand);
++        } else {
++          // Change datatype of the operands which match one of the types in
++          // from_ty.
++          new_operands.push_back(MakeConvertToHlo(operand, to_type));
++        }
++      }
++
++      Shape new_shape = instr->shape();
++      new_shape.set_element_type(to_type);
++      HloInstruction* new_instr =
++          comp->AddInstruction(cloner(instr, new_shape, new_operands));
++      TF_RETURN_IF_ERROR(comp->ReplaceInstruction(
++          instr, MakeConvertToHlo(new_instr, from_type)));
++      changed = true;
++    }
++  }
++  return changed;
++}
++
++// Promote 16-bit float scatter to 32-bit float types.
++// {{F16, F32}, {BF16, F32}}
++ScatterPromotion::ScatterPromotion(
++    absl::Span<std::pair<PrimitiveType, PrimitiveType> const> from_to_types)
++    : pass_(from_to_types, IsScatter, Clone16bitScatter) {}
++
++StatusOr<bool> ScatterPromotion::Run(
++    HloModule* module,
++    const absl::flat_hash_set<absl::string_view>& execution_threads) {
++  return pass_.Run(module, execution_threads);
++}
++
++}  // namespace xla
+diff --git a/xla/service/scatter_promotion.h b/xla/service/scatter_promotion.h
+new file mode 100644
+index 000000000..abb13b74f
+--- /dev/null
++++ b/xla/service/scatter_promotion.h
+@@ -0,0 +1,106 @@
++/* Copyright 2024 The OpenXLA Authors.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++
++#ifndef XLA_SERVICE_SCATTER_PROMOTION_H_
++#define XLA_SERVICE_SCATTER_PROMOTION_H_
++
++#include <functional>
++#include <memory>
++#include <utility>
++
++#include "xla/service/hlo_pass_interface.h"
++
++namespace xla {
++
++// Changes `from_ty op(from_ty a, from_ty b)` into
++// `from_ty convert(op(to_ty convert(a), to_ty convert(b)))`.
++//
++// This path is different from "xla/service/change_op_data_type.h"
++// ChangeOpDataType. ChangeOpDataType only considers ops that match `op_matcher`
++// and where all operands have type `from_ty`.  ChangeOpDataType will not do the
++// correct thing for ops like dynamic-slice where only some of the arguments
++// should be converted; it's up to you to avoid matching such ops with
++// `op_matcher`.
++//
++// The ChangeMultiInputOpDataType pass support multiple input which not all
++// operands have type `from_ty. It will apply the transform only to the operands
++// match one of the types in from_ty.
++//
++// It uses provided `cloner` to clone an instruction with shape and converted
++// operands. If the cloner is not provided, it will uses `CloneWithNewOperands`.
++class ChangeMultiInputOpDataType : public HloModulePass {
++ public:
++  using HloCloner = std::function<std::unique_ptr<HloInstruction>(
++      const HloInstruction*, const Shape&, absl::Span<HloInstruction* const>)>;
++  ChangeMultiInputOpDataType(
++      absl::Span<std::pair<PrimitiveType, PrimitiveType> const> from_to_types,
++      HloPredicate op_matcher, HloCloner cloner = nullptr)
++      : op_matcher_(op_matcher), cloner_(cloner) {
++    for (const std::pair<PrimitiveType, PrimitiveType>& pair : from_to_types) {
++      to_type_map_[pair.first] = pair.second;
++    }
++  }
++
++  ChangeMultiInputOpDataType(PrimitiveType from_ty, PrimitiveType to_ty,
++                             HloPredicate op_matcher,
++                             HloCloner cloner = nullptr)
++      : op_matcher_(op_matcher), cloner_(cloner) {
++    to_type_map_[from_ty] = to_ty;
++  }
++
++  absl::string_view name() const override {
++    return "change-multi-input-op-data-type";
++  }
++  absl::StatusOr<bool> Run(
++      HloModule* module,
++      const absl::flat_hash_set<absl::string_view>& execution_threads) override;
++
++ private:
++  // map with key = from_type and value = to_type.
++  absl::flat_hash_map<PrimitiveType, PrimitiveType> to_type_map_;
++  HloPredicate op_matcher_;
++  HloCloner cloner_;
++};
++
++// This pass rewrites scatter operations to promote 16 bit integer scatter
++// to 32-bit to avoid slow 16-bit atomic.
++//
++// Scatter invoke `EmitAtomicOperationUsingCAS` function for atomicCAS.
++// The function is in "xla/service/gpu/ir_emitter_nested.cc".
++// if the element type is smaller than 32 bits, XLA will use int32_t for the
++// atomicCAS operation. A 32-bit location holds two 16-bit data.
++// In this case, atomicCAS reads and writes 32 bit values from the memory.
++// When competition intensifies, it will be really slow.
++//
++// This pass lets us run the fp16/bf16 scatter as "convert to fp32,
++// run in fp32, then convert back to fp16/bf16".
++class ScatterPromotion : public HloModulePass {
++ public:
++  explicit ScatterPromotion(
++      absl::Span<std::pair<PrimitiveType, PrimitiveType> const> from_to_types);
++  absl::string_view name() const override { return "scatter-promotion"; }
++
++  using HloPassInterface::Run;
++  absl::StatusOr<bool> Run(
++      HloModule* module,
++      const absl::flat_hash_set<absl::string_view>& execution_threads) override;
++
++ private:
++  ChangeMultiInputOpDataType pass_;
++};
++
++}  // namespace xla
++
++#endif  // XLA_SERVICE_SCATTER_PROMOTION_H_
 diff --git a/xla/stream_executor/blas.h b/xla/stream_executor/blas.h
 index 9834e0319..fbcd5d7d6 100644
 --- a/xla/stream_executor/blas.h
