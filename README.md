@@ -85,6 +85,15 @@ pip install -r test/requirements.txt
 ```
 Check [test/requirements.txt](test/requirements.txt) for more details.
 
+The following table tracks intel-extension-for-openxla versions and compatible versions of jax and jaxlib. The compatibility between jax and jaxlib is maintained through JAX. This version restriction will be relaxed over time as the plugin API matures.
+|**intel-extension-for-openxla**|**jaxlib**|**jax**|
+|:-:|:-:|:-:|
+| 0.4.0 | 0.4.26 | >= 0.4.26, <= 0.4.27|
+| 0.3.0 | 0.4.24 | >= 0.4.24, <= 0.4.27|
+| 0.2.1 | 0.4.20 | >= 0.4.20, <= 0.4.26|
+| 0.2.0 | 0.4.20 | >= 0.4.20, <= 0.4.26|
+| 0.1.0 | 0.4.13 | >= 0.4.13, <= 0.4.14|
+
 ## 3. Install
 
 ### Install via PyPI wheel
