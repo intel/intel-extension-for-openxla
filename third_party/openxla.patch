@@ -4570,10 +4570,10 @@ index 05f230088..b4154971e 100644
    // This API doesn't have a corresponding API in NCCL and implemented as
 diff --git a/xla/service/gpu/spir_compiler.cc b/xla/service/gpu/spir_compiler.cc
 new file mode 100644
-index 000000000..1c33d7e50
+index 000000000..bffa2d412
 --- /dev/null
 +++ b/xla/service/gpu/spir_compiler.cc
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,289 @@
 +/* Copyright (c) 2023 Intel Corporation
 +
 +Licensed under the Apache License, Version 2.0 (the "License");
@@ -4750,16 +4750,15 @@ index 000000000..1c33d7e50
 +
 +  // For frontend debugging.
 +  FrontendAttributes frontend_attributes;
-+  if (IsXeHPC(nullptr)) {
-+    frontend_attributes.mutable_map()->emplace("IsXeHPC", "True");
-+  }
-+  if (HasXMX(nullptr)) {
-+    frontend_attributes.mutable_map()->emplace("HasXMX", "True");
++  bool is_xetla_hardware_support = IsXetlaHardwareSupport();
++  if (is_xetla_hardware_support) {
++    frontend_attributes.mutable_map()->emplace("is_xetla_hardware_support",
++                                               "True");
 +  }
 +  hlo_module->add_frontend_attributes(frontend_attributes);
 +  bool use_mha = true;
 +  TF_CHECK_OK(tsl::ReadBoolFromEnvVar("MHA", true, &use_mha));
-+  if (use_mha && IsXetlaHardwareSupport()) {
++  if (use_mha && is_xetla_hardware_support) {
 +    HloPassPipeline mha_fusion_pipeline("multi-headed attention fusion");
 +    const DebugOptions& debug_options = hlo_module->config().debug_options();
 +    // The LayoutAssignment pass may leave behind kCopy instructions which are
