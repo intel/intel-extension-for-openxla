@@ -3,6 +3,7 @@ import logging
 import time
 import json
 import os
+import jax
 
 from model import LanguageModelConfig, TransformerConfig
 from runners import InferenceRunner, ModelRunner, sample_from_model
@@ -12,9 +13,15 @@ def main(args):
     num_warmup = args.num_warmup
     input_tokens = args.input_tokens
     max_new_tokens = args.max_new_tokens
+    compilcation_cache = args.compilcation_cache
     input_len = int(input_tokens)
 
     current_path = str(os.path.dirname(__file__))
+
+    if compilcation_cache:
+        COMPILATION_CACHE_PATH = current_path +"/compilcation_cache/"
+        jax.config.update("jax_compilation_cache_dir", COMPILATION_CACHE_PATH)
+
     CKPT_PATH = current_path +"/checkpoints/"
     with open(current_path + "/prompt.json") as f:
         content = f.read()
@@ -86,5 +93,6 @@ if __name__ == "__main__":
     parser.add_argument("--num-warmup", default=1, type=int, help="num warmup")
     parser.add_argument("--input-tokens",default="32",choices=["32", "64", "128", "256", "512", "1024", "2016", "2017", "2048", "4096", "8192"],type=str,help="input tokens length if needed from prompt.json")
     parser.add_argument("--max-new-tokens", default=32, type=int, help="output max new tokens")
+    parser.add_argument("--compilcation-cache", default=False, type=bool, help="compilcation cache")
     args = parser.parse_args()
     main(args)

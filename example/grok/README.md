@@ -2,6 +2,8 @@
 
 Loading and running the Grok-1 open-weights model by [Grok-1](https://github.com/xai-org/grok-1)
 
+The Grok-1 model running needs at least 8-tile GPU device.
+
 ## 1. Install intel-extension-for-openxla
 
 Please got the [main page](https://github.com/intel/intel-extension-for-openxla/blob/main/README.md#build-and-install), and follow the instructions to build and install intel-extension-for-openxla.

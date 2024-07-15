@@ -1974,7 +1974,7 @@ index 0aa610fc9..3c4b34ace 100644
                          MatrixIsColumnMajor(instr, gemm_backend_config));
  
 diff --git a/xla/service/gpu/gpu_compiler.cc b/xla/service/gpu/gpu_compiler.cc
-index d0c20aa1c..86ac26006 100644
+index d0c20aa1c..98ce30ebe 100644
 --- a/xla/service/gpu/gpu_compiler.cc
 +++ b/xla/service/gpu/gpu_compiler.cc
 @@ -209,6 +209,7 @@ limitations under the License.
@@ -2115,24 +2115,7 @@ index d0c20aa1c..86ac26006 100644
  }
  
  HloCostAnalysis::ShapeSizeFunction GpuCompiler::ShapeSizeBytesFunction() const {
-@@ -2148,6 +2175,7 @@ HloCostAnalysis::ShapeSizeFunction GpuCompiler::ShapeSizeBytesFunction() const {
- 
- absl::StatusOr<std::unique_ptr<AotCompilationResult>> GpuCompiler::Export(
-     Executable* executable) const {
-+#if 0
-   auto* gpu_executable = tensorflow::down_cast<GpuExecutable*>(executable);
-   if (!gpu_executable) return Internal("GpuExecutable is null");
- 
-@@ -2155,6 +2183,8 @@ absl::StatusOr<std::unique_ptr<AotCompilationResult>> GpuCompiler::Export(
-       &gpu_executable->module(), gpu_executable->buffer_assignment(),
-       gpu_executable->text(), gpu_executable->binary(),
-       gpu_executable->dnn_compiled_graphs());
-+#endif
-+  LOG(FATAL) << "GpuCompiler::Export is not implemented";
- }
- 
- absl::Status GpuCompiler::RunPostSchedulingPipelines(
-@@ -2215,13 +2245,18 @@ absl::Status GpuCompiler::RunPostSchedulingPipelines(
+@@ -2215,13 +2242,18 @@ absl::Status GpuCompiler::RunPostSchedulingPipelines(
      auto driver_version = se::gpu::GpuDriver::GetDriverVersion();
  #if GOOGLE_CUDA
      constexpr int toolkit_version = CUDA_VERSION;
