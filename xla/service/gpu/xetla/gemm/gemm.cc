@@ -16,7 +16,9 @@ limitations under the License.
 #include "xla/service/gpu/xetla/gemm/gemm.h"
 
 #include "xla/service/gpu/matrix_descriptor.h"
-#include "xla/service/gpu/xetla/gemm/hgemm_impl.h"
+#include "xla/service/gpu/xetla/gemm/dispatch_col_major.h"
+#include "xla/service/gpu/xetla/gemm/dispatch_row_major.h"
+#include "xla/service/gpu/xetla/gemm/gemm_common.h"
 #include "xla/stream_executor/blas.h"
 #include "xla/stream_executor/gpu/gpu_types.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
@@ -311,238 +313,19 @@ std::tuple<int, int, int, int, int, int> selectXetlaQKVGemmConfig(int m, int n,
 }
 
 template <typename ComputeType>
-template <int WG_M, int WG_N, int SG_M, int SG_N, int SG_K, int SLM_KS,
-          bool B_ROW_MAJOR>
-bool XetlaGemmKernel<ComputeType>::dispatch(se::gpu::GpuStreamHandle handle) {
-  sycl::queue q = *handle;
-  if (num_epilogues_ == 0) {
-    hgemm_common<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
-                 B_ROW_MAJOR>(
-        q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
-        reinterpret_cast<ComputeType*>(a_->data.opaque()),
-        reinterpret_cast<ComputeType*>(b_->data.opaque()), m_, n_, k_);
-  } else if (num_epilogues_ == 1 && epilogue_types_[0] == RES_ADD) {
-    if (alpha_ == 1.0f) {
-      hgemm_res<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
-                B_ROW_MAJOR>(
-          q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
-          reinterpret_cast<ComputeType*>(a_->data.opaque()),
-          reinterpret_cast<ComputeType*>(b_->data.opaque()),
-          reinterpret_cast<ComputeType*>(epilogue_tensors_[0]), m_, n_, k_,
-          epilogue_params_[0]);
-    } else {
-      hgemm_addmm<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
-                  B_ROW_MAJOR>(
-          q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
-          reinterpret_cast<ComputeType*>(epilogue_tensors_[0]),
-          reinterpret_cast<ComputeType*>(a_->data.opaque()),
-          reinterpret_cast<ComputeType*>(b_->data.opaque()), m_, n_, k_, alpha_,
-          epilogue_params_[0]);
-    }
-  } else if (num_epilogues_ == 1 && epilogue_types_[0] == GELU) {
-    CHECK(alpha_ == 1.0f);
-    hgemm_gelu<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
-               B_ROW_MAJOR>(
-        q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
-        reinterpret_cast<ComputeType*>(a_->data.opaque()),
-        reinterpret_cast<ComputeType*>(b_->data.opaque()), m_, n_, k_);
-  } else if (num_epilogues_ == 1 && epilogue_types_[0] == BIAS) {
-    CHECK(alpha_ == 1.0f);
-    hgemm_bias<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
-               B_ROW_MAJOR>(
-        q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
-        reinterpret_cast<ComputeType*>(a_->data.opaque()),
-        reinterpret_cast<ComputeType*>(b_->data.opaque()),
-        reinterpret_cast<ComputeType*>(epilogue_tensors_[0]), m_, n_, k_,
-        epilogue_params_[0]);
-  } else if (num_epilogues_ == 2 && epilogue_types_[0] == BIAS &&
-             epilogue_types_[1] == RES_ADD) {
-    CHECK(alpha_ == 1.0f);
-    hgemm_bias_res<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
-                   B_ROW_MAJOR>(
-        q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
-        reinterpret_cast<ComputeType*>(a_->data.opaque()),
-        reinterpret_cast<ComputeType*>(b_->data.opaque()),
-        reinterpret_cast<ComputeType*>(epilogue_tensors_[0]),
-        reinterpret_cast<ComputeType*>(epilogue_tensors_[1]), m_, n_, k_,
-        epilogue_params_[0], epilogue_params_[1]);
-  } else if (num_epilogues_ == 2 && epilogue_types_[0] == BIAS &&
-             epilogue_types_[1] == GELU) {
-    CHECK(alpha_ == 1.0f);
-    hgemm_bias_gelu<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3,
-                    B_ROW_MAJOR>(
-        q, reinterpret_cast<ComputeType*>(c_->data.opaque()),
-        reinterpret_cast<ComputeType*>(a_->data.opaque()),
-        reinterpret_cast<ComputeType*>(b_->data.opaque()),
-        reinterpret_cast<ComputeType*>(epilogue_tensors_[0]), m_, n_, k_,
-        epilogue_params_[0]);
-
-  } else {
-    LOG(ERROR) << "No mateched policy, will fallback to oneDNN kernel";
-    return false;
-  }
-  return true;
-}
-
-template <typename ComputeType, int WG_M, int WG_N, int SG_M, int SG_N,
-          int SG_K, int SLM_KS>
-struct GemmPolicy {
-  static bool match_or_call(int wg_m, int wg_n, int sg_m, int sg_n, int sg_k,
-                            int slm_ks, bool b_row_major,
-                            XetlaGemmKernel<ComputeType>* gemm_kernel,
-                            se::gpu::GpuStreamHandle handle) {
-    if (WG_M == wg_m && WG_N == wg_n && SG_M == sg_m && SG_N == sg_n &&
-        SG_K == sg_k && SLM_KS == slm_ks) {
-      if (b_row_major) {
-        return gemm_kernel
-            ->template dispatch<WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, true>(
-                handle);
-      }
-      return gemm_kernel
-          ->template dispatch<WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, false>(
-              handle);
-    }
-    return false;
-  }
-};
-
-template <typename ComputeType, typename MATCHER, typename... TArgs>
-struct PolicyDispatcher {
-  static bool call(int wg_m, int wg_n, int sg_m, int sg_n, int sg_k, int slm_ks,
-                   bool b_row_major, XetlaGemmKernel<ComputeType>* gemm_kernel,
-                   se::gpu::GpuStreamHandle handle) {
-    if (MATCHER::match_or_call(wg_m, wg_n, sg_m, sg_n, sg_k, slm_ks,
-                               b_row_major, gemm_kernel, handle)) {
-      return true;
-    }
-    return PolicyDispatcher<ComputeType, TArgs...>::call(
-        wg_m, wg_n, sg_m, sg_n, sg_k, slm_ks, b_row_major, gemm_kernel, handle);
-  }
-};
-
-template <typename ComputeType, typename MATCHER>
-struct PolicyDispatcher<ComputeType, MATCHER> {
-  static bool call(int wg_m, int wg_n, int sg_m, int sg_n, int sg_k, int slm_ks,
-                   bool b_row_major, XetlaGemmKernel<ComputeType>* gemm_kernel,
-                   se::gpu::GpuStreamHandle handle) {
-    if (MATCHER::match_or_call(wg_m, wg_n, sg_m, sg_n, sg_k, slm_ks,
-                               b_row_major, gemm_kernel, handle)) {
-      return true;
-    }
-    return false;
-  }
-};
-
-template <typename ComputeType>
 bool XetlaGemmKernel<ComputeType>::run(se::gpu::GpuStreamHandle handle) {
-  using gemm_policy =
-      PolicyDispatcher<ComputeType,
-                       GemmPolicy<ComputeType, 8, 64, 8, 16, 32, 8>,
-                       GemmPolicy<ComputeType, 8, 64, 8, 16, 16, 4>,
-                       GemmPolicy<ComputeType, 8, 32, 8, 16, 16, 4>,
-                       GemmPolicy<ComputeType, 8, 32, 8, 16, 16, 8>,
-                       GemmPolicy<ComputeType, 8, 128, 8, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 8, 128, 8, 16, 32, 4>,
-                       GemmPolicy<ComputeType, 8, 256, 8, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 8, 512, 8, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 16, 64, 16, 16, 16, 8>,
-                       GemmPolicy<ComputeType, 16, 256, 8, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 16, 256, 16, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 16, 512, 16, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 32, 128, 8, 16, 32, 1>,
-                       GemmPolicy<ComputeType, 32, 64, 32, 16, 16, 8>,
-                       GemmPolicy<ComputeType, 32, 64, 8, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 32, 128, 32, 16, 16, 4>,
-                       GemmPolicy<ComputeType, 32, 256, 32, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 32, 512, 32, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 64, 128, 64, 16, 16, 4>,
-                       GemmPolicy<ComputeType, 64, 256, 64, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 64, 512, 64, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 128, 128, 32, 32, 32, 2>,
-                       GemmPolicy<ComputeType, 128, 256, 64, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 128, 512, 64, 32, 16, 1>,
-                       GemmPolicy<ComputeType, 256, 256, 64, 32, 16, 1>,
-                       GemmPolicy<ComputeType, 256, 256, 32, 64, 16, 1>,
-                       GemmPolicy<ComputeType, 256, 256, 32, 64, 32, 1>,
-                       GemmPolicy<ComputeType, 128, 64, 16, 16, 64, 1>,
-                       GemmPolicy<ComputeType, 128, 128, 16, 32, 64, 1>,
-                       GemmPolicy<ComputeType, 128, 256, 32, 32, 16, 1>>;
-
-  int WG_M = std::get<0>(selected_policy_id_);
-  int WG_N = std::get<1>(selected_policy_id_);
-  int SG_M = std::get<2>(selected_policy_id_);
-  int SG_N = std::get<3>(selected_policy_id_);
-  int SG_K = std::get<4>(selected_policy_id_);
-  int SLM_KS = std::get<5>(selected_policy_id_);
-  return gemm_policy::call(WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
-                           is_b_row_major_, this, handle);
+  DispatchParams params(a_, b_, c_, m_, n_, k_, alpha_, num_epilogues_,
+                        epilogue_tensors_, epilogue_types_, epilogue_params_);
+  if (is_b_row_major_) {
+    return GemmRowMajorDispatcher<ComputeType>(&params, selected_policy_id_)
+        .run(handle);
+  }
+  return GemmColMajorDispatcher<ComputeType>(&params, selected_policy_id_)
+      .run(handle);
 }
 
 template class XetlaGemmKernel<sycl::half>;
 template class XetlaGemmKernel<gpu::xetla::bf16>;
-
-template <typename ComputeType>
-template <int WG_M, int WG_N, int SG_M, int SG_N, int SG_K, int SLM_KS>
-bool XetlaQKVGemmKernel<ComputeType>::dispatch(
-    se::gpu::GpuStreamHandle handle) {
-  sycl::queue q = *handle;
-  if (q_out_ != nullptr && k_out_ != nullptr && v_out_ != nullptr) {
-    CHECK(alpha_ == 1.0f);
-    hgemm_qkv<ComputeType, WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS, 1, 1, 3, true>(
-        q, reinterpret_cast<ComputeType*>(q_out_->data.opaque()),
-        reinterpret_cast<ComputeType*>(k_out_->data.opaque()),
-        reinterpret_cast<ComputeType*>(v_out_->data.opaque()),
-        reinterpret_cast<ComputeType*>(a_->data.opaque()),
-        reinterpret_cast<ComputeType*>(b_->data.opaque()), m_, n_, k_);
-    return true;
-  } else {
-    LOG(ERROR) << "No mateched policy";
-    return false;
-  }
-}
-
-template <typename ComputeType>
-bool XetlaQKVGemmKernel<ComputeType>::run(se::gpu::GpuStreamHandle handle) {
-  using gemm_policy =
-      PolicyDispatcher<ComputeType,
-                       GemmPolicy<ComputeType, 8, 64, 8, 16, 32, 8>,
-                       GemmPolicy<ComputeType, 8, 128, 8, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 8, 128, 8, 16, 32, 4>,
-                       GemmPolicy<ComputeType, 8, 256, 8, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 8, 512, 8, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 16, 64, 16, 16, 16, 8>,
-                       GemmPolicy<ComputeType, 16, 256, 8, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 16, 256, 16, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 16, 512, 16, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 32, 64, 32, 16, 16, 8>,
-                       GemmPolicy<ComputeType, 32, 64, 8, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 32, 128, 32, 16, 16, 4>,
-                       GemmPolicy<ComputeType, 32, 256, 32, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 32, 512, 32, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 64, 128, 64, 16, 16, 4>,
-                       GemmPolicy<ComputeType, 64, 256, 64, 16, 16, 2>,
-                       GemmPolicy<ComputeType, 64, 512, 64, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 128, 128, 32, 32, 32, 2>,
-                       GemmPolicy<ComputeType, 128, 256, 64, 16, 16, 1>,
-                       GemmPolicy<ComputeType, 128, 512, 64, 32, 16, 1>,
-                       GemmPolicy<ComputeType, 256, 256, 64, 32, 16, 1>,
-                       GemmPolicy<ComputeType, 256, 256, 32, 64, 16, 1>,
-                       GemmPolicy<ComputeType, 256, 256, 32, 64, 32, 1>,
-                       GemmPolicy<ComputeType, 128, 64, 16, 16, 64, 1>,
-                       GemmPolicy<ComputeType, 128, 128, 16, 32, 64, 1>,
-                       GemmPolicy<ComputeType, 128, 256, 32, 32, 16, 1>>;
-  int WG_M = std::get<0>(selected_policy_id_);
-  int WG_N = std::get<1>(selected_policy_id_);
-  int SG_M = std::get<2>(selected_policy_id_);
-  int SG_N = std::get<3>(selected_policy_id_);
-  int SG_K = std::get<4>(selected_policy_id_);
-  int SLM_KS = std::get<5>(selected_policy_id_);
-  return gemm_policy::call(WG_M, WG_N, SG_M, SG_N, SG_K, SLM_KS,
-                           is_b_row_major_, this, handle);
-}
-
-template class XetlaQKVGemmKernel<sycl::half>;
-template class XetlaQKVGemmKernel<gpu::xetla::bf16>;
 
 }  // namespace xetla
 }  // namespace gpu
