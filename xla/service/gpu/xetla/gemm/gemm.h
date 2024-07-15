@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "absl/strings/str_cat.h"
 #include "xla/service/gpu/matrix_descriptor.h"
+#include "xla/service/gpu/xetla/gemm/gemm_common.h"
 #include "xla/stream_executor/blas.h"
 #include "xla/stream_executor/gpu/gpu_types.h"
 #include "xla/stream_executor/sycl/sycl_stream.h"
@@ -37,23 +38,11 @@ extern std::tuple<int, int, int, int, int, int> selectXetlaQKVGemmConfig(int m,
 
 template <typename ComputeType>
 class XetlaGemmKernel {
- public:
-  enum EpilogueType {
-    BIAS = 0,
-    RES_ADD,
-    GELU,
-    RES_MUL,
-    SILU,
-  };
-
  private:
-  enum {
-    MAX_EPILOGUES = 4,
-  };
   xla::gpu::MatrixDescriptor *a_, *b_, *c_;
-  void* epilogue_tensors_[MAX_EPILOGUES];
-  EpilogueType epilogue_types_[MAX_EPILOGUES];
-  float epilogue_params_[MAX_EPILOGUES];
+  void* epilogue_tensors_[kMaxNumEpilogues];
+  EpilogueType epilogue_types_[kMaxNumEpilogues];
+  float epilogue_params_[kMaxNumEpilogues];
   int num_epilogues_ = 0;
   bool is_a_row_major_;
   bool is_a_col_major_;

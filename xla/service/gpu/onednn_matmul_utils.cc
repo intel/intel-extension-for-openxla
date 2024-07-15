@@ -264,7 +264,7 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
           policy
               .add_epilogue(
                   c_data,
-                  ::gpu::xetla::XetlaGemmKernel<InputT>::EpilogueType::RES_ADD)
+                  ::gpu::xetla::EpilogueType::RES_ADD)
               .build();
         } else {
           return true;
@@ -283,13 +283,13 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
               .add_matrix_b(rhs)
               .add_epilogue(
                   bias_data,
-                  ::gpu::xetla::XetlaGemmKernel<InputT>::EpilogueType::BIAS)
+                  ::gpu::xetla::EpilogueType::BIAS)
               .build();
       if (fabs(beta) - 0.0f > 1e-6) {
         policy
             .add_epilogue(
                 c_data,
-                ::gpu::xetla::XetlaGemmKernel<InputT>::EpilogueType::RES_ADD,
+                ::gpu::xetla::EpilogueType::RES_ADD,
                 beta)
             .build();
       }
@@ -306,7 +306,7 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
               .add_matrix_b(rhs)
               .add_epilogue(
                   nullptr,
-                  ::gpu::xetla::XetlaGemmKernel<InputT>::EpilogueType::GELU)
+                  ::gpu::xetla::EpilogueType::GELU)
               .build();
       if (policy.fallback() == false) {
         return !policy.run(handle);
@@ -321,10 +321,10 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
               .add_matrix_b(rhs)
               .add_epilogue(
                   bias_data,
-                  ::gpu::xetla::XetlaGemmKernel<InputT>::EpilogueType::BIAS)
+                  ::gpu::xetla::EpilogueType::BIAS)
               .add_epilogue(
                   nullptr,
-                  ::gpu::xetla::XetlaGemmKernel<InputT>::EpilogueType::GELU)
+                  ::gpu::xetla::EpilogueType::GELU)
               .build();
       if (policy.fallback() == false) {
         return !policy.run(handle);
