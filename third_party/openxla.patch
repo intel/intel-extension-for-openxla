@@ -482,7 +482,7 @@ index 89b8f6d81..2ce9bc7cb 100644
  
  }  // namespace xla
 diff --git a/xla/pjrt/gpu/BUILD b/xla/pjrt/gpu/BUILD
-index 8586df664..26ba692dd 100644
+index 8586df664..08c476541 100644
 --- a/xla/pjrt/gpu/BUILD
 +++ b/xla/pjrt/gpu/BUILD
 @@ -40,6 +40,7 @@ cc_library(
@@ -493,6 +493,14 @@ index 8586df664..26ba692dd 100644
          ":gpu_helpers",
          ":gpu_metrics",
          ":gpu_topology",
+@@ -84,6 +85,7 @@ cc_library(
+         "//xla/stream_executor:device_memory",
+         "//xla/stream_executor:device_memory_allocator",
+         "//xla/stream_executor:platform",
++        "//xla/stream_executor/gpu:gpu_malloc_allocator",
+         "//xla/stream_executor/integrations:device_mem_allocator",
+         "//xla/stream_executor/integrations:tf_allocator_adapter",
+         "//xla/tsl/util:env_var",
 diff --git a/xla/pjrt/gpu/gpu_helpers.cc b/xla/pjrt/gpu/gpu_helpers.cc
 index c9c6fe4da..f46f7a690 100644
 --- a/xla/pjrt/gpu/gpu_helpers.cc
@@ -533,19 +541,20 @@ index c9c6fe4da..f46f7a690 100644
  
  }  // namespace xla
 diff --git a/xla/pjrt/gpu/se_gpu_pjrt_client.cc b/xla/pjrt/gpu/se_gpu_pjrt_client.cc
-index 9dec918f9..075676d23 100644
+index 9dec918f9..884b79948 100644
 --- a/xla/pjrt/gpu/se_gpu_pjrt_client.cc
 +++ b/xla/pjrt/gpu/se_gpu_pjrt_client.cc
-@@ -84,6 +84,8 @@ limitations under the License.
+@@ -84,6 +84,9 @@ limitations under the License.
  #include "tsl/platform/threadpool.h"
  #include "tsl/profiler/lib/connected_traceme.h"
  #include "tsl/profiler/lib/traceme.h"
++#include "xla/stream_executor/gpu/gpu_malloc_allocator.h"
 +#include "xla/stream_executor/sycl/hw_info.h"
 +#include "xla/tsl/util/env_var.h"
  
  #if defined(GOOGLE_CUDA) || defined(TENSORFLOW_USE_ROCM)
  #include "xla/pjrt/compile_options.pb.h"
-@@ -475,7 +477,7 @@ absl::string_view StreamExecutorGpuClient::platform_version() const {
+@@ -475,7 +478,7 @@ absl::string_view StreamExecutorGpuClient::platform_version() const {
  #elif GOOGLE_CUDA && defined(CUDART_VERSION)  // cuda
    return "cuda " STRINGIFY(CUDART_VERSION);
  #else
@@ -554,6 +563,64 @@ index 9dec918f9..075676d23 100644
  #endif  // TENSORFLOW_USE_ROCM && defined(TF_ROCM_VERSION)
  }
  
+@@ -750,6 +753,27 @@ StreamExecutorGpuClient::Load(std::unique_ptr<PjRtExecutable> executable) {
+ 
+ namespace {
+ 
++absl::StatusOr<std::vector<se::MultiDeviceAdapter::AllocatorInfo>>
++CreateDefaultGPUAllocator(
++    se::Platform* platform,
++    const std::map<int, std::unique_ptr<LocalDeviceState>>&
++        addressable_devices) {
++  CHECK_GT(addressable_devices.size(), 0);
++  std::vector<se::MultiDeviceAdapter::AllocatorInfo> allocators;
++
++  for (auto& ordinal_and_device : addressable_devices) {
++    se::StreamExecutor* executor = ordinal_and_device.second->executor();
++    int device_ordinal = executor->device_ordinal();
++
++    auto allocator = std::make_unique<se::GpuMallocAllocator>(
++        executor, tsl::PlatformDeviceId(device_ordinal));
++    allocators.emplace_back(std::move(allocator),
++                            ordinal_and_device.second->compute_stream(),
++                            /*memory_space=*/0);
++  }
++  return allocators;
++}
++
+ #if defined(GOOGLE_CUDA) && CUDA_VERSION >= 11020
+ 
+ absl::StatusOr<std::vector<se::MultiDeviceAdapter::AllocatorInfo>>
+@@ -864,17 +888,26 @@ GetStreamExecutorGpuDeviceAllocator(
+       }
+       break;
+     }
+-
+-    case GpuAllocatorConfig::Kind::kPlatform:
+-      LOG(INFO) << "Using platform allocator.";
++    case GpuAllocatorConfig::Kind::kPlatform: {
+       if (allocator_config.collective_memory_size != 0) {
+         LOG(WARNING)
+             << "collective_memory_size is non-zero, but allocator kind is set "
+                "to \"platform\". Collective memory will not be allocated.";
+       }
++      auto allocators_or =
++          CreateDefaultGPUAllocator(platform, addressable_devices);
++      if (allocators_or.ok()) {
++        LOG(INFO) << "Using platform allocator.";
++        allocators = std::move(allocators_or.value());
++        break;
++      }
++      LOG(ERROR) << "Failed to initialize platform allocator: "
++                 << allocators_or.status() << "; Please choose other kind allocator.";
++
+       // Returning null will cause the client to use the default backend
+       // allocator.
+       return nullptr;
++    }
+   }
+ 
+   // Add any additional allocators for alternate memory spaces.
 diff --git a/xla/pjrt/pjrt_compiler.h b/xla/pjrt/pjrt_compiler.h
 index d624fd0cf..88409f0ac 100644
 --- a/xla/pjrt/pjrt_compiler.h
@@ -6187,7 +6254,7 @@ index d0b239cf0..bbe9b91d7 100644
                                      Kernel* kernel) {
    GpuKernel* cuda_kernel = AsGpuKernel(kernel);
 diff --git a/xla/stream_executor/gpu/BUILD b/xla/stream_executor/gpu/BUILD
-index b4fabb305..37a851fac 100644
+index b4fabb305..73be6e20b 100644
 --- a/xla/stream_executor/gpu/BUILD
 +++ b/xla/stream_executor/gpu/BUILD
 @@ -10,6 +10,10 @@ load(
@@ -6219,6 +6286,45 @@ index b4fabb305..37a851fac 100644
      ]),
  )
  
+@@ -602,6 +610,38 @@ tsl_gpu_library(
+     ],
+ )
+ 
++tsl_gpu_library(
++    name = "gpu_malloc_allocator_header",
++    hdrs = ["gpu_malloc_allocator.h"],
++    deps = [
++        "//xla/stream_executor:stream_executor_headers",
++        "@com_google_absl//absl/base:core_headers",
++        "@com_google_absl//absl/container:flat_hash_map",
++        "@tsl//tsl/framework:allocator",
++        "@tsl//tsl/framework:device_id",
++        "@tsl//tsl/platform:mutex",
++    ],
++)
++
++tsl_gpu_library(
++    name = "gpu_malloc_allocator",
++    srcs = [
++        "gpu_malloc_allocator.cc",
++    ],
++    hdrs = ["gpu_malloc_allocator.h"],
++    deps = [
++        ":gpu_init_impl",
++        "//xla/stream_executor:stream_executor_headers",
++        "@com_google_absl//absl/base:core_headers",
++        "@com_google_absl//absl/container:flat_hash_map",
++        "@com_google_absl//absl/strings",
++        "@tsl//tsl/framework:allocator",
++        "@tsl//tsl/framework:device_id",
++        "@tsl//tsl/platform:logging",
++        "@tsl//tsl/platform:mutex",
++    ],
++)
++
+ cc_library(
+     name = "gpu_blas_lt",
+     srcs = ["gpu_blas_lt.cc"],
 diff --git a/xla/stream_executor/gpu/gpu_driver.h b/xla/stream_executor/gpu/gpu_driver.h
 index 91690f696..a5c9f4e27 100644
 --- a/xla/stream_executor/gpu/gpu_driver.h
@@ -6272,6 +6378,255 @@ index c86f49140..5560795dd 100644
  
  // Type traits to get CUDA complex types from std::complex<>.
  
+diff --git a/xla/stream_executor/gpu/gpu_malloc_allocator.cc b/xla/stream_executor/gpu/gpu_malloc_allocator.cc
+new file mode 100644
+index 000000000..fdd6d5961
+--- /dev/null
++++ b/xla/stream_executor/gpu/gpu_malloc_allocator.cc
+@@ -0,0 +1,154 @@
++/* Copyright (c) 2024 Intel Corporation
++
++Copyright 2021 The OpenXLA Authors.
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++    http://www.apache.org/licenses/LICENSE-2.0
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++
++#include "xla/stream_executor/gpu/gpu_malloc_allocator.h"
++
++#include <atomic>
++#include <cstddef>
++#include <map>
++#include <memory>
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "absl/strings/str_cat.h"
++#include "absl/strings/str_join.h"
++#include "xla/stream_executor/gpu/gpu_init.h"     // IWYU pragma: keep
++#include "xla/stream_executor/stream_executor.h"  // IWYU pragma: keep
++#include "tsl/framework/allocator.h"
++#include "tsl/framework/device_id.h"
++#include "tsl/platform/logging.h"
++#include "tsl/platform/mutex.h"
++
++namespace stream_executor {
++
++std::atomic<int> GpuMallocAllocator::number_instantiated_(0);
++
++GpuMallocAllocator::GpuMallocAllocator(StreamExecutor* executor,
++                                       tsl::PlatformDeviceId platform_device_id,
++                                       bool compute_stats)
++    : stream_exec_(executor),
++      name_(absl::StrCat("gpu", platform_device_id.value())) {
++  ++number_instantiated_;
++
++  if (compute_stats) {
++    stats_ = std::make_unique<tsl::AllocatorStats>();
++  }  // If not set, it means we do not compute stats.
++
++  VLOG(1) << Name() << " GPUMallocAsync initialized on platform: "
++          << platform_device_id.value();
++}
++
++GpuMallocAllocator::~GpuMallocAllocator() {}
++
++void* GpuMallocAllocator::AllocateRaw(size_t alignment, size_t num_bytes) {
++  CHECK(stream_exec_ != nullptr)
++      << "A stream executor must be added to the default gpu allocator";
++  // The lock is only needed when stats are enabled, but it must be around
++  // the cuMemAllocFromPoolAsync call as well to ensure consistency of the stats
++  // update.
++  std::unique_lock<tsl::mutex> lock(lock_, std::defer_lock);
++  if (stats_) {
++    lock.lock();
++  }
++  int64_t count = num_bytes / sizeof(uint8_t);
++  void* ptr = (stream_exec_->AllocateArray<uint8_t>(count, 0)).opaque();
++
++  if (ptr == nullptr) {
++    LOG(ERROR) << Name() << " failed to allocate " << num_bytes << " bytes: ";
++    if (stats_) {
++      LOG(ERROR) << "Stats: " << stats_->DebugString();
++    }
++
++    return nullptr;
++  }
++
++  // Update stats.
++  if (stats_) {
++    ++(stats_->num_allocs);
++    stats_->bytes_in_use += num_bytes;
++    if (stats_->bytes_in_use > stats_->peak_bytes_in_use) {
++      VLOG(9) << "New Peak memory usage of " << stats_->bytes_in_use
++              << " bytes.";
++    }
++    stats_->peak_bytes_in_use =
++        std::max(stats_->peak_bytes_in_use, stats_->bytes_in_use);
++    stats_->largest_alloc_size =
++        std::max<std::size_t>(stats_->largest_alloc_size, num_bytes);
++    bool ptr_inserted = size_map_.emplace(ptr, num_bytes).second;
++    DCHECK(ptr_inserted);
++  }
++  VLOG(1) << Name() << " Allocated " << num_bytes << " at " << ptr;
++  return ptr;
++}
++
++void GpuMallocAllocator::DeallocateRaw(void* ptr) {
++  if (ptr == nullptr) return;
++  // The lock is only needed when stats are enabled, but it must be around
++  // the cuMemFreeAsync call as well to ensure consistency of the stats update.
++  std::unique_lock<tsl::mutex> lock(lock_, std::defer_lock);
++  if (stats_) {
++    lock.lock();
++  }
++  auto device_memory_base = DeviceMemoryBase(ptr);
++  stream_exec_->Deallocate(&device_memory_base);
++
++  // Updates the stats.
++  if (stats_) {
++    DCHECK(size_map_.contains(ptr));
++    size_t size = size_map_[ptr];
++    stats_->bytes_in_use -= size;
++    size_map_.erase(ptr);
++  }
++
++  VLOG(1) << Name() << " Freed ptr: " << ptr;
++}
++
++bool GpuMallocAllocator::TracksAllocationSizes() const {
++  return static_cast<bool>(stats_);
++}
++
++size_t GpuMallocAllocator::RequestedSize(const void* ptr) const {
++  if (!stats_ || !ptr) return 0;
++  tsl::mutex_lock l(lock_);
++  return size_map_.at(ptr);
++}
++
++size_t GpuMallocAllocator::AllocatedSize(const void* ptr) const {
++  if (!stats_ || !ptr) return 0;
++  tsl::mutex_lock l(lock_);
++  return size_map_.at(ptr);
++}
++
++std::optional<tsl::AllocatorStats> GpuMallocAllocator::GetStats() {
++  if (!stats_) return std::nullopt;
++  tsl::mutex_lock l(lock_);
++  return *stats_;
++}
++
++bool GpuMallocAllocator::ClearStats() {
++  if (!stats_) return false;
++  tsl::mutex_lock l(lock_);
++  stats_->num_allocs = 0;
++  stats_->peak_bytes_in_use = stats_->bytes_in_use;
++  stats_->largest_alloc_size = 0;
++  return true;
++}
++
++void GpuMallocAllocator::SetStreamAndPreallocateMemory(void* stream) {
++  LOG(FATAL) <<  // Crash OK.
++      "Unimplemented. ";
++}
++
++}  // namespace stream_executor
+diff --git a/xla/stream_executor/gpu/gpu_malloc_allocator.h b/xla/stream_executor/gpu/gpu_malloc_allocator.h
+new file mode 100644
+index 000000000..ce441527d
+--- /dev/null
++++ b/xla/stream_executor/gpu/gpu_malloc_allocator.h
+@@ -0,0 +1,83 @@
++/* Copyright (c) 2024 Intel Corporation
++
++Copyright 2021 The OpenXLA Authors.
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++    http://www.apache.org/licenses/LICENSE-2.0
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++
++#ifndef XLA_STREAM_EXECUTOR_GPU_GPU_MALLOC_ALLOCATOR_H_
++#define XLA_STREAM_EXECUTOR_GPU_GPU_MALLOC_ALLOCATOR_H_
++
++#include <atomic>
++#include <cstddef>
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "absl/base/thread_annotations.h"
++#include "absl/container/flat_hash_map.h"
++#include "xla/stream_executor/stream_executor.h"  // IWYU pragma: keep
++#include "tsl/framework/allocator.h"
++#include "tsl/framework/device_id.h"
++#include "tsl/platform/mutex.h"
++
++namespace stream_executor {
++
++class GpuMallocAllocator : public tsl::Allocator {
++ public:
++  explicit GpuMallocAllocator(StreamExecutor* executor,
++                              tsl::PlatformDeviceId platform_device_id,
++                              bool compute_stats = true);
++  ~GpuMallocAllocator() override;
++  std::string Name() override { return name_; }
++  void* AllocateRaw(size_t alignment,
++                    size_t num_bytes) override ABSL_NO_THREAD_SAFETY_ANALYSIS;
++  void DeallocateRaw(void* ptr) override ABSL_NO_THREAD_SAFETY_ANALYSIS;
++
++  bool TracksAllocationSizes() const override;
++
++  size_t RequestedSize(const void* ptr) const override;
++
++  size_t AllocatedSize(const void* ptr) const override;
++
++  std::optional<tsl::AllocatorStats> GetStats() override;
++
++  bool ClearStats() override;
++
++  void SetStreamAndPreallocateMemory(void* stream) override;
++
++  static int GetInstantiatedCountTestOnly() { return number_instantiated_; }
++
++  tsl::AllocatorMemoryType GetMemoryType() const override {
++    return tsl::AllocatorMemoryType::kDevice;
++  }
++
++ private:
++  StreamExecutor* stream_exec_;
++
++  // Just a counter for the number of time this class is instantiated.
++  // Only useful for tests.
++  static std::atomic<int> number_instantiated_;
++
++  std::string name_;
++
++  GpuMallocAllocator(const GpuMallocAllocator&) = delete;
++  void operator=(const GpuMallocAllocator&) = delete;
++
++  // Stats.
++  // Structures mutable after construction
++  mutable tsl::mutex lock_;
++  std::unique_ptr<tsl::AllocatorStats> stats_ ABSL_PT_GUARDED_BY(lock_);
++  absl::flat_hash_map<const void*, size_t> size_map_ ABSL_GUARDED_BY(lock_);
++};
++
++}  // namespace stream_executor
++
++#endif  // XLA_STREAM_EXECUTOR_GPU_GPU_MALLOC_ALLOCATOR_H_
 diff --git a/xla/stream_executor/gpu/gpu_timer.cc b/xla/stream_executor/gpu/gpu_timer.cc
 index ecd3f40c6..048ac6d49 100644
 --- a/xla/stream_executor/gpu/gpu_timer.cc

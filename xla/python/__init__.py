@@ -16,6 +16,7 @@
 
 import logging
 from pathlib import Path
+import os
 import platform
 import sys
 
@@ -38,6 +39,14 @@ def initialize():
         f"was built or installed.")
 
   options = dict()
+  options['platform_name'] = 'sycl'
+  allocator = os.getenv('XLA_PYTHON_CLIENT_ALLOCATOR', 'default').lower()
+  if allocator not in ('default', 'platform', 'bfc', 'cuda_async'):
+    raise ValueError(
+        'XLA_PYTHON_CLIENT_ALLOCATOR env var must be "default", "platform", '
+        '"bfc", or "cuda_async", got "%s"' % allocator
+    )
+  options['allocator'] = allocator
 
   # xb.CUDA_VISIBLE_DEVICES is set by jax.distribute.initialize(local_device_ids).
   # xb.CUDA_VISIBLE_DEVICES would has default value 'all' if users not call 
