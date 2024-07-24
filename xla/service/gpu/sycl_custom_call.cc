@@ -102,8 +102,8 @@ static absl::Status SyclConvolutionBiasActivationForward(
             primitive_util::ByteWidth(S.dtype)));
   }
   CudnnConvKind conv_kind = CudnnConvKind::kForwardActivation;
-  return SyclConvolutionBase(stream, &scratch_allocator, operand_se_buffers,
-                             Y, dict, conv_kind);
+  return SyclConvolutionBase(stream, &scratch_allocator, operand_se_buffers, Y,
+                             dict, conv_kind);
 }
 
 XLA_FFI_DEFINE_HANDLER(kSyclConvolutionForward, SyclConvolutionForward,
@@ -154,7 +154,8 @@ static absl::Status SyclGemm(se::Stream* stream,
   ffi::BufferBase rhs = *args.get<ffi::BufferBase>(1);
   ffi::BufferBase output = *args.get<ffi::BufferBase>(2);
   return RunGemmCustomCall(&lhs, &rhs, /*add*/ nullptr, &output,
-                           /*bias*/ nullptr, stream, dict, SYCLGemm::GemmBackendEpilogue::DEFAULT,
+                           /*bias*/ nullptr, stream, dict,
+                           SYCLGemm::GemmBackendEpilogue::DEFAULT,
                            &scratch_allocator);
 }
 
@@ -163,15 +164,15 @@ static absl::Status SyclLtMatmul(se::Stream* stream,
                                  ffi::RemainingArgs args,
                                  ffi::Dictionary dict) {
   int32_t epilogue = *dict.get<int32_t>("epilogue");
-  auto epilogue_cuda = static_cast<xla::gpu::GemmBackendConfig_Epilogue>(epilogue);
+  auto epilogue_cuda =
+      static_cast<xla::gpu::GemmBackendConfig_Epilogue>(epilogue);
   TF_ASSIGN_OR_RETURN(SYCLGemm::GemmBackendEpilogue epilogue_sycl,
                       SYCLGemm::AsSYCLEpilogue(epilogue_cuda));
 
   TF_ASSIGN_OR_RETURN(bool has_vector_bias,
                       SYCLGemm::EpilogueAddsVectorBias(epilogue_sycl));
-  int64_t gemm_config_ptr = *dict.get<int64_t>("gemm_config_ptr");
-  GemmConfig gemm_config = *reinterpret_cast<GemmConfig*>(gemm_config_ptr);
-  bool has_matrix_bias = gemm_config.beta != 0;
+
+  bool has_matrix_bias = *dict.get<float>("beta") != 0;
   TF_ASSIGN_OR_RETURN(bool has_aux_output,
                       SYCLGemm::EpilogueHasAuxiliaryOutput(epilogue_sycl));
 

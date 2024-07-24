@@ -3012,7 +3012,7 @@ index 7403531a8..cc3b8aadd 100644
    // Extract the memory value returned from atomicCAS and store it as
    // cas_old_output.
 diff --git a/xla/service/gpu/ir_emitter_unnested.cc b/xla/service/gpu/ir_emitter_unnested.cc
-index 4ba739dba..475cd1217 100644
+index 4ba739dba..a84be445e 100644
 --- a/xla/service/gpu/ir_emitter_unnested.cc
 +++ b/xla/service/gpu/ir_emitter_unnested.cc
 @@ -1,4 +1,6 @@
@@ -3240,7 +3240,7 @@ index 4ba739dba..475cd1217 100644
  absl::Status IrEmitterUnnested::EmitCholeskyThunk(const HloInstruction* instr) {
    TF_ASSIGN_OR_RETURN(CholeskyOptions options,
                        instr->backend_config<CholeskyOptions>());
-@@ -1301,7 +1333,108 @@ absl::Status IrEmitterUnnested::EmitCholeskyThunk(const HloInstruction* instr) {
+@@ -1301,7 +1333,144 @@ absl::Status IrEmitterUnnested::EmitCholeskyThunk(const HloInstruction* instr) {
  
    return absl::OkStatus();
  }
@@ -3250,8 +3250,6 @@ index 4ba739dba..475cd1217 100644
 +#ifdef TENSORFLOW_USE_SYCL
 +absl::StatusOr<CustomCallThunk::AttributesMap> BuildAttributesMap(
 +    const HloCustomCallInstruction* instr) {
-+  // After 0.4.26, ffi support absl::span.
-+  // Below attrs can be refine to absl::span for reducing key-value
 +  CustomCallThunk::AttributesMap attrs;
 +  if (IsCustomCallToDnnConvolution(*instr)) {
 +    TF_ASSIGN_OR_RETURN(auto gpu_config,
@@ -3259,10 +3257,14 @@ index 4ba739dba..475cd1217 100644
 +    const CudnnConvBackendConfig& backend_config =
 +        gpu_config.cudnn_conv_backend_config();
 +    TF_ASSIGN_OR_RETURN(CudnnConvKind kind, GetCudnnConvKind(instr));
-+    attrs["conv_result_scale"] =  static_cast<float>(backend_config.conv_result_scale());
-+    attrs["side_input_scale"] =  static_cast<float>(backend_config.side_input_scale());
-+    attrs["activation_mode"] =  static_cast<int32_t>(backend_config.activation_mode());
-+    attrs["leakyrelu_alpha"] =  static_cast<float>(backend_config.leakyrelu_alpha());
++    attrs["conv_result_scale"] =
++        static_cast<float>(backend_config.conv_result_scale());
++    attrs["side_input_scale"] =
++        static_cast<float>(backend_config.side_input_scale());
++    attrs["activation_mode"] =
++        static_cast<int32_t>(backend_config.activation_mode());
++    attrs["leakyrelu_alpha"] =
++        static_cast<float>(backend_config.leakyrelu_alpha());
 +
 +    const Window& window = instr->window();
 +    const ConvolutionDimensionNumbers& dnums =
@@ -3333,14 +3335,48 @@ index 4ba739dba..475cd1217 100644
 +                        instr->backend_config<xla::gpu::GpuBackendConfig>());
 +    xla::gpu::GemmBackendConfig config = gpu_config.gemm_backend_config();
 +    xla::gpu::GemmBackendConfig_Epilogue epilogue = config.epilogue();
-+    TF_ASSIGN_OR_RETURN(
-+      auto gemm_config,
-+      GemmConfig::For(static_cast<const HloInstruction*>(instr)));
-+    GemmConfig* gemm_config_ptr = new GemmConfig(gemm_config);
 +    attrs["epilogue"] = static_cast<int32_t>(epilogue);
-+    // SYCL TODO:
-+    // gemm_config may be split into separate parameters and added to attrs later.
-+    attrs["gemm_config_ptr"] = reinterpret_cast<int64_t>(gemm_config_ptr);
++
++    TF_ASSIGN_OR_RETURN(
++        auto gemm_config,
++        GemmConfig::For(static_cast<const HloInstruction*>(instr)));
++
++    attrs["lhs_layout_dtype"] =
++        static_cast<int32_t>(gemm_config.lhs_layout.dtype);
++    attrs["lhs_order"] = static_cast<int32_t>(gemm_config.lhs_layout.order);
++    attrs["lhs_num_cols"] = gemm_config.lhs_layout.num_cols;
++    attrs["lhs_num_rows"] = gemm_config.lhs_layout.num_rows;
++    attrs["lhs_batch_stride"] = gemm_config.lhs_layout.batch_stride;
++    attrs["lhs_leading_dim_stride"] = gemm_config.lhs_layout.leading_dim_stride;
++
++    attrs["rhs_layout_dtype"] =
++        static_cast<int32_t>(gemm_config.rhs_layout.dtype);
++    attrs["rhs_order"] = static_cast<int32_t>(gemm_config.rhs_layout.order);
++    attrs["rhs_num_cols"] = gemm_config.rhs_layout.num_cols;
++    attrs["rhs_num_rows"] = gemm_config.rhs_layout.num_rows;
++    attrs["rhs_batch_stride"] = gemm_config.rhs_layout.batch_stride;
++    attrs["rhs_leading_dim_stride"] = gemm_config.rhs_layout.leading_dim_stride;
++
++    attrs["output_layout_dtype"] =
++        static_cast<int32_t>(gemm_config.output_layout.dtype);
++    attrs["output_order"] =
++        static_cast<int32_t>(gemm_config.output_layout.order);
++    attrs["output_num_cols"] = gemm_config.output_layout.num_cols;
++    attrs["output_num_rows"] = gemm_config.output_layout.num_rows;
++    attrs["output_batch_stride"] = gemm_config.output_layout.batch_stride;
++    attrs["output_leading_dim_stride"] =
++        gemm_config.output_layout.leading_dim_stride;
++
++    attrs["batch_size"] =
++        static_cast<int64_t>(gemm_config.output_layout.batch_size);
++    attrs["alpha"] = static_cast<float>(gemm_config.alpha.real());
++    attrs["beta"] = static_cast<float>(gemm_config.beta);
++
++    // config.algorithm is less than 0, thus 0 means no algorithm
++    if (gemm_config.algorithm.has_value()) {
++      attrs["algorithm"] = static_cast<int64_t>(gemm_config.algorithm.value());
++    } else
++      attrs["algorithm"] = static_cast<int64_t>(0);
 +  } else {
 +    return absl::InternalError("Unknown CustomCall To SYCL FFI Call");
 +  }
@@ -3350,7 +3386,7 @@ index 4ba739dba..475cd1217 100644
  
  absl::Status IrEmitterUnnested::EmitCustomCallThunk(
      const HloCustomCallInstruction* instr) {
-@@ -1431,6 +1564,12 @@ absl::Status IrEmitterUnnested::EmitCustomCallThunk(
+@@ -1431,6 +1600,12 @@ absl::Status IrEmitterUnnested::EmitCustomCallThunk(
        break;
  
      case CustomCallApiVersion::API_VERSION_TYPED_FFI:
@@ -3363,7 +3399,7 @@ index 4ba739dba..475cd1217 100644
        if (!backend_config_str.empty()) {
          mlir::Attribute attr = mlir::parseAttribute(
              backend_config_str, ir_emitter_context_->mlir_context());
-@@ -1443,7 +1582,7 @@ absl::Status IrEmitterUnnested::EmitCustomCallThunk(
+@@ -1443,7 +1618,7 @@ absl::Status IrEmitterUnnested::EmitCustomCallThunk(
              "dictionary attribute");
        }
        break;
@@ -3372,7 +3408,7 @@ index 4ba739dba..475cd1217 100644
      default:
        return Internal("Unknown custom-call API version enum value: %d",
                        instr->api_version());
-@@ -1484,7 +1623,7 @@ absl::Status IrEmitterUnnested::EmitFftThunk(const HloFftInstruction* instr) {
+@@ -1484,7 +1659,7 @@ absl::Status IrEmitterUnnested::EmitFftThunk(const HloFftInstruction* instr) {
    return absl::OkStatus();
  }
  
@@ -3381,7 +3417,7 @@ index 4ba739dba..475cd1217 100644
  
  absl::Status IrEmitterUnnested::EmitTriangularSolveCustomCall(
      const HloInstruction* instr) {
-@@ -1564,7 +1703,7 @@ absl::Status IrEmitterUnnested::EmitTriangularSolveCustomCall(
+@@ -1564,7 +1739,7 @@ absl::Status IrEmitterUnnested::EmitTriangularSolveCustomCall(
    }
    return absl::OkStatus();
  }
@@ -3390,7 +3426,7 @@ index 4ba739dba..475cd1217 100644
  
  absl::Status IrEmitterUnnested::EmitTopKCustomCall(
      const HloCustomCallInstruction* instr) {
-@@ -2617,6 +2756,7 @@ absl::Status IrEmitterUnnested::EmitCopyStartThunk(
+@@ -2617,6 +2792,7 @@ absl::Status IrEmitterUnnested::EmitCopyStartThunk(
  }
  
  absl::Status IrEmitterUnnested::EmitSendThunk(const HloSendInstruction* instr) {
@@ -3398,7 +3434,7 @@ index 4ba739dba..475cd1217 100644
    if (!instr->channel_id().has_value())
      return absl::InternalError("Unknown send instruction channel id");
  
-@@ -2669,12 +2809,14 @@ absl::Status IrEmitterUnnested::EmitSendThunk(const HloSendInstruction* instr) {
+@@ -2669,12 +2845,14 @@ absl::Status IrEmitterUnnested::EmitSendThunk(const HloSendInstruction* instr) {
        *instr->channel_id(), send_recv_events_,
        ConvertFrontendAttributes(instr->frontend_attributes()),
        DeviceConstraint(instr)));
@@ -3414,7 +3450,7 @@ index 4ba739dba..475cd1217 100644
    if (!instr->channel_id().has_value())
      return absl::InternalError("Unknown send done instruction channel id");
  
-@@ -2685,11 +2827,13 @@ absl::Status IrEmitterUnnested::EmitSendDoneThunk(
+@@ -2685,11 +2863,13 @@ absl::Status IrEmitterUnnested::EmitSendDoneThunk(
    AddThunkToThunkSequence(std::make_unique<SendDoneThunk>(
        Thunk::ThunkInfo::WithProfileAnnotation(instr), *instr->channel_id(),
        send_recv_events_, DeviceConstraint(instr)));
@@ -3429,7 +3465,7 @@ index 4ba739dba..475cd1217 100644
    if (!instr->channel_id().has_value())
      return absl::InternalError("Unknown recv instruction channel id");
    TF_RET_CHECK(instr->shape().IsTuple());
-@@ -2744,11 +2888,13 @@ absl::Status IrEmitterUnnested::EmitRecvThunk(const HloRecvInstruction* instr) {
+@@ -2744,11 +2924,13 @@ absl::Status IrEmitterUnnested::EmitRecvThunk(const HloRecvInstruction* instr) {
        ConvertFrontendAttributes(instr->frontend_attributes()),
        DeviceConstraint(instr)));
  
@@ -3444,7 +3480,7 @@ index 4ba739dba..475cd1217 100644
    if (!instr->channel_id().has_value())
      return absl::InternalError("Unknown recv done instruction channel id");
  
-@@ -2759,8 +2905,9 @@ absl::Status IrEmitterUnnested::EmitRecvDoneThunk(
+@@ -2759,8 +2941,9 @@ absl::Status IrEmitterUnnested::EmitRecvDoneThunk(
    AddThunkToThunkSequence(std::make_unique<RecvDoneThunk>(
        Thunk::ThunkInfo::WithProfileAnnotation(instr), *instr->channel_id(),
        send_recv_events_, DeviceConstraint(instr)));
@@ -3455,7 +3491,7 @@ index 4ba739dba..475cd1217 100644
  }
  
  absl::Status IrEmitterUnnested::EmitHloInstruction(
-@@ -2871,47 +3018,67 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
+@@ -2871,47 +3054,67 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
      case HloOpcode::kCustomCall: {
        auto* custom_call = Cast<HloCustomCallInstruction>(instr);
        if (IsLegacyCublasMatmul(*instr)) {
@@ -4816,7 +4852,7 @@ index 3f9db4ea2..2aa8d4030 100644
    absl::flat_hash_map<const stream_executor::Stream*,
                        std::unique_ptr<GenericConvRunner>>
 diff --git a/xla/service/gpu/runtime/custom_call_thunk.cc b/xla/service/gpu/runtime/custom_call_thunk.cc
-index 0eaf0aaf4..172ed916b 100644
+index 0eaf0aaf4..d9c4b733c 100644
 --- a/xla/service/gpu/runtime/custom_call_thunk.cc
 +++ b/xla/service/gpu/runtime/custom_call_thunk.cc
 @@ -38,6 +38,7 @@ limitations under the License.
@@ -4836,28 +4872,7 @@ index 0eaf0aaf4..172ed916b 100644
  #include "xla/stream_executor/gpu/gpu_stream.h"
  #endif
  
-@@ -79,6 +80,20 @@ CustomCallThunk::CustomCallThunk(ThunkInfo thunk_info, XLA_FFI_Handler* handler,
-       attributes_(std::move(attributes)),
-       called_computation_(called_computation) {}
- 
-+#ifdef TENSORFLOW_USE_SYCL
-+  CustomCallThunk::~CustomCallThunk(){
-+    if(attributes_.find("gemm_config_ptr") != attributes_.end()){
-+      GemmConfig* gemm_config_ptr = 
-+        reinterpret_cast<GemmConfig*>(
-+          std::get<int64_t>(
-+            std::get<std::variant<int32_t, int64_t, float>>(attributes_["gemm_config_ptr"])));
-+      if(gemm_config_ptr != nullptr){
-+        delete gemm_config_ptr;
-+      }
-+    }
-+  }
-+#endif
-+
- absl::Status CustomCallThunk::ExecuteCustomCall(const ExecuteParams& params) {
-   // gpu_stream is CUstream or e.g. the equivalent type in ROCm.
-   std::vector<void*> buffers;
-@@ -98,7 +113,7 @@ absl::Status CustomCallThunk::ExecuteCustomCall(const ExecuteParams& params) {
+@@ -98,7 +99,7 @@ absl::Status CustomCallThunk::ExecuteCustomCall(const ExecuteParams& params) {
      }
    }
  
@@ -4866,7 +4881,7 @@ index 0eaf0aaf4..172ed916b 100644
    auto gpu_stream = se::gpu::AsGpuStreamValue(params.stream);
    XlaCustomCallStatus custom_call_status;
    call_target_(gpu_stream, buffers.data(), opaque_.data(), opaque_.size(),
-@@ -109,11 +124,11 @@ absl::Status CustomCallThunk::ExecuteCustomCall(const ExecuteParams& params) {
+@@ -109,11 +110,11 @@ absl::Status CustomCallThunk::ExecuteCustomCall(const ExecuteParams& params) {
    } else {
      return absl::OkStatus();
    }
@@ -4881,7 +4896,7 @@ index 0eaf0aaf4..172ed916b 100644
  
  absl::Status CustomCallThunk::ExecuteFfiHandler(const ExecuteParams& params) {
 diff --git a/xla/service/gpu/runtime/custom_call_thunk.h b/xla/service/gpu/runtime/custom_call_thunk.h
-index 02679d2e0..2bd5a73c6 100644
+index 02679d2e0..1bcb07264 100644
 --- a/xla/service/gpu/runtime/custom_call_thunk.h
 +++ b/xla/service/gpu/runtime/custom_call_thunk.h
 @@ -32,7 +32,7 @@ limitations under the License.
@@ -4908,17 +4923,6 @@ index 02679d2e0..2bd5a73c6 100644
  
    using CustomCallTarget = std::function<void(Stream, void**, const char*,
                                                size_t, XlaCustomCallStatus*)>;
-@@ -91,6 +91,10 @@ class CustomCallThunk : public Thunk {
-   const std::vector<std::optional<Slice>>& results() const { return results_; }
-   absl::string_view opaque() const { return opaque_; }
- 
-+#ifdef TENSORFLOW_USE_SYCL
-+  ~CustomCallThunk();
-+#endif
-+
-  private:
-   absl::Status ExecuteCustomCall(const ExecuteParams& params);
-   absl::Status ExecuteFfiHandler(const ExecuteParams& params);
 diff --git a/xla/service/gpu/runtime/fft_thunk.cc b/xla/service/gpu/runtime/fft_thunk.cc
 index 728c36752..fccde5793 100644
 --- a/xla/service/gpu/runtime/fft_thunk.cc

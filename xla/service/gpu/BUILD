@@ -47,6 +47,8 @@ xetla_library(
         ":scratch_allocator",
         "//xla/service:onednn_util",
         "//xla/service/gpu/xetla/gemm:gemm_kernel",
+        "@xla//xla/ffi",
+        "@xla//xla/ffi:ffi_api",
         "@xla//xla/service/gpu:matmul_utils",
     ],
 )
@@ -58,6 +60,8 @@ cc_library(
     deps = [
         ":sycl_onednn",
         "//xla/stream_executor/sycl:hw_info",
+        "@xla//xla/ffi",
+        "@xla//xla/ffi:ffi_api",
         "@com_google_absl//absl/algorithm:container",
         "@tsl//tsl/platform:errors",
         "@tsl//tsl/platform:logging",

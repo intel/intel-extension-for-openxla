@@ -32,109 +32,109 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-namespace SYCLGemm{
-    absl::StatusOr<GemmBackendEpilogue> EpilogueCast(std::string& epilogue){
-        if(epilogue == "DEFAULT"){
-            return GemmBackendEpilogue::DEFAULT;
-        }else if(epilogue == "RELU"){
-            return GemmBackendEpilogue::RELU;
-        }else if(epilogue == "GELU"){
-            return GemmBackendEpilogue::GELU;
-        }else if(epilogue == "BIAS"){
-            return GemmBackendEpilogue::BIAS;
-        }else if(epilogue == "BIAS_RELU"){
-            return GemmBackendEpilogue::BIAS_RELU;
-        }else if(epilogue == "BIAS_GELU"){
-            return GemmBackendEpilogue::BIAS_GELU;
-        }else if(epilogue == "GELU_AUX"){
-            return GemmBackendEpilogue::GELU_AUX;
-        }else if(epilogue == "BIAS_GELU_AUX"){
-            return GemmBackendEpilogue::BIAS_GELU_AUX;
-        }else{
-            return Internal("Unknown Epilogue.");
-        }
-    }
-
-    absl::StatusOr<std::string> EpilogueCast(GemmBackendEpilogue epilogue){
-        if(epilogue == GemmBackendEpilogue::DEFAULT){
-            return "DEFAULT";
-        }else if(epilogue == GemmBackendEpilogue::RELU){
-            return "RELU";
-        }else if(epilogue == GemmBackendEpilogue::GELU){
-            return "GELU";
-        }else if(epilogue == GemmBackendEpilogue::BIAS){
-            return "BIAS";
-        }else if(epilogue == GemmBackendEpilogue::BIAS_RELU){
-            return "BIAS_RELU";
-        }else if(epilogue == GemmBackendEpilogue::BIAS_GELU){
-            return "BIAS_GELU";
-        }else if(epilogue == GemmBackendEpilogue::GELU_AUX){
-            return "GELU_AUX";
-        }else if(epilogue == GemmBackendEpilogue::BIAS_GELU_AUX){
-            return "BIAS_GELU_AUX";
-        }else{
-            return Internal("Unknown Epilogue.");
-        }
-    }
-
-    absl::StatusOr<bool> EpilogueAddsVectorBias(GemmBackendEpilogue epilogue) {
-        switch (epilogue) {
-            case GemmBackendEpilogue::DEFAULT:
-            case GemmBackendEpilogue::RELU:
-            case GemmBackendEpilogue::GELU:
-            case GemmBackendEpilogue::GELU_AUX:
-                return false;
-            case GemmBackendEpilogue::BIAS:
-            case GemmBackendEpilogue::BIAS_RELU:
-            case GemmBackendEpilogue::BIAS_GELU:
-            case GemmBackendEpilogue::BIAS_GELU_AUX:
-                return true;
-            default:
-                return Internal("Unknown Epilogue.");
-        }
-    }
-
-    absl::StatusOr<bool> EpilogueHasAuxiliaryOutput(GemmBackendEpilogue epilogue) {
-        switch (epilogue) {
-            case GemmBackendEpilogue::DEFAULT:
-            case GemmBackendEpilogue::RELU:
-            case GemmBackendEpilogue::GELU:
-            case GemmBackendEpilogue::BIAS:
-            case GemmBackendEpilogue::BIAS_RELU:
-            case GemmBackendEpilogue::BIAS_GELU:
-                return false;
-            case GemmBackendEpilogue::GELU_AUX:
-            case GemmBackendEpilogue::BIAS_GELU_AUX:
-                return true;
-            default:
-              return Internal("Unknown Epilogue.");
-        }
-    }
-
-    absl::StatusOr<GemmBackendEpilogue> AsSYCLEpilogue(
-        GemmBackendConfig_Epilogue epilogue) {
-          switch (epilogue) {
-            case GemmBackendConfig::DEFAULT:
-              return GemmBackendEpilogue::DEFAULT;
-            case GemmBackendConfig::RELU:
-              return GemmBackendEpilogue::RELU;
-            case GemmBackendConfig::GELU:
-              return GemmBackendEpilogue::GELU;
-            case GemmBackendConfig::GELU_AUX:
-              return GemmBackendEpilogue::GELU_AUX;
-            case GemmBackendConfig::BIAS:
-              return GemmBackendEpilogue::BIAS;
-            case GemmBackendConfig::BIAS_RELU:
-              return GemmBackendEpilogue::BIAS_RELU;
-            case GemmBackendConfig::BIAS_GELU:
-              return GemmBackendEpilogue::BIAS_GELU;
-            case GemmBackendConfig::BIAS_GELU_AUX:
-              return GemmBackendEpilogue::BIAS_GELU_AUX;
-            default:
-              return Internal("Unsupported Epilogue.");
-          }
-    }
+namespace SYCLGemm {
+absl::StatusOr<GemmBackendEpilogue> EpilogueCast(std::string& epilogue) {
+  if (epilogue == "DEFAULT") {
+    return GemmBackendEpilogue::DEFAULT;
+  } else if (epilogue == "RELU") {
+    return GemmBackendEpilogue::RELU;
+  } else if (epilogue == "GELU") {
+    return GemmBackendEpilogue::GELU;
+  } else if (epilogue == "BIAS") {
+    return GemmBackendEpilogue::BIAS;
+  } else if (epilogue == "BIAS_RELU") {
+    return GemmBackendEpilogue::BIAS_RELU;
+  } else if (epilogue == "BIAS_GELU") {
+    return GemmBackendEpilogue::BIAS_GELU;
+  } else if (epilogue == "GELU_AUX") {
+    return GemmBackendEpilogue::GELU_AUX;
+  } else if (epilogue == "BIAS_GELU_AUX") {
+    return GemmBackendEpilogue::BIAS_GELU_AUX;
+  } else {
+    return Internal("Unknown Epilogue.");
+  }
 }
+
+absl::StatusOr<std::string> EpilogueCast(GemmBackendEpilogue epilogue) {
+  if (epilogue == GemmBackendEpilogue::DEFAULT) {
+    return "DEFAULT";
+  } else if (epilogue == GemmBackendEpilogue::RELU) {
+    return "RELU";
+  } else if (epilogue == GemmBackendEpilogue::GELU) {
+    return "GELU";
+  } else if (epilogue == GemmBackendEpilogue::BIAS) {
+    return "BIAS";
+  } else if (epilogue == GemmBackendEpilogue::BIAS_RELU) {
+    return "BIAS_RELU";
+  } else if (epilogue == GemmBackendEpilogue::BIAS_GELU) {
+    return "BIAS_GELU";
+  } else if (epilogue == GemmBackendEpilogue::GELU_AUX) {
+    return "GELU_AUX";
+  } else if (epilogue == GemmBackendEpilogue::BIAS_GELU_AUX) {
+    return "BIAS_GELU_AUX";
+  } else {
+    return Internal("Unknown Epilogue.");
+  }
+}
+
+absl::StatusOr<bool> EpilogueAddsVectorBias(GemmBackendEpilogue epilogue) {
+  switch (epilogue) {
+    case GemmBackendEpilogue::DEFAULT:
+    case GemmBackendEpilogue::RELU:
+    case GemmBackendEpilogue::GELU:
+    case GemmBackendEpilogue::GELU_AUX:
+      return false;
+    case GemmBackendEpilogue::BIAS:
+    case GemmBackendEpilogue::BIAS_RELU:
+    case GemmBackendEpilogue::BIAS_GELU:
+    case GemmBackendEpilogue::BIAS_GELU_AUX:
+      return true;
+    default:
+      return Internal("Unknown Epilogue.");
+  }
+}
+
+absl::StatusOr<bool> EpilogueHasAuxiliaryOutput(GemmBackendEpilogue epilogue) {
+  switch (epilogue) {
+    case GemmBackendEpilogue::DEFAULT:
+    case GemmBackendEpilogue::RELU:
+    case GemmBackendEpilogue::GELU:
+    case GemmBackendEpilogue::BIAS:
+    case GemmBackendEpilogue::BIAS_RELU:
+    case GemmBackendEpilogue::BIAS_GELU:
+      return false;
+    case GemmBackendEpilogue::GELU_AUX:
+    case GemmBackendEpilogue::BIAS_GELU_AUX:
+      return true;
+    default:
+      return Internal("Unknown Epilogue.");
+  }
+}
+
+absl::StatusOr<GemmBackendEpilogue> AsSYCLEpilogue(
+    GemmBackendConfig_Epilogue epilogue) {
+  switch (epilogue) {
+    case GemmBackendConfig::DEFAULT:
+      return GemmBackendEpilogue::DEFAULT;
+    case GemmBackendConfig::RELU:
+      return GemmBackendEpilogue::RELU;
+    case GemmBackendConfig::GELU:
+      return GemmBackendEpilogue::GELU;
+    case GemmBackendConfig::GELU_AUX:
+      return GemmBackendEpilogue::GELU_AUX;
+    case GemmBackendConfig::BIAS:
+      return GemmBackendEpilogue::BIAS;
+    case GemmBackendConfig::BIAS_RELU:
+      return GemmBackendEpilogue::BIAS_RELU;
+    case GemmBackendConfig::BIAS_GELU:
+      return GemmBackendEpilogue::BIAS_GELU;
+    case GemmBackendConfig::BIAS_GELU_AUX:
+      return GemmBackendEpilogue::BIAS_GELU_AUX;
+    default:
+      return Internal("Unsupported Epilogue.");
+  }
+}
+}  // namespace SYCLGemm
 
 // Returns the xetla native type (eg, float) corresponding to the given template
 // parameter XLA primitive type (eg, F32).
@@ -247,11 +247,11 @@ std::enable_if_t<std::is_same_v<InputT, ::gpu::xetla::bf16> ||
                      std::is_same_v<InputT, sycl::half>,
                  absl::StatusOr<bool>>
 RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
-             const MatrixDescriptor& rhs, const MatrixDescriptor& c,
+             const MatrixDescriptor& rhs, se::DeviceMemoryBase c,
              const MatrixDescriptor& out, se::DeviceMemoryBase bias,
              SYCLGemm::GemmBackendEpilogue epilogue, float beta) {
   void* bias_data = const_cast<void*>(bias.opaque());
-  void* c_data = const_cast<void*>(c.data.opaque());
+  void* c_data = const_cast<void*>(c.opaque());
   switch (epilogue) {
     case SYCLGemm::GemmBackendEpilogue::DEFAULT: {
       auto policy = ::gpu::xetla::XetlaGemmKernel<InputT>()
@@ -261,10 +261,7 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
                         .build();
       if (fabs(beta) - 0.0f > 1e-6) {
         if (fabs(beta) - 1.0f < 1e-6) {
-          policy
-              .add_epilogue(
-                  c_data,
-                  ::gpu::xetla::EpilogueType::RES_ADD)
+          policy.add_epilogue(c_data, ::gpu::xetla::EpilogueType::RES_ADD)
               .build();
         } else {
           return true;
@@ -281,16 +278,10 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
               .add_matrix_c(out)
               .add_matrix_a(lhs)
               .add_matrix_b(rhs)
-              .add_epilogue(
-                  bias_data,
-                  ::gpu::xetla::EpilogueType::BIAS)
+              .add_epilogue(bias_data, ::gpu::xetla::EpilogueType::BIAS)
               .build();
       if (fabs(beta) - 0.0f > 1e-6) {
-        policy
-            .add_epilogue(
-                c_data,
-                ::gpu::xetla::EpilogueType::RES_ADD,
-                beta)
+        policy.add_epilogue(c_data, ::gpu::xetla::EpilogueType::RES_ADD, beta)
             .build();
       }
       if (policy.fallback() == false) {
@@ -299,15 +290,12 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
       return policy.fallback();
     }
     case SYCLGemm::GemmBackendEpilogue::GELU: {
-      auto policy =
-          ::gpu::xetla::XetlaGemmKernel<InputT>()
-              .add_matrix_c(out)
-              .add_matrix_a(lhs)
-              .add_matrix_b(rhs)
-              .add_epilogue(
-                  nullptr,
-                  ::gpu::xetla::EpilogueType::GELU)
-              .build();
+      auto policy = ::gpu::xetla::XetlaGemmKernel<InputT>()
+                        .add_matrix_c(out)
+                        .add_matrix_a(lhs)
+                        .add_matrix_b(rhs)
+                        .add_epilogue(nullptr, ::gpu::xetla::EpilogueType::GELU)
+                        .build();
       if (policy.fallback() == false) {
         return !policy.run(handle);
       }
@@ -319,12 +307,8 @@ RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
               .add_matrix_c(out)
               .add_matrix_a(lhs)
               .add_matrix_b(rhs)
-              .add_epilogue(
-                  bias_data,
-                  ::gpu::xetla::EpilogueType::BIAS)
-              .add_epilogue(
-                  nullptr,
-                  ::gpu::xetla::EpilogueType::GELU)
+              .add_epilogue(bias_data, ::gpu::xetla::EpilogueType::BIAS)
+              .add_epilogue(nullptr, ::gpu::xetla::EpilogueType::GELU)
               .build();
       if (policy.fallback() == false) {
         return !policy.run(handle);
@@ -344,7 +328,7 @@ std::enable_if_t<!std::is_same_v<InputT, ::gpu::xetla::bf16> &&
                      !std::is_same_v<InputT, sycl::half>,
                  absl::StatusOr<bool>>
 RunXetlaGemm(se::gpu::GpuStreamHandle handle, const MatrixDescriptor& lhs,
-             const MatrixDescriptor& rhs, const MatrixDescriptor& c,
+             const MatrixDescriptor& rhs, se::DeviceMemoryBase c,
              const MatrixDescriptor& out, se::DeviceMemoryBase bias,
              SYCLGemm::GemmBackendEpilogue epilogue, float beta) {
   return Internal("Unsupported Datatype in XeTLA");
@@ -390,15 +374,13 @@ std::unique_ptr<OneDnnMatMulParams> CreateMatMulParams(
 }
 
 template <typename InputT>
-absl::Status DoXetlaGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
-                         const MatrixDescriptor& lhs,
-                         const MatrixDescriptor& rhs, const MatrixDescriptor& c,
+absl::Status DoXetlaGemm(int64_t batch_size, const MatrixDescriptor& lhs,
+                         const MatrixDescriptor& rhs, se::DeviceMemoryBase c,
                          const MatrixDescriptor& output,
                          se::DeviceMemoryBase bias, float alpha, float beta,
-                         SYCLGemm::GemmBackendEpilogue epilogue, se::Stream* stream,
-                         std::optional<se::blas::AlgorithmType> algorithm,
-                         se::ScratchAllocator* scratch_allocator,
-                         se::blas::ComputePrecision compute_precision) {
+                         SYCLGemm::GemmBackendEpilogue epilogue,
+                         se::Stream* stream,
+                         se::ScratchAllocator* scratch_allocator) {
   CHECK(output.transpose == se::blas::Transpose::kNoTranspose);
   se::gpu::GpuStreamHandle stream_handle =
       stream_executor::gpu::AsGpuStreamValue(stream);
@@ -406,50 +388,25 @@ absl::Status DoXetlaGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
                       RunXetlaGemm<InputT>(stream_handle, lhs, rhs, c, output,
                                            bias, epilogue, beta));
   if (!fallback) return OkStatus();
-  VLOG(2) << "lhs: " << batch_size << " " << lhs.num_rows << " "
-          << lhs.num_cols;
-  VLOG(2) << "rhs: " << batch_size << " " << rhs.num_rows << " "
-          << rhs.num_cols;
-  VLOG(2) << "out: " << batch_size << " " << output.num_rows << " "
-          << output.num_cols;
   return absl::InternalError("Anyway, something is wrong in DoXetlaGemm.");
 }
 
 template <typename InputT, typename OutputT>
-absl::Status DoOnednnGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
-                          const MatrixDescriptor& lhs,
-                          const MatrixDescriptor& rhs,
-                          const MatrixDescriptor& c,
+absl::Status DoOnednnGemm(int64_t batch_size, const MatrixDescriptor& lhs,
+                          const MatrixDescriptor& rhs, se::DeviceMemoryBase c,
                           const MatrixDescriptor& output,
                           se::DeviceMemoryBase bias, float alpha, float beta,
                           SYCLGemm::GemmBackendEpilogue epilogue,
                           se::Stream* stream,
-                          std::optional<se::blas::AlgorithmType> algorithm,
-                          se::ScratchAllocator* scratch_allocator,
-                          se::blas::ComputePrecision compute_precision) {
+                          se::ScratchAllocator* scratch_allocator) {
   CHECK(output.transpose == se::blas::Transpose::kNoTranspose);
   se::gpu::GpuStreamHandle stream_handle =
       stream_executor::gpu::AsGpuStreamValue(stream);
   void* lhs_data = const_cast<void*>(lhs.data.opaque());
   void* rhs_data = const_cast<void*>(rhs.data.opaque());
-  void* c_data = const_cast<void*>(c.data.opaque());
+  void* c_data = const_cast<void*>(c.opaque());
   void* out_data = const_cast<void*>(output.data.opaque());
   void* bias_data = const_cast<void*>(bias.opaque());
-
-  VLOG(2) << "lhs: " << batch_size << " " << lhs.num_rows << " "
-          << lhs.num_cols;
-  VLOG(2) << "rhs: " << batch_size << " " << rhs.num_rows << " "
-          << rhs.num_cols;
-  VLOG(2) << "out: " << batch_size << " " << output.num_rows << " "
-          << output.num_cols;
-  VLOG(2) << "lhs stride: " << lhs.batch_stride << " " << lhs.leading_dim_stride
-          << " " << 1;
-  VLOG(2) << "rhs stride: " << rhs.batch_stride << " " << rhs.leading_dim_stride
-          << " " << 1;
-  VLOG(2) << "out stride: " << output.batch_stride << " "
-          << output.leading_dim_stride << " " << 1;
-  VLOG(2) << "lhs trans: " << TransposeString(lhs.transpose);
-  VLOG(2) << "rhs trans: " << TransposeString(rhs.transpose);
 
   auto params = CreateMatMulParams(batch_size, lhs, rhs, output);
 
@@ -534,24 +491,22 @@ absl::Status DoOnednnGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
 }
 
 template <typename InputT, typename OutputT>
-absl::Status DoGemm(int64_t batch_size, int64_t m, int64_t n, int64_t k,
-                    const MatrixDescriptor& lhs, const MatrixDescriptor& rhs,
-                    const MatrixDescriptor& c, const MatrixDescriptor& output,
-                    se::DeviceMemoryBase bias, float alpha, float beta,
+absl::Status DoGemm(int64_t batch_size, const MatrixDescriptor& lhs,
+                    const MatrixDescriptor& rhs, se::DeviceMemoryBase c,
+                    const MatrixDescriptor& output, se::DeviceMemoryBase bias,
+                    float alpha, float beta,
                     SYCLGemm::GemmBackendEpilogue epilogue, se::Stream* stream,
-                    std::optional<se::blas::AlgorithmType> algorithm,
-                    se::ScratchAllocator* scratch_allocator,
-                    se::blas::ComputePrecision compute_precision) {
+                    se::blas::AlgorithmType algorithm,
+                    se::ScratchAllocator* scratch_allocator) {
   if (algorithm == se::blas::kXetlaGemm) {
     VLOG(1) << "Run Xetla gemm kernel";
-    return DoXetlaGemm<InputT>(batch_size, m, n, k, lhs, rhs, c, output, bias,
-                               alpha, beta, epilogue, stream, algorithm,
-                               scratch_allocator, compute_precision);
+    return DoXetlaGemm<InputT>(batch_size, lhs, rhs, c, output, bias, alpha,
+                               beta, epilogue, stream, scratch_allocator);
   } else {
     VLOG(1) << "Run OneDnn gemm kernel";
-    return DoOnednnGemm<InputT, OutputT>(
-        batch_size, m, n, k, lhs, rhs, c, output, bias, alpha, beta, epilogue,
-        stream, algorithm, scratch_allocator, compute_precision);
+    return DoOnednnGemm<InputT, OutputT>(batch_size, lhs, rhs, c, output, bias,
+                                         alpha, beta, epilogue, stream,
+                                         scratch_allocator);
   }
 }
 
@@ -573,20 +528,97 @@ void MakeBlasGemmCompatible(MatrixDescriptor& lhs, MatrixDescriptor& rhs,
     TransposeMatrixDesc(output);
   }
 }
-
-void MakeBlasGemmCompatible(MatrixDescriptor& lhs, MatrixDescriptor& rhs,
-                            MatrixDescriptor& c, MatrixDescriptor& output) {
-  // BLAS GeMM doesn't support transposed output, but we can use the identity:
-  // C^T = (A @ B)^T = B^T @ A^T.
-  if (output.transpose == se::blas::Transpose::kTranspose) {
-    std::swap(lhs, rhs);
-    TransposeMatrixDesc(lhs);
-    TransposeMatrixDesc(rhs);
-    TransposeMatrixDesc(output);
-    TransposeMatrixDesc(c);
-  }
-}
 }  // namespace
+
+absl::Status RunGemm(const ffi::Dictionary& dict,
+                     se::DeviceMemoryBase lhs_buffer,
+                     se::DeviceMemoryBase rhs_buffer,
+                     se::DeviceMemoryBase c_buffer,
+                     se::DeviceMemoryBase output_buffer,
+                     se::DeviceMemoryBase bias_buffer, se::Stream* stream,
+                     SYCLGemm::GemmBackendEpilogue epilogue,
+                     se::ScratchAllocator* scratch_allocator) {
+  VLOG(2) << "Executing a GemmThunk with ffi";
+
+  bool lhs_transpose =
+      static_cast<MatrixLayout::Order>(*dict.get<int32_t>("lhs_order")) ==
+      MatrixLayout::Order::kColumnMajor;
+  bool rhs_transpose =
+      static_cast<MatrixLayout::Order>(*dict.get<int32_t>("rhs_order")) ==
+      MatrixLayout::Order::kColumnMajor;
+  bool output_transpose =
+      static_cast<MatrixLayout::Order>(*dict.get<int32_t>("output_order")) ==
+      MatrixLayout::Order::kColumnMajor;
+  MatrixDescriptor lhs{
+      lhs_buffer,
+      lhs_transpose ? se::blas::Transpose::kTranspose
+                    : se::blas::Transpose::kNoTranspose,
+      lhs_transpose ? *dict.get<int64_t>("lhs_num_cols")
+                    : *dict.get<int64_t>("lhs_num_rows"),
+      lhs_transpose ? *dict.get<int64_t>("lhs_num_rows")
+                    : *dict.get<int64_t>("lhs_num_cols"),
+      *dict.get<int64_t>("lhs_batch_stride"),
+      *dict.get<int64_t>("lhs_leading_dim_stride"),
+  };
+  MatrixDescriptor rhs{
+      rhs_buffer,
+      rhs_transpose ? se::blas::Transpose::kTranspose
+                    : se::blas::Transpose::kNoTranspose,
+      rhs_transpose ? *dict.get<int64_t>("rhs_num_cols")
+                    : *dict.get<int64_t>("rhs_num_rows"),
+      rhs_transpose ? *dict.get<int64_t>("rhs_num_rows")
+                    : *dict.get<int64_t>("rhs_num_cols"),
+      *dict.get<int64_t>("rhs_batch_stride"),
+      *dict.get<int64_t>("rhs_leading_dim_stride"),
+  };
+  MatrixDescriptor output{
+      output_buffer,
+      output_transpose ? se::blas::Transpose::kTranspose
+                       : se::blas::Transpose::kNoTranspose,
+      output_transpose ? *dict.get<int64_t>("output_num_cols")
+                       : *dict.get<int64_t>("output_num_rows"),
+      output_transpose ? *dict.get<int64_t>("output_num_rows")
+                       : *dict.get<int64_t>("output_num_cols"),
+      *dict.get<int64_t>("output_batch_stride"),
+      *dict.get<int64_t>("output_leading_dim_stride"),
+  };
+  int64_t batch_size = *dict.get<int64_t>("batch_size");
+  float alpha = *dict.get<float>("alpha");
+  float beta = *dict.get<float>("beta");
+  se::blas::AlgorithmType algorithm =
+      static_cast<se::blas::AlgorithmType>(*dict.get<int64_t>("algorithm"));
+  MakeBlasGemmCompatible(lhs, rhs, output);
+
+  std::tuple operand_types{
+      static_cast<PrimitiveType>(*dict.get<int32_t>("lhs_layout_dtype")),
+      static_cast<PrimitiveType>(*dict.get<int32_t>("rhs_layout_dtype")),
+      static_cast<PrimitiveType>(*dict.get<int32_t>("output_layout_dtype"))};
+#define TYPED_GEMM(ATYPE, BTYPE, CTYPE)                                   \
+  if (operand_types == std::make_tuple(ATYPE, BTYPE, CTYPE)) {            \
+    using NativeAType = PrimitiveTypeToXetlaNative<ATYPE>::type;          \
+    using NativeCType = PrimitiveTypeToXetlaNative<CTYPE>::type;          \
+    return DoGemm<NativeAType, NativeCType>(                              \
+        batch_size, lhs, rhs, c_buffer, output, bias_buffer, alpha, beta, \
+        epilogue, stream, algorithm, scratch_allocator);                  \
+  }
+
+  TYPED_GEMM(BF16, BF16, BF16)
+  TYPED_GEMM(F16, F16, F16)
+  TYPED_GEMM(BF16, BF16, F32)
+  TYPED_GEMM(F16, F16, F32)
+  TYPED_GEMM(F32, F32, F32)
+  TYPED_GEMM(S8, S8, S32)
+
+#undef TYPED_GEMM
+  return Internal(
+      "Unexpected GEMM lhs type %s, rhs type %s and output type %s",
+      primitive_util::LowercasePrimitiveTypeName(
+          static_cast<PrimitiveType>(*dict.get<int32_t>("lhs_layout_dtype"))),
+      primitive_util::LowercasePrimitiveTypeName(
+          static_cast<PrimitiveType>(*dict.get<int32_t>("rhs_layout_dtype"))),
+      primitive_util::LowercasePrimitiveTypeName(static_cast<PrimitiveType>(
+          *dict.get<int32_t>("output_layout_dtype"))));
+}
 
 absl::Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
                      se::DeviceMemoryBase rhs_buffer,
@@ -595,33 +627,33 @@ absl::Status RunGemm(const GemmConfig& config, se::DeviceMemoryBase lhs_buffer,
                      se::DeviceMemoryBase bias_buffer, se::Stream* stream,
                      SYCLGemm::GemmBackendEpilogue epilogue,
                      se::ScratchAllocator* scratch_allocator) {
-  VLOG(2) << "Executing a GemmThunk";
+  VLOG(2) << "Executing a GemmThunk with GemmConfig";
 
   auto lhs_layout = MatrixLayout{config.lhs_layout},
        rhs_layout = MatrixLayout{config.rhs_layout},
-       output_layout = MatrixLayout{config.output_layout},
-       c_layout = MatrixLayout{config.c_layout};
+       output_layout = MatrixLayout{config.output_layout};
 
-  int64_t m = output_layout.num_rows;
-  int64_t n = output_layout.num_cols;
-  int64_t k = lhs_layout.num_cols;
   MatrixDescriptor lhs = GetMatrixDesc(lhs_layout, lhs_buffer);
   MatrixDescriptor rhs = GetMatrixDesc(rhs_layout, rhs_buffer);
-  MatrixDescriptor c = GetMatrixDesc(c_layout, c_buffer);
   MatrixDescriptor output = GetMatrixDesc(output_layout, output_buffer);
   int64_t batch_size = output_layout.batch_size;
-  MakeBlasGemmCompatible(lhs, rhs, c, output);
+  MakeBlasGemmCompatible(lhs, rhs, output);
 
   std::tuple operand_types{lhs_layout.dtype, rhs_layout.dtype,
                            output_layout.dtype};
-#define TYPED_GEMM(ATYPE, BTYPE, CTYPE)                                       \
-  if (operand_types == std::make_tuple(ATYPE, BTYPE, CTYPE)) {                \
-    using NativeAType = PrimitiveTypeToXetlaNative<ATYPE>::type;              \
-    using NativeCType = PrimitiveTypeToXetlaNative<CTYPE>::type;              \
-    return DoGemm<NativeAType, NativeCType>(                                  \
-        batch_size, m, n, k, lhs, rhs, c, output, bias_buffer,                \
-        config.alpha.real(), config.beta, epilogue, stream, config.algorithm, \
-        scratch_allocator, config.compute_precision);                         \
+
+  se::blas::AlgorithmType algorithm = 0;
+  if (config.algorithm.has_value()) {
+    algorithm = config.algorithm.value();
+  }
+#define TYPED_GEMM(ATYPE, BTYPE, CTYPE)                                \
+  if (operand_types == std::make_tuple(ATYPE, BTYPE, CTYPE)) {         \
+    using NativeAType = PrimitiveTypeToXetlaNative<ATYPE>::type;       \
+    using NativeCType = PrimitiveTypeToXetlaNative<CTYPE>::type;       \
+    return DoGemm<NativeAType, NativeCType>(                           \
+        batch_size, lhs, rhs, c_buffer, output, bias_buffer,           \
+        config.alpha.real(), config.beta, epilogue, stream, algorithm, \
+        scratch_allocator);                                            \
   }
 
   TYPED_GEMM(BF16, BF16, BF16)
