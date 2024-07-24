@@ -58,6 +58,9 @@ limitations under the License.
 namespace stream_executor {
 namespace gpu {
 
+ScopedActivateContext::ScopedActivateContext(GpuContext* context) {}
+ScopedActivateContext::~ScopedActivateContext() {}
+
 #define MSEC_IN_SEC 1000
 
 class GpuContext {

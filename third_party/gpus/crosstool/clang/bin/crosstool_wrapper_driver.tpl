@@ -166,12 +166,18 @@ def call_compiler(argv, link = False, sycl_compile = True, xetla = False):
       ar_cmd = ('env ' + AR_PATH + ar_flags)
       return system(ar_cmd)
   elif link:
-    flags = [shlex.quote(s) for s in flags]
+    new_flags = []
+    for s in flags:
+      if s.endswith(".o"):
+        new_flags.append("-Wl,--whole-archive")
+      new_flags.append(shlex.quote(s))
+      if s.endswith(".o"):
+        new_flags.append("-Wl,--no-whole-archive")
     # sycl link
     out_files.append('-o')
     out_files.extend(args.o[0])
-    flags += (common_flags + in_files + out_files + link_flags)
-    cmd = ('env ' + CPU_COMPILER + ' ' + ' '.join(flags))
+    new_flags += (common_flags + in_files + out_files + link_flags)
+    cmd = ('env ' + CPU_COMPILER + ' ' + ' '.join(new_flags))
     return system(cmd)
   else:
     # host compilation

@@ -56,6 +56,8 @@ limitations under the License.
 namespace stream_executor {
 namespace gpu {
 
+GpuContext* ExtractGpuContext(GpuExecutor* gpu_exec) {}
+
 namespace sycl = ::sycl;
 
 // Hook that can be used to CUBIN-ate PTX before it is loaded into the driver.

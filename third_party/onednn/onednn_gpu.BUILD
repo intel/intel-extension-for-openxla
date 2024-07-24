@@ -148,7 +148,7 @@ cc_library(
         "-DNGEN_SAFE=1",
         "-DNGEN_NEO_INTERFACE=1",
         #TODO(itex): for symbol collision, may be removed in produce version
-        "-fvisibility=hidden",
+        #"-fvisibility=hidden",
     ],
     includes = [
         "include",
