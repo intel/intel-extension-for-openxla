@@ -55,7 +55,7 @@ def initialize():
   if visible_devices != 'all':
     options['visible_devices'] = [int(x) for x in visible_devices.split(',')]
   
-  c_api = xb.register_plugin("xpu",
+  c_api = xb.register_plugin("sycl",
                      priority=500,
                      library_path=str(path),
                      options=options)
@@ -69,5 +69,7 @@ def initialize():
             xpu_plugin_extension.register_custom_call_target, c_api
         ),
     )
+    for _name, _value in xpu_plugin_extension.registrations().items():
+      xla_client.register_custom_call_target(_name, _value, platform="SYCL")
   except:
     raise RuntimeError("Fail to load xpu_plugin_extension.so.")

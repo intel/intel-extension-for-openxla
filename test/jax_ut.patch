@@ -23,163 +23,8 @@ index 599ba0f89..9048355c6 100644
  del _os
  
  # Import version first, because other submodules may reference it.
-diff --git a/jax/_src/ad_checkpoint.py b/jax/_src/ad_checkpoint.py
-index 6eb28bf29..3ab8807c5 100644
---- a/jax/_src/ad_checkpoint.py
-+++ b/jax/_src/ad_checkpoint.py
-@@ -772,7 +772,7 @@ mlir.register_lowering(
-     remat_p,
-     mlir.lower_fun(partial(remat_lowering, is_gpu_platform=True),
-                    multiple_results=True),
--    platform="gpu")
-+    platform="xpu")
- 
- def _optimization_barrier_abstract_eval(*args):
-   return args
-diff --git a/jax/_src/checkify.py b/jax/_src/checkify.py
-index 9b68afcf3..018779391 100644
---- a/jax/_src/checkify.py
-+++ b/jax/_src/checkify.py
-@@ -538,7 +538,7 @@ mlir.register_lowering(check_p, check_lowering_rule_unsupported,
- mlir.register_lowering(check_p, check_lowering_rule,
-                        platform='cpu')
- mlir.register_lowering(check_p, check_lowering_rule,
--                       platform='gpu')
-+                       platform='xpu')
- 
- def check_batching_rule(batched_args, batch_dims, *, err_tree, debug):
-   size = next(x.shape[dim] for x, dim in zip(batched_args, batch_dims)
-diff --git a/jax/_src/compiler.py b/jax/_src/compiler.py
-index 3c80a8fb1..9e2b74398 100644
---- a/jax/_src/compiler.py
-+++ b/jax/_src/compiler.py
-@@ -253,7 +253,7 @@ def compile_or_get_cached(
-   # Persistent compilation cache only implemented on TPU and GPU and the backend
-   # that supports serialization of executables.
-   # TODO(skye): add warning when initializing cache on unsupported default platform
--  supported_platforms = ["tpu", "gpu"]
-+  supported_platforms = ["tpu", "xpu"]
-   if xla_extension_version >= 253:
-     supported_platforms.append("cpu")
-   use_compilation_cache = (
-diff --git a/jax/_src/debugging.py b/jax/_src/debugging.py
-index 84fc677c9..81161f63d 100644
---- a/jax/_src/debugging.py
-+++ b/jax/_src/debugging.py
-@@ -165,7 +165,7 @@ def debug_callback_lowering(ctx, *args, effect, callback, **params):
- mlir.register_lowering(debug_callback_p, debug_callback_lowering,
-                        platform="cpu")
- mlir.register_lowering(
--    debug_callback_p, debug_callback_lowering, platform="gpu")
-+    debug_callback_p, debug_callback_lowering, platform="xpu")
- mlir.register_lowering(
-     debug_callback_p, debug_callback_lowering, platform="tpu")
- 
-diff --git a/jax/_src/dispatch.py b/jax/_src/dispatch.py
-index 550032c9a..0334c3f81 100644
---- a/jax/_src/dispatch.py
-+++ b/jax/_src/dispatch.py
-@@ -460,6 +460,8 @@ mlir.register_lowering(
-   device_put_p, _tpu_gpu_device_put_lowering, platform='tpu')
- mlir.register_lowering(
-   device_put_p, _tpu_gpu_device_put_lowering, platform='gpu')
-+mlir.register_lowering(
-+  device_put_p, _tpu_gpu_device_put_lowering, platform='xpu')
- 
- 
- def _common_device_put_lowering(ctx, x, *, device, src):
-diff --git a/jax/_src/internal_test_util/test_harnesses.py b/jax/_src/internal_test_util/test_harnesses.py
-index bf099344b..c516fe3d1 100644
---- a/jax/_src/internal_test_util/test_harnesses.py
-+++ b/jax/_src/internal_test_util/test_harnesses.py
-@@ -314,7 +314,7 @@ class Limitation:
-       description: str,
-       *,
-       enabled: bool = True,
--      devices: str | Sequence[str] = ("cpu", "gpu", "tpu"),
-+      devices: str | Sequence[str] = ("cpu", "xpu", "tpu"),
-       dtypes: Sequence[DType] = (),
-       skip_run: bool = False,
-   ):
-@@ -1699,7 +1699,7 @@ for dtype in jtu.dtypes.all_inexact:
-         [CustomArg(partial(_make_cholesky_arg, shape, dtype))],
-         jax_unimplemented=[
-             Limitation(
--                "unimplemented", dtypes=[np.float16], devices=("cpu", "gpu"))
-+                "unimplemented", dtypes=[np.float16], devices=("cpu", "xpu"))
-         ],
-         shape=shape,
-         dtype=dtype)
-@@ -1716,7 +1716,7 @@ for dtype in jtu.dtypes.all_floating + jtu.dtypes.complex:
-           jax_unimplemented=[
-               Limitation(
-                   "unimplemented",
--                  devices=("cpu", "gpu"),
-+                  devices=("cpu", "xpu"),
-                   dtypes=[np.float16, dtypes.bfloat16]),
-           ],
-           shape=shape,
-@@ -1819,7 +1819,7 @@ for dtype in jtu.dtypes.all_floating + jtu.dtypes.complex:
-             jax_unimplemented=[
-                 Limitation(
-                     "unimplemented",
--                    devices=("cpu", "gpu"),
-+                    devices=("cpu", "xpu"),
-                     dtypes=[np.float16, dtypes.bfloat16],
-                 ),
-             ],
-@@ -1843,7 +1843,7 @@ for dtype in jtu.dtypes.all_inexact:
-             ],
-             jax_unimplemented=[
-                 Limitation(
--                    "only supported on CPU in JAX", devices=("tpu", "gpu")),
-+                    "only supported on CPU in JAX", devices=("tpu", "xpu")),
-                 Limitation(
-                     "unimplemented",
-                     devices="cpu",
-@@ -1887,7 +1887,7 @@ for dtype in jtu.dtypes.all_inexact:
-           jax_unimplemented=[
-               Limitation(
-                   "unimplemented",
--                  devices=("cpu", "gpu"),
-+                  devices=("cpu", "xpu"),
-                   dtypes=[np.float16, dtypes.bfloat16]),
-           ],
-           shape=shape,
-@@ -1937,7 +1937,7 @@ def _make_triangular_solve_harness(name,
-       f_lax, [RandArg(a_shape, dtype),
-               RandArg(b_shape, dtype)],
-       jax_unimplemented=[
--          Limitation("unimplemented", devices="gpu", dtypes=[np.float16]),
-+          Limitation("unimplemented", devices="xpu", dtypes=[np.float16]),
-       ],
-       dtype=dtype,
-       a_shape=a_shape,
-@@ -2816,11 +2816,11 @@ def _make_dot_general_harness(name,
-       enable_xla=enable_xla,
-       jax_unimplemented=[
-           Limitation("preferred_element_type must match dtype for floating point",
--                     devices="gpu",
-+                     devices="xpu",
-                      dtypes=[np.float16, dtypes.bfloat16, np.float32, np.float64, np.complex64, np.complex128],
-                      enabled=(preferred_element_type is not None and preferred_element_type != lhs_dtype)),
-           Limitation("preferred_element_type must be floating for integer dtype",
--                     devices="gpu",
-+                     devices="xpu",
-                      dtypes=[np.int8, np.uint8, np.int16, np.uint16,
-                              np.int32, np.uint32, np.int64, np.uint64],
-                      enabled=(preferred_element_type is not None
-@@ -3018,7 +3018,7 @@ def _make_conv_harness(name,
-             # b/183565702 - no integer convolutions for GPU
-             Limitation(
-                 "preferred_element_type not implemented for integers",
--                devices="gpu",
-+                devices="xpu",
-                 dtypes=(np.int8, np.int16, np.int32, np.int64),
-                 enabled=(preferred_element_type in [np.int16, np.int32,
-                                                     np.int64])),
 diff --git a/jax/_src/interpreters/mlir.py b/jax/_src/interpreters/mlir.py
-index 239559a47..b416cb695 100644
+index 239559a47..99ad70adf 100644
 --- a/jax/_src/interpreters/mlir.py
 +++ b/jax/_src/interpreters/mlir.py
 @@ -816,7 +816,7 @@ class LoweringResult(NamedTuple):
@@ -187,7 +32,7 @@ index 239559a47..b416cb695 100644
  
  
 -_platforms_with_donation = ["cpu", "cuda", "rocm", "tpu"]
-+_platforms_with_donation = ["cpu", "cuda", "rocm", "tpu", "xpu"]
++_platforms_with_donation = ["cpu", "cuda", "rocm", "tpu", "sycl"]
  
  
  def _to_physical_op_sharding(
@@ -196,7 +41,7 @@ index 239559a47..b416cb695 100644
      raise NotImplementedError("multi-platform lowering for python_callback")
    platform = ctx.module_context.platforms[0]
 -  if platform not in {"cpu", "cuda", "rocm", "tpu"}:
-+  if platform not in {"cpu", "cuda", "rocm", "tpu", "xpu"}:
++  if platform not in {"cpu", "cuda", "rocm", "tpu", "sycl"}:
      raise ValueError(
          f"`EmitPythonCallback` not supported on {platform} backend.")
    backend = ctx.module_context.backend
@@ -205,12 +50,12 @@ index 239559a47..b416cb695 100644
    result_type = ir.TupleType.get_tuple(result_types)
    call_target_name = ("xla_python_gpu_callback"
 -                     if platform in {"cuda", "rocm"} else "xla_python_cpu_callback")
-+                     if platform in {"cuda", "rocm", "xpu"} else "xla_python_cpu_callback")
++                     if platform in {"cuda", "rocm", "sycl"} else "xla_python_cpu_callback")
    result = hlo.CustomCallOp(
        [result_type],
        callback_operands,
 diff --git a/jax/_src/lax/control_flow/loops.py b/jax/_src/lax/control_flow/loops.py
-index aadf97475..7d7c8bfd4 100644
+index aadf97475..baadb1587 100644
 --- a/jax/_src/lax/control_flow/loops.py
 +++ b/jax/_src/lax/control_flow/loops.py
 @@ -2413,7 +2413,7 @@ def _cumulative_reduction_primitive(name, reduce_fn, reduce_window_fn):
@@ -218,25 +63,12 @@ index aadf97475..7d7c8bfd4 100644
    # On GPU, we choose between window reduction and associative scan
    # based on the input size.
 -  for platform in ['cuda', 'rocm']:
-+  for platform in ['cuda', 'rocm', 'xpu']:
++  for platform in ['cuda', 'rocm', 'sycl']:
      register_lowering(
          partial(cumred_gpu_impl, reduce_window_fn, reduce_fn), platform)
    # On TPU, an implementation using reduce_window is handled specially by the
-diff --git a/jax/_src/lax/convolution.py b/jax/_src/lax/convolution.py
-index 423c44773..c2bd81f0b 100644
---- a/jax/_src/lax/convolution.py
-+++ b/jax/_src/lax/convolution.py
-@@ -762,7 +762,7 @@ mlir.register_lowering(
- mlir.register_lowering(
-     conv_general_dilated_p,
-     partial(_conv_general_dilated_lower, expand_complex_convolutions=True),
--    platform='gpu')
-+    platform='xpu')
- 
- 
- def _reshape_axis_into(src, dst, x):
 diff --git a/jax/_src/lax/linalg.py b/jax/_src/lax/linalg.py
-index 80162a204..e2b77261b 100644
+index 80162a204..4ddfba8bb 100644
 --- a/jax/_src/lax/linalg.py
 +++ b/jax/_src/lax/linalg.py
 @@ -915,6 +915,9 @@ if gpu_solver is not None:
@@ -245,54 +77,65 @@ index 80162a204..e2b77261b 100644
      platform='tpu')
 +mlir.register_lowering(
 +    eigh_p, mlir.lower_fun(_eigh_tpu_impl, multiple_results=True),
-+    platform='xpu')
++    platform='sycl')
  
  
  _triangular_solve_dtype_rule = partial(
-@@ -2475,6 +2478,9 @@ mlir.register_lowering(
+@@ -2041,6 +2044,7 @@ mlir.register_lowering(
+                  platform='rocm'),
+   platform='rocm')
+ 
++
+ mlir.register_lowering(svd_p, _svd_tpu_lowering_rule)
+ 
+ 
+@@ -2475,6 +2479,9 @@ mlir.register_lowering(
  mlir.register_lowering(
      tridiagonal_p, partial(_tridiagonal_cpu_gpu_hlo, gpu_solver.rocm_sytrd),
      platform='rocm')
 +mlir.register_lowering(
 +    tridiagonal_p, partial(_tridiagonal_cpu_gpu_hlo, lapack.sytrd_hlo),
-+    platform='xpu')
++    platform='sycl')
  
  # Utilities
  
-diff --git a/jax/_src/lax/slicing.py b/jax/_src/lax/slicing.py
-index 48689bbb0..b20c59fa7 100644
---- a/jax/_src/lax/slicing.py
-+++ b/jax/_src/lax/slicing.py
-@@ -2563,7 +2563,7 @@ def _scatter_add_lower_gpu(ctx, operand, indices, updates,
-   imag = _scatter(hlo.imag(operand), hlo.imag(updates))
-   return [hlo.complex(real, imag)]
+diff --git a/jax/_src/test_util.py b/jax/_src/test_util.py
+index e497b168a..a6b23d52b 100644
+--- a/jax/_src/test_util.py
++++ b/jax/_src/test_util.py
+@@ -366,6 +366,9 @@ def is_device_rocm():
+ def is_device_cuda():
+   return 'cuda' in xla_bridge.get_backend().platform_version
  
--mlir.register_lowering(scatter_add_p, _scatter_add_lower_gpu, platform="gpu")
-+mlir.register_lowering(scatter_add_p, _scatter_add_lower_gpu, platform="xpu")
++def is_device_sycl():
++  return 'sycl' in xla_bridge.get_backend().platform_version
++
+ def is_cloud_tpu():
+   return running_in_cloud_tpu_vm
  
+@@ -425,6 +428,8 @@ def _get_device_tags():
+     device_tags = {device_under_test(), "rocm"}
+   elif is_device_cuda():
+     device_tags = {device_under_test(), "cuda"}
++  elif is_device_sycl():
++    device_tags = {device_under_test(), "sycl", "gpu"}
+   elif device_under_test() == "METAL":
+     device_tags = {device_under_test(), "gpu"}
+   else:
+diff --git a/jax/_src/xla_bridge.py b/jax/_src/xla_bridge.py
+index e94152884..b407293e9 100644
+--- a/jax/_src/xla_bridge.py
++++ b/jax/_src/xla_bridge.py
+@@ -745,6 +745,7 @@ def _discover_and_register_pjrt_plugins():
+ _platform_aliases = {
+   "cuda": "gpu",
+   "rocm": "gpu",
++  "sycl": "gpu",
+ }
  
- def _dynamic_slice_indices(
-diff --git a/jax/_src/lax/windowed_reductions.py b/jax/_src/lax/windowed_reductions.py
-index af85a04d7..fcb78aa79 100644
---- a/jax/_src/lax/windowed_reductions.py
-+++ b/jax/_src/lax/windowed_reductions.py
-@@ -642,7 +642,7 @@ mlir.register_lowering(select_and_scatter_add_p, mlir.lower_fun(
- # TODO(b/182390722): workaround for XLA/GPU crash.
- mlir.register_lowering(select_and_scatter_add_p, mlir.lower_fun(
-     partial(_select_and_scatter_add_impl, expand_padding=True),
--    multiple_results=False), platform='gpu')
-+    multiple_results=False), platform='xpu')
- 
- 
- def _select_and_gather_add_shape_rule(
-@@ -875,4 +875,4 @@ mlir.register_lowering(select_and_gather_add_p, mlir.lower_fun(
- mlir.register_lowering(
-     select_and_gather_add_p,
-     _select_and_gather_add_lowering,
--    platform="gpu")
-+    platform="xpu")
+ _alias_to_platforms: dict[str, list[str]] = {}
 diff --git a/jax/experimental/host_callback.py b/jax/experimental/host_callback.py
-index da2dbc79d..2dea2a283 100644
+index da2dbc79d..033b952ab 100644
 --- a/jax/experimental/host_callback.py
 +++ b/jax/experimental/host_callback.py
 @@ -565,7 +565,7 @@ logger = logging.getLogger(__name__)
@@ -300,7 +143,7 @@ index da2dbc79d..2dea2a283 100644
  
  def _use_outfeed(platform: str) -> bool:
 -  return (platform in ("tpu", "gpu", "cuda", "rocm") or
-+  return (platform in ("tpu", "xpu", "cuda", "rocm") or
++  return (platform in ("tpu", "gpu", "cuda", "rocm", "sycl") or
            _HOST_CALLBACK_OUTFEED.value)
  
  
@@ -309,16 +152,16 @@ index da2dbc79d..2dea2a283 100644
      # By default, all devices on all supported backends.
      clients = [backend for name, backend in xb.backends().items()
 -               if name in ("cpu", "cuda", "rocm", "tpu")]
-+               if name in ("cpu", "cuda", "rocm", "tpu", "xpu")]
++               if name in ("cpu", "cuda", "rocm", "tpu", "sycl")]
      devices = list(
          itertools.chain(*[backend.local_devices() for backend in clients]))
      _callback_handler_data.clients = clients  # type: ignore[assignment]
 diff --git a/run_all_UT.py b/run_all_UT.py
 new file mode 100644
-index 000000000..9e688d744
+index 000000000..95157f49f
 --- /dev/null
 +++ b/run_all_UT.py
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,76 @@
 +import os
 +import re
 +import subprocess
@@ -329,22 +172,18 @@ index 000000000..9e688d744
 +
 +# https://github.com/wendyliu235/aipc_unify_validation_infr/blob/jax/openxla/blacklist.txt
 +skip_files = (
-+    'lax_scipy_spectral_dac_test.py',
 +    'array_interoperability_test.py',
 +    'python_callback_test.py',
 +    'lobpcg_test.py',
 +    'aot_test.py',
 +    'random_test.py',
 +    'experimental_rnn_test.py',
-+    'debug_nans_test.py',
 +    'fft_test.py',
 +    'names.filecheck.py', # filecheck/
 +    'math.filecheck.py', # filecheck/
 +    'subcomputations.filecheck.py', # filecheck/
 +    'array.filecheck.py', # filecheck/
 +    'shapes.filecheck.py', # filecheck/
-+    'svd_test.py',
-+    'qdwh_test.py',
 +    'checkify_test.py',
 +    'debugger_test.py',
 +    'debugging_primitives_test.py',
@@ -399,258 +238,51 @@ index 000000000..9e688d744
 +
 +if __name__ == '__main__':
 +    main()
-diff --git a/tests/aot_test.py b/tests/aot_test.py
-index dacfa620c..3ae649713 100644
---- a/tests/aot_test.py
-+++ b/tests/aot_test.py
-@@ -42,7 +42,7 @@ with contextlib.suppress(ImportError):
- 
- class JaxAotTest(jtu.JaxTestCase):
- 
--  @jtu.run_on_devices('tpu', 'gpu')
-+  @jtu.run_on_devices('tpu', 'xpu')
-   def test_pickle_pjit_lower(self):
-     def fun(x):
-       return x * x
-diff --git a/tests/array_interoperability_test.py b/tests/array_interoperability_test.py
-index 006dea8ac..70eba54da 100644
---- a/tests/array_interoperability_test.py
-+++ b/tests/array_interoperability_test.py
-@@ -67,7 +67,7 @@ all_shapes = nonempty_array_shapes + empty_array_shapes
- class DLPackTest(jtu.JaxTestCase):
-   def setUp(self):
-     super().setUp()
--    if not jtu.test_device_matches(["cpu", "gpu"]):
-+    if not jtu.test_device_matches(["cpu", "xpu"]):
-       self.skipTest(f"DLPack not supported on {jtu.device_under_test()}")
- 
-   @jtu.sample_product(
-@@ -82,7 +82,7 @@ class DLPackTest(jtu.JaxTestCase):
-     np = rng(shape, dtype)
-     if gpu and jtu.test_device_matches(["cpu"]):
-       raise unittest.SkipTest("Skipping GPU test case on CPU")
--    device = jax.devices("gpu" if gpu else "cpu")[0]
-+    device = jax.devices("xpu" if gpu else "cpu")[0]
-     x = jax.device_put(np, device)
-     dlpack = jax.dlpack.to_dlpack(x)
-     y = jax.dlpack.from_dlpack(dlpack)
-@@ -103,7 +103,7 @@ class DLPackTest(jtu.JaxTestCase):
-     np = rng(shape, dtype)
-     if gpu and jax.default_backend() == "cpu":
-       raise unittest.SkipTest("Skipping GPU test case on CPU")
--    device = jax.devices("gpu" if gpu else "cpu")[0]
-+    device = jax.devices("xpu" if gpu else "cpu")[0]
-     x = jax.device_put(np, device)
-     y = jax.dlpack.from_dlpack(x)
-     self.assertEqual(y.devices(), {device})
-@@ -124,16 +124,16 @@ class DLPackTest(jtu.JaxTestCase):
-     if (not config.enable_x64.value and
-         dtype in [jnp.int64, jnp.uint64, jnp.float64]):
-       raise self.skipTest("x64 types are disabled by jax_enable_x64")
--    if (jtu.test_device_matches(["gpu"]) and
--        not tf.config.list_physical_devices("GPU")):
-+    if (jtu.test_device_matches(["xpu"]) and
-+        not tf.config.list_physical_devices("XPU")):
-       raise self.skipTest("TensorFlow not configured with GPU support")
- 
--    if jtu.test_device_matches(["gpu"]) and dtype == jnp.int32:
-+    if jtu.test_device_matches(["xpu"]) and dtype == jnp.int32:
-       raise self.skipTest("TensorFlow does not place int32 tensors on GPU")
- 
-     rng = jtu.rand_default(self.rng())
-     np = rng(shape, dtype)
--    with tf.device("/GPU:0" if jtu.test_device_matches(["gpu"]) else "/CPU:0"):
-+    with tf.device("/SYCL:0" if jtu.test_device_matches(["xpu"]) else "/CPU:0"):
-       x = tf.identity(tf.constant(np))
-     dlpack = tf.experimental.dlpack.to_dlpack(x)
-     y = jax.dlpack.from_dlpack(dlpack)
-@@ -148,8 +148,8 @@ class DLPackTest(jtu.JaxTestCase):
-     if (not config.enable_x64.value and
-         dtype in [jnp.int64, jnp.uint64, jnp.float64]):
-       self.skipTest("x64 types are disabled by jax_enable_x64")
--    if (jtu.test_device_matches(["gpu"]) and
--        not tf.config.list_physical_devices("GPU")):
-+    if (jtu.test_device_matches(["xpu"]) and
-+        not tf.config.list_physical_devices("XPU")):
-       raise self.skipTest("TensorFlow not configured with GPU support")
-     rng = jtu.rand_default(self.rng())
-     np = rng(shape, dtype)
-@@ -207,7 +207,7 @@ class DLPackTest(jtu.JaxTestCase):
- 
- class CudaArrayInterfaceTest(jtu.JaxTestCase):
- 
--  @jtu.skip_on_devices("cuda")
-+  @jtu.skip_on_devices("xpu")
-   @unittest.skipIf(xla_extension_version < 228, "Requires newer jaxlib")
-   def testCudaArrayInterfaceOnNonCudaFails(self):
-     x = jnp.arange(5)
-@@ -218,7 +218,7 @@ class CudaArrayInterfaceTest(jtu.JaxTestCase):
-     ):
-       _ = x.__cuda_array_interface__
- 
--  @jtu.run_on_devices("cuda")
-+  @jtu.run_on_devices("xpu")
-   @unittest.skipIf(xla_extension_version < 233, "Requires newer jaxlib")
-   def testCudaArrayInterfaceOnShardedArrayFails(self):
-     devices = jax.local_devices()
-@@ -240,7 +240,7 @@ class CudaArrayInterfaceTest(jtu.JaxTestCase):
-     shape=all_shapes,
-     dtype=cuda_array_interface_dtypes,
-   )
--  @jtu.run_on_devices("cuda")
-+  @jtu.run_on_devices("xpu")
-   def testCudaArrayInterfaceWorks(self, shape, dtype):
-     rng = jtu.rand_default(self.rng())
-     x = rng(shape, dtype)
-@@ -250,7 +250,7 @@ class CudaArrayInterfaceTest(jtu.JaxTestCase):
-     self.assertEqual(shape, a["shape"])
-     self.assertEqual(z.__array_interface__["typestr"], a["typestr"])
- 
--  @jtu.run_on_devices("cuda")
-+  @jtu.run_on_devices("xpu")
-   @unittest.skipIf(xla_extension_version < 228, "Requires newer jaxlib")
-   def testCudaArrayInterfaceBfloat16Fails(self):
-     rng = jtu.rand_default(self.rng())
-@@ -264,7 +264,7 @@ class CudaArrayInterfaceTest(jtu.JaxTestCase):
-     dtype=cuda_array_interface_dtypes,
-   )
-   @unittest.skipIf(not cupy, "Test requires CuPy")
--  @jtu.run_on_devices("cuda")
-+  @jtu.run_on_devices("xpu")
-   def testJaxToCuPy(self, shape, dtype):
-     rng = jtu.rand_default(self.rng())
-     x = rng(shape, dtype)
-@@ -280,7 +280,7 @@ class CudaArrayInterfaceTest(jtu.JaxTestCase):
-     dtype=jtu.dtypes.supported(cuda_array_interface_dtypes),
-   )
-   @unittest.skipIf(not cupy, "Test requires CuPy")
--  @jtu.run_on_devices("cuda")
-+  @jtu.run_on_devices("xpu")
-   def testCuPyToJax(self, shape, dtype):
-     rng = jtu.rand_default(self.rng())
-     x = rng(shape, dtype)
-@@ -296,7 +296,7 @@ class CudaArrayInterfaceTest(jtu.JaxTestCase):
-     shape=all_shapes,
-     dtype=jtu.dtypes.supported(cuda_array_interface_dtypes),
-   )
--  @jtu.run_on_devices("cuda")
-+  @jtu.run_on_devices("xpu")
-   def testCaiToJax(self, shape, dtype):
-     # TODO(b/324133505) enable this test for PJRT C API
-     if xb.using_pjrt_c_api():
-@@ -306,7 +306,7 @@ class CudaArrayInterfaceTest(jtu.JaxTestCase):
- 
-     # using device with highest device_id for testing the correctness
-     # of detecting the device id from a pointer value
--    device = jax.devices('cuda')[-1]
-+    device = jax.devices('xpu')[-1]
-     with jax.default_device(device):
-       y = jnp.array(x, dtype=dtype)
-     self.assertEqual(y.dtype, dtype)
-diff --git a/tests/array_test.py b/tests/array_test.py
-index 7c8d4c355..cf0f50d0f 100644
---- a/tests/array_test.py
-+++ b/tests/array_test.py
-@@ -1207,7 +1207,7 @@ class RngShardingTest(jtu.JaxTestCase):
-   # tests that the PRNGs are automatically sharded as expected
- 
-   @parameterized.named_parameters(("3", 3), ("4", 4), ("5", 5))
--  @jtu.skip_on_devices("gpu")
-+  @jtu.skip_on_devices("xpu")
-   def test_random_bits_is_pure_map_1d(self, num_devices):
-     @jax.jit
-     def f(x):
-@@ -1241,7 +1241,7 @@ class RngShardingTest(jtu.JaxTestCase):
-        "mesh_shape": mesh_shape, "pspec": pspec}
-       for mesh_shape in [(3, 2), (4, 2), (2, 3)]
-       for pspec in [P('x', None), P(None, 'y'), P('x', 'y')])
--  @jtu.skip_on_devices("gpu")
-+  @jtu.skip_on_devices("xpu")
-   def test_random_bits_is_pure_map_2d(self, mesh_shape, pspec):
-     @jax.jit
-     def f(x):
-diff --git a/tests/checkify_test.py b/tests/checkify_test.py
-index 730f14ddc..7ef6972a1 100644
---- a/tests/checkify_test.py
-+++ b/tests/checkify_test.py
-@@ -1307,7 +1307,7 @@ class LowerableChecksTest(jtu.JaxTestCase):
-     super().setUp()
-     self.enter_context(config.xla_runtime_errors(True))
- 
--  @jtu.run_on_devices("cpu", "gpu")
-+  @jtu.run_on_devices("cpu", "xpu")
-   def test_jit(self):
-     @jax.jit
-     def f(x):
-diff --git a/tests/compilation_cache_test.py b/tests/compilation_cache_test.py
-index 196e66ffb..d6983cf4d 100644
---- a/tests/compilation_cache_test.py
-+++ b/tests/compilation_cache_test.py
-@@ -72,6 +72,7 @@ class CompilationCacheTest(jtu.JaxTestCase):
- 
-   def setUp(self):
-     super().setUp()
-+    # Need xla runtime.
-     supported_platforms = ["tpu", "gpu"]
-     if xla_extension_version >= 253:
-       supported_platforms.append("cpu")
-diff --git a/tests/debugger_test.py b/tests/debugger_test.py
-index 5e6d4388f..060db7fc5 100644
---- a/tests/debugger_test.py
-+++ b/tests/debugger_test.py
-@@ -58,7 +58,7 @@ class CliDebuggerTest(jtu.JaxTestCase):
- 
-   def setUp(self):
-     super().setUp()
--    if not jtu.test_device_matches(["cpu", "gpu", "tpu"]):
-+    if not jtu.test_device_matches(["cpu", "xpu", "tpu"]):
-       self.skipTest(f"Host callback not supported on {jtu.device_under_test()}")
- 
-   def test_debugger_eof(self):
 diff --git a/tests/export_harnesses_multi_platform_test.py b/tests/export_harnesses_multi_platform_test.py
-index 44a3070f8..118ddb428 100644
+index 44a3070f8..7322c00d3 100644
 --- a/tests/export_harnesses_multi_platform_test.py
 +++ b/tests/export_harnesses_multi_platform_test.py
-@@ -64,7 +64,7 @@ class PrimitiveTest(jtu.JaxTestCase):
-     # Pick one device from each available platform
-     cls.devices = []
-     cls.platforms = []
--    for backend in ["cpu", "gpu", "tpu"]:
-+    for backend in ["cpu", "xpu", "tpu"]:
-       try:
-         devices = jax.devices(backend)
-       except RuntimeError:
-@@ -93,7 +93,7 @@ class PrimitiveTest(jtu.JaxTestCase):
+@@ -48,6 +48,9 @@ _known_failures_gpu = make_disjunction_regexp(
+     "lu_",
+     "svd_",
+     "tridiagonal_solve_",
++    "triangular_solve_",
++    "cholesky_",
++    "eig_",
+ )
+ 
+ # Some primitive lowering rules need the GPU backend to be able to create
+@@ -93,7 +96,7 @@ class PrimitiveTest(jtu.JaxTestCase):
    )
    @jtu.skip_on_flag("jax_skip_slow_tests", True)
    def test_prim(self, harness: test_harnesses.Harness):
 -    if (jtu.device_under_test() == "gpu"
-+    if (jtu.device_under_test() == "xpu"
++    if (jtu.device_under_test() == "sycl"
          and _known_failures_gpu.search(harness.fullname)):
        self.skipTest("failure to be investigated")
  
-@@ -108,8 +108,8 @@ class PrimitiveTest(jtu.JaxTestCase):
+@@ -108,8 +111,8 @@ class PrimitiveTest(jtu.JaxTestCase):
        if l.filter(dtype=harness.dtype):
          unimplemented_platforms = unimplemented_platforms.union(l.devices)
      if (_skip_cuda_lowering_unless_have_gpus.search(harness.fullname)
 -        and all(d.platform != "gpu" for d in self.devices)):
 -      unimplemented_platforms.add("gpu")
-+        and all(d.platform != "xpu" for d in self.devices)):
-+      unimplemented_platforms.add("xpu")
++        and all(d.platform != "sycl" for d in self.devices)):
++      unimplemented_platforms.add("sycl")
  
      logging.info("Harness is not implemented on %s", unimplemented_platforms)
  
-@@ -142,7 +142,7 @@ class PrimitiveTest(jtu.JaxTestCase):
+@@ -137,7 +140,7 @@ class PrimitiveTest(jtu.JaxTestCase):
+     ]
+     logging.info("Using devices %s", [str(d) for d in devices])
+     # lowering_platforms uses "cuda" or "rocm" instead of "gpu"
+-    gpu_platform = "cuda"
++    gpu_platform = "sycl"
+     if jtu.is_device_rocm():
          gpu_platform = "rocm"
      lowering_platforms: list[str] = [
-         p if p != "gpu" else gpu_platform
--        for p in ("cpu", "gpu", "tpu")
-+        for p in ("cpu", "xpu", "tpu")
-         if p not in unimplemented_platforms
-     ]
- 
 diff --git a/tests/export_test.py b/tests/export_test.py
-index 144956475..78162d1df 100644
+index 144956475..9dba4b6d7 100644
 --- a/tests/export_test.py
 +++ b/tests/export_test.py
 @@ -113,7 +113,7 @@ mlir.register_lowering(testing_primitive_with_effect_p,
@@ -658,146 +290,96 @@ index 144956475..78162d1df 100644
  
  ## Setup for multi-platform lowering
 -_testing_multi_platform_to_add = dict(cpu=2., tpu=3., cuda=4., rocm=5.)
-+_testing_multi_platform_to_add = dict(cpu=2., tpu=3., xpu=4., rocm=5.)
++_testing_multi_platform_to_add = dict(cpu=2., tpu=3., cuda=4., rocm=5., sycl=6.)
  
  def _testing_multi_platform_func(x, *,
                                   effect_class_name: str | None = None):
-@@ -128,7 +128,7 @@ def _testing_multi_platform_func(x, *,
- 
-   return x + lax.platform_dependent(
+@@ -130,6 +130,7 @@ def _testing_multi_platform_func(x, *,
      tpu=lambda: for_platform("tpu"),
--    cuda=lambda: for_platform("cuda"),
-+    xpu=lambda: for_platform("xpu"),
+     cuda=lambda: for_platform("cuda"),
      rocm=lambda: for_platform("rocm"),
++    sycl=lambda: for_platform("sycl"),
      default=lambda: for_platform("cpu"),
    )
-@@ -163,7 +163,7 @@ class JaxExportTest(jtu.JaxTestCase):
-   def setUpClass(cls):
-     # Find the available platforms
-     cls.platforms = []
--    for backend in ["cpu", "gpu", "tpu"]:
-+    for backend in ["cpu", "xpu", "tpu"]:
-       try:
-         jax.devices(backend)
-       except RuntimeError:
-@@ -288,7 +288,7 @@ class JaxExportTest(jtu.JaxTestCase):
+ 
+@@ -288,7 +289,7 @@ class JaxExportTest(jtu.JaxTestCase):
    @jtu.parameterized_filterable(
      testcase_name=lambda kw: kw["platform"],
      kwargs=[dict(platform=p)
 -            for p in ("cpu", "cuda", "rocm", "tpu")])
-+            for p in ("cpu", "xpu", "rocm", "tpu")])
++            for p in ("cpu", "cuda", "rocm", "tpu", "sycl")])
    def test_error_wrong_platform(self, platform):
      a = np.arange(4, dtype=np.float32)
  
-@@ -1031,8 +1031,8 @@ class JaxExportTest(jtu.JaxTestCase):
+@@ -1031,8 +1032,8 @@ class JaxExportTest(jtu.JaxTestCase):
    def test_multi_platform(self):
      x = np.arange(8, dtype=np.float32)
      exp = get_exported(_testing_multi_platform_func,
 -                        lowering_platforms=("tpu", "cpu", "cuda","rocm"))(x)
 -    self.assertEqual(exp.lowering_platforms, ("tpu", "cpu", "cuda", "rocm"))
-+                        lowering_platforms=("tpu", "cpu", "xpu","rocm"))(x)
-+    self.assertEqual(exp.lowering_platforms, ("tpu", "cpu", "xpu", "rocm"))
++                        lowering_platforms=("tpu", "cpu", "cuda","rocm", "sycl"))(x)
++    self.assertEqual(exp.lowering_platforms, ("tpu", "cpu", "cuda", "rocm", "sycl"))
      module_str = str(exp.mlir_module())
      expected_main_re = (
        r"@main\("
-@@ -1054,14 +1054,14 @@ class JaxExportTest(jtu.JaxTestCase):
+@@ -1054,14 +1055,14 @@ class JaxExportTest(jtu.JaxTestCase):
    def test_multi_platform_nested(self):
      x = np.arange(5, dtype=np.float32)
      exp = get_exported(lambda x: _testing_multi_platform_func(jnp.sin(x)),
 -                        lowering_platforms=("cpu", "tpu", "cuda","rocm"))(x)
 -    self.assertEqual(exp.lowering_platforms, ("cpu", "tpu", "cuda","rocm"))
-+                        lowering_platforms=("cpu", "tpu", "xpu","rocm"))(x)
-+    self.assertEqual(exp.lowering_platforms, ("cpu", "tpu", "xpu","rocm"))
++                        lowering_platforms=("cpu", "tpu", "cuda","rocm", "sycl"))(x)
++    self.assertEqual(exp.lowering_platforms, ("cpu", "tpu", "cuda","rocm", "sycl"))
  
      # Now serialize the call to the exported using a different sequence of
      # lowering platforms, but included in the lowering platforms for the
      # nested exported.
      exp2 = get_exported(export.call_exported(exp),
 -                         lowering_platforms=("cpu", "cuda","rocm"))(x)
-+                         lowering_platforms=("cpu", "xpu","rocm"))(x)
++                         lowering_platforms=("cpu", "cuda","rocm", "sycl"))(x)
  
      # Ensure that we do not have multiple lowerings of the exported function
      exp2_module_str = str(exp2.mlir_module())
-@@ -1080,8 +1080,8 @@ class JaxExportTest(jtu.JaxTestCase):
+@@ -1080,8 +1081,8 @@ class JaxExportTest(jtu.JaxTestCase):
    def test_multi_platform_nested_inside_single_platform_export(self):
      x = np.arange(5, dtype=np.float32)
      exp = get_exported(_testing_multi_platform_func,
 -                        lowering_platforms=("cpu", "tpu", "cuda","rocm"))(x)
 -    self.assertEqual(exp.lowering_platforms, ("cpu", "tpu", "cuda", "rocm"))
-+                        lowering_platforms=("cpu", "tpu", "xpu","rocm"))(x)
-+    self.assertEqual(exp.lowering_platforms, ("cpu", "tpu", "xpu", "rocm"))
++                        lowering_platforms=("cpu", "tpu", "cuda","rocm", "sycl"))(x)
++    self.assertEqual(exp.lowering_platforms, ("cpu", "tpu", "cuda", "rocm", "sycl"))
  
      # Now serialize the call for the current platform.
      exp2 = get_exported(export.call_exported(exp))(x)
-@@ -1092,7 +1092,7 @@ class JaxExportTest(jtu.JaxTestCase):
+@@ -1092,7 +1093,7 @@ class JaxExportTest(jtu.JaxTestCase):
      self.assertAllClose(res2, _testing_multi_platform_fun_expected(x))
  
    def test_multi_platform_and_poly(self):
 -    if jtu.test_device_matches(["gpu"]):
-+    if jtu.test_device_matches(["xpu"]):
++    if jtu.test_device_matches(["sycl"]):
        # The export is not applicable to GPU
        raise unittest.SkipTest("Not intended for running on GPU")
      exp = get_exported(lambda x: jnp.reshape(_testing_multi_platform_func(x), (-1,)),
-@@ -1120,7 +1120,7 @@ class JaxExportTest(jtu.JaxTestCase):
+@@ -1120,7 +1121,7 @@ class JaxExportTest(jtu.JaxTestCase):
  
      res_native = f_jax(a)
      exp = get_exported(f_jax,
 -                        lowering_platforms=("cpu", "tpu", "cuda", "rocm"))(a)
-+                        lowering_platforms=("cpu", "tpu", "xpu", "rocm"))(a)
++                        lowering_platforms=("cpu", "tpu", "cuda", "rocm", "sycl"))(a)
  
      # Call with argument placed on different plaforms
      for platform in self.__class__.platforms:
-@@ -1270,7 +1270,7 @@ class JaxExportTest(jtu.JaxTestCase):
+@@ -1270,7 +1271,7 @@ class JaxExportTest(jtu.JaxTestCase):
                       export.maximum_supported_serialization_version + 1)])
    def test_ordered_effects_multi_platform_and_poly(self, *, v: int):
      self.override_serialization_version(v)
 -    if jtu.device_under_test() == "gpu":
-+    if jtu.device_under_test() == "xpu":
++    if jtu.device_under_test() == "sycl":
        # The export is not applicable to GPU
        raise unittest.SkipTest("Not intended for running on GPU")
      x = np.ones((3, 4), dtype=np.float32)
-diff --git a/tests/for_loop_test.py b/tests/for_loop_test.py
-index 641f12ff0..c2401d827 100644
---- a/tests/for_loop_test.py
-+++ b/tests/for_loop_test.py
-@@ -224,7 +224,7 @@ class ForLoopTransformationTest(jtu.JaxTestCase):
-     [dict(for_impl=for_impl, impl_name=impl_name)
-      for for_impl, impl_name in FOR_LOOP_IMPLS],
-   )
--  @jtu.skip_on_devices("gpu")  # TODO(mattjj,sharadmv): timeouts?
-+  @jtu.skip_on_devices("xpu")  # TODO(mattjj,sharadmv): timeouts?
-   def test_for_jvp(self, f, ref, body_shapes, n, for_impl, for_body_name,
-                    impl_name):
-     for_ = for_impl
-@@ -256,7 +256,7 @@ class ForLoopTransformationTest(jtu.JaxTestCase):
-     [dict(for_impl=for_impl, impl_name=impl_name)
-      for for_impl, impl_name in FOR_LOOP_IMPLS],
-   )
--  @jtu.skip_on_devices("gpu")  # TODO(mattjj,sharadmv): timeouts?
-+  @jtu.skip_on_devices("xpu")  # TODO(mattjj,sharadmv): timeouts?
-   def test_for_linearize(self, f, ref, body_shapes, n, for_impl, for_body_name,
-                          impl_name):
-     for_ = for_impl
-@@ -363,7 +363,7 @@ class ForLoopTransformationTest(jtu.JaxTestCase):
-     [dict(for_impl=for_impl, impl_name=impl_name)
-      for for_impl, impl_name in FOR_LOOP_IMPLS],
-   )
--  @jtu.skip_on_devices("gpu")  # TODO(mattjj,sharadmv): timeouts?
-+  @jtu.skip_on_devices("xpu")  # TODO(mattjj,sharadmv): timeouts?
-   @jtu.skip_on_flag("jax_skip_slow_tests", True)
-   def test_for_grad(self, f, ref, body_shapes, n, for_impl, for_body_name,
-                     impl_name):
-@@ -383,7 +383,7 @@ class ForLoopTransformationTest(jtu.JaxTestCase):
-     jtu.check_grads(lambda *args: for_(n, f, args)[1].sum(), args, order=2,
-                     rtol=7e-3, atol=1e-2)
- 
--  @jtu.skip_on_devices("gpu")  # TODO(mattjj,sharadmv): timeouts?
-+  @jtu.skip_on_devices("xpu")  # TODO(mattjj,sharadmv): timeouts?
-   @jax.legacy_prng_key('allow')
-   def test_grad_of_triple_nested_for_loop(self):
- 
 diff --git a/tests/fused_attention_stablehlo_test.py b/tests/fused_attention_stablehlo_test.py
-index f7e4bb799..cfa395e17 100644
+index f7e4bb799..2de3efac8 100644
 --- a/tests/fused_attention_stablehlo_test.py
 +++ b/tests/fused_attention_stablehlo_test.py
 @@ -140,7 +140,7 @@ class DotProductAttentionTest(jtu.JaxTestCase):
@@ -805,7 +387,7 @@ index f7e4bb799..cfa395e17 100644
        dtype=[jnp.float16, jnp.bfloat16]
    )
 -  @jtu.run_on_devices("cuda")
-+  @jtu.run_on_devices("xpu")
++  @jtu.run_on_devices("sycl")
    def test_sdpa(self, batch_size: int, seq_len: int, num_heads: int,
                  head_dim: int, use_bias: bool, use_mask: bool, is_causal_mask: bool,
                  dropout_rate: float, scale: float, dtype: jnp.dtype):
@@ -814,89 +396,174 @@ index f7e4bb799..cfa395e17 100644
        self.assertArraysAllClose(value_grad_ref, value_grad, rtol=1e-5, atol=1e-5)
  
 -  @jtu.run_on_devices("cuda")
-+  @jtu.run_on_devices("xpu")
++  @jtu.run_on_devices("sycl")
    def test_sdpa_inference(self):
      k1, k2, k3 = jax.random.split(jax.random.key(0), 3)
      query = jax.random.normal(
+diff --git a/tests/gemm_ut.py b/tests/gemm_ut.py
+new file mode 100644
+index 000000000..b2c9c3cf9
+--- /dev/null
++++ b/tests/gemm_ut.py
+@@ -0,0 +1,146 @@
++# Copyright (c) 2024 Intel Corporation
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++# ==============================================================================
++
++from absl.testing import absltest
++from absl.testing import parameterized
++
++import numpy as np
++import os
++
++import jax
++import jax.numpy as jnp
++import jax.util
++from jax import random
++from jax._src import test_util as jtu
++
++
++class GemmTest(jtu.JaxTestCase):
++
++    shape_list = [
++        (1, 256, 128, 8),
++        (1, 1024, 64, 128),
++    ]
++
++    shape_list1 = [
++        (1, 2560, 128, 2048),
++        (1, 1024, 128, 16384),
++    ]
++
++    types_list = [("bf16", ) + shape for shape in shape_list] + \
++        [("fp16", ) + shape for shape in shape_list]
++    types_list1 = [("fp32", ) + shape for shape in shape_list]  + \
++        [("fp16", ) + shape for shape in shape_list]
++
++    # Test the result of the gemm autotune and the policy of the xetla kernel
++    @parameterized.named_parameters(
++        *[
++            (
++                (f"{datatype=}_{batch_size=}_{m=}_{k=}_{n=}"),
++                datatype,
++                batch_size,
++                m,
++                k,
++                n
++            )
++            for (
++                datatype,
++                batch_size,
++                m,
++                k,
++                n,
++            ) in types_list
++        ]
++    )
++    def test_gemm_autotune(self, datatype, batch_size, m, k, n):
++        k1, k2, = random.split(random.key(0), 2)
++        datatype = jnp.bfloat16 if datatype == "bf16" else jnp.float16
++        a = random.normal(
++            k1, (batch_size, m, k), dtype=datatype
++        )
++        b = random.normal(
++            k2, (batch_size, k, n), dtype=datatype
++        )
++        #  Test b is col major
++        b = jnp.reshape(b, (batch_size, k, n), order='F')
++
++        def _get_computation(f, *ops):
++            lower = jax.jit(f).lower(*ops)
++            compiled = lower.compile()
++            return compiled.as_text()
++
++        def _gemm(self, *ops):
++            def f(*ops):
++                return jnp.einsum('b m k, b k n -> b m n', *ops)
++            str = _get_computation(f, *ops)
++            if 'is_xetla_hardware_support="True"' in str:
++                self.assertIn('custom_call_target="__cublas$lt$matmul"', str)
++                self.assertIn('"selected_algorithm":"-6"', str)
++
++        def _gemm_with_gelu(self, *ops):
++            def f(*ops):
++                matmul = jnp.einsum('b m k, b k n -> b m n', *ops)
++                return jax.nn.gelu(matmul)
++            str = _get_computation(f, *ops)
++            if 'is_xetla_hardware_support="True"' in str:
++                self.assertIn('custom_call_target="__cublas$lt$matmul"', str)
++                self.assertIn('"selected_algorithm":"-6"', str)
++                self.assertIn('"epilogue":"GELU"', str)
++
++
++        # check the autotune result when xetla option is open
++        os.environ["XETLA_GEMM"] = "1"
++        os.environ["_FORCE_XETLA"] = "1"
++        _gemm(self, a, b)
++        _gemm_with_gelu(self, a, b)
++
++    '''
++    @parameterized.named_parameters(
++        *[
++            (
++                (f"{datatype=}_{batch_size=}_{m=}_{k=}_{n=}"),
++                datatype,
++                batch_size,
++                m,
++                k,
++                n,
++            )
++            for (
++                datatype,
++                batch_size,
++                m,
++                k,
++                n,
++            ) in types_list1
++        ]
++    )
++    def test_gemm_accuracy(self, datatype, batch_size, m, k, n):
++        k1, k2 = random.split(random.key(0), 2)
++        datatype = jnp.float32 if datatype == "fp32" else jnp.float16
++        a = random.normal(
++            k1, (batch_size, m, k), dtype=datatype
++        )
++        b = random.normal(
++            k2, (batch_size, k, n), dtype=datatype
++        )
++
++        os.environ["XETLA_GEMM"] = "1"
++        ref = np.einsum('b m k, b k n -> b m n', a, b)
++        res = jnp.einsum('b m k, b k n -> b m n', a, b)
++        atol = 1e-3 if datatype == jnp.float16 else 1e-6
++        self.assertAllClose(ref, res, atol=atol)
++   '''
++
++if __name__ == "__main__":
++    absltest.main(testLoader=jtu.JaxTestLoader())
 diff --git a/tests/gpu_memory_flags_test.py b/tests/gpu_memory_flags_test.py
-index 21cdae2da..89a6d7282 100644
+index 21cdae2da..214f84eac 100644
 --- a/tests/gpu_memory_flags_test.py
 +++ b/tests/gpu_memory_flags_test.py
 @@ -37,6 +37,7 @@ class GpuMemoryAllocationTest(absltest.TestCase):
        "Test does not work if the python client allocator has been overriden",
    )
    @unittest.skipIf(xla_extension_version < 225, "jaxlib version too old")
-+  @jtu.skip_on_devices("xpu")
++  @jtu.skip_on_devices("sycl")
    def test_gpu_memory_allocation(self):
      falsey_values = ("0", "False", "false")
      preallocate = (
-diff --git a/tests/host_callback_test.py b/tests/host_callback_test.py
-index f12218449..9d5c0c631 100644
---- a/tests/host_callback_test.py
-+++ b/tests/host_callback_test.py
-@@ -237,7 +237,7 @@ class HostCallbackTapTest(jtu.JaxTestCase):
- 
-   def setUp(self):
-     super().setUp()
--    if jtu.test_device_matches(["gpu"]) and jax.device_count() > 1:
-+    if jtu.test_device_matches(["xpu"]) and jax.device_count() > 1:
-       raise SkipTest("host_callback broken on multi-GPU platforms (#6447)")
-     if xla_bridge.using_pjrt_c_api():
-       raise SkipTest("host_callback not implemented in PJRT C API")
-@@ -540,7 +540,7 @@ class HostCallbackTapTest(jtu.JaxTestCase):
-   @jtu.sample_product(concurrent=[True, False])
-   def test_tap_multiple(self, concurrent=False):
-     """Call id_tap multiple times, concurrently or in sequence. """
--    if concurrent and jtu.test_device_matches(["cpu", "gpu"]):
-+    if concurrent and jtu.test_device_matches(["cpu", "xpu"]):
-       # TODO(necula): if there is device side concurrency, outfeeds from
-       # different computations can be interleaved. For example, it seems that
-       # on GPU if multiple host threads run a jit computation, the multiple
-@@ -1868,7 +1868,7 @@ class HostCallbackCallTest(jtu.JaxTestCase):
- 
-   def setUp(self):
-     super().setUp()
--    if jtu.test_device_matches(["gpu"]) and jax.device_count() > 1:
-+    if jtu.test_device_matches(["xpu"]) and jax.device_count() > 1:
-       raise SkipTest("host_callback broken on multi-GPU platforms (#6447)")
-     if xla_bridge.using_pjrt_c_api():
-       raise SkipTest("host_callback not implemented in PJRT C API")
-@@ -2104,7 +2104,7 @@ class HostCallbackCallTest(jtu.JaxTestCase):
- 
-     expected_res = np.linalg.eigvals(m)
-     self.assertAllClose(expected_res, fun(m))
--  @jtu.skip_on_devices("gpu")
-+  @jtu.skip_on_devices("xpu")
-   def test_call_doc_example_hlo(self):
-     """Examples from the documentation: simplest, call a function."""
- 
-@@ -2234,7 +2234,7 @@ class HostCallbackCallTest(jtu.JaxTestCase):
-     if jtu.test_device_matches(["cpu"]):
-       # On CPU the runtime crashes, and the tests are all aborted
-       raise SkipTest("TODO: CPU runtime crashes on unexpected infeed")
--    elif jtu.test_device_matches(["gpu"]):
-+    elif jtu.test_device_matches(["xpu"]):
-       # On GPU we get a nice error back to Python
-       with self.assertRaisesRegex(
-           RuntimeError,
-@@ -2323,7 +2323,7 @@ class CallJaxTest(jtu.JaxTestCase):
-   """Tests using `call_jax_other_device`."""
- 
-   def setUp(self):
--    if jtu.test_device_matches(["gpu"]) and jax.device_count() > 1:
-+    if jtu.test_device_matches(["xpu"]) and jax.device_count() > 1:
-       raise SkipTest("host_callback broken on multi-GPU platforms (#6447)")
-     if xla_bridge.using_pjrt_c_api():
-       raise SkipTest("host_callback not implemented in PJRT C API")
-@@ -2398,7 +2398,7 @@ class CallJaxTest(jtu.JaxTestCase):
- class OutfeedRewriterTest(jtu.JaxTestCase):
- 
-   def setUp(self):
--    if jtu.test_device_matches(["gpu"]) and jax.device_count() > 1:
-+    if jtu.test_device_matches(["xpu"]) and jax.device_count() > 1:
-       raise SkipTest("host_callback broken on multi-GPU platforms (#6447)")
-     if xla_bridge.using_pjrt_c_api():
-       raise SkipTest("host_callback not implemented in PJRT C API")
 diff --git a/tests/lax_autodiff_test.py b/tests/lax_autodiff_test.py
 index 630b08cc3..7641c99db 100644
 --- a/tests/lax_autodiff_test.py
@@ -920,7 +587,7 @@ index 630b08cc3..7641c99db 100644
  if __name__ == '__main__':
    absltest.main(testLoader=jtu.JaxTestLoader())
 diff --git a/tests/lax_control_flow_test.py b/tests/lax_control_flow_test.py
-index 5c737cc4d..0def16242 100644
+index 5c737cc4d..5fd74dd7e 100644
 --- a/tests/lax_control_flow_test.py
 +++ b/tests/lax_control_flow_test.py
 @@ -1636,7 +1636,7 @@ class LaxControlFlowTest(jtu.JaxTestCase):
@@ -945,205 +612,25 @@ index 5c737cc4d..0def16242 100644
        for jit_f in [False, True]
        for scan_impl, scan_name in SCAN_IMPLS_WITH_FOR)
    @jtu.skip_on_flag("jax_skip_slow_tests", True)
-+  @jtu.skip_on_devices("xpu") # fails on atsm
++  @jtu.skip_on_devices("sycl") # fails on atsm
    def testScanGrad(self, jit_scan, jit_f, scan):
      rng = self.rng()
  
 diff --git a/tests/lax_numpy_test.py b/tests/lax_numpy_test.py
-index ab52cd6ed..c053d82d4 100644
+index ab52cd6ed..8823b86fc 100644
 --- a/tests/lax_numpy_test.py
 +++ b/tests/lax_numpy_test.py
-@@ -419,7 +419,7 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
-   )
-   def testArgMinMax(self, np_op, jnp_op, rng_factory, shape, dtype, axis, keepdims):
-     rng = rng_factory(self.rng())
--    if dtype == np.complex128 and jtu.test_device_matches(["gpu"]):
-+    if dtype == np.complex128 and jtu.test_device_matches(["xpu"]):
-       raise unittest.SkipTest("complex128 reductions not supported on GPU")
-     if "nan" in np_op.__name__ and dtype == jnp.bfloat16:
-       raise unittest.SkipTest("NumPy doesn't correctly handle bfloat16 arrays")
-@@ -811,7 +811,8 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
-     with jtu.strict_promotion_if_dtypes_match([lhs_dtype, rhs_dtype]):
-       self._CheckAgainstNumpy(np_fun, jnp_fun, args_maker, check_dtypes=False, tol=tol)
-       self._CompileAndCheck(jnp_fun, args_maker, check_dtypes=False, atol=tol, rtol=tol)
--
-+  '''
-+  # depending on eigh support
-   @jtu.sample_product(
-     dtype=[dt for dt in float_dtypes if dt not in [jnp.float16, jnp.bfloat16]],
-     shape=[shape for shape in one_dim_array_shapes if shape != (1,)],
-@@ -853,7 +854,7 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
-         (np_p, nrank, nsingular_values, nrcond),
-         (jp_p, jrank, jsingular_values, jrcond),
-         atol=tol, rtol=tol, check_dtypes=False)
--
-+  '''
-   @jtu.sample_product(
-     [dict(a_min=a_min, a_max=a_max)
-       for a_min, a_max in [(-1, None), (None, 1), (-0.9, 1),
-@@ -2071,7 +2072,7 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
+@@ -2071,7 +2071,7 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
      xshape=one_dim_array_shapes,
      yshape=one_dim_array_shapes,
    )
 -  @jtu.skip_on_devices("cuda", "rocm")  # backends don't support all dtypes.
-+  @jtu.skip_on_devices("xpu", "rocm")  # backends don't support all dtypes.
++  @jtu.skip_on_devices("cuda", "rocm", "sycl")  # backends don't support all dtypes.
    def testConvolutionsPreferredElementType(self, xshape, yshape, dtype, mode, op):
      jnp_op = getattr(jnp, op)
      np_op = getattr(np, op)
-@@ -5024,7 +5025,7 @@ class LaxBackedNumpyTests(jtu.JaxTestCase):
-   def testLogspace(self, start_shape, stop_shape, num,
-                    endpoint, base, dtype):
-     if (dtype in int_dtypes and
--        jtu.test_device_matches(["gpu", "tpu"]) and
-+        jtu.test_device_matches(["xpu", "tpu"]) and
-         not config.enable_x64.value):
-       raise unittest.SkipTest("GPUx32 truncated exponentiation"
-                               " doesn't exactly match other platforms.")
-diff --git a/tests/lax_scipy_sparse_test.py b/tests/lax_scipy_sparse_test.py
-index d2e64833b..0222dd939 100644
---- a/tests/lax_scipy_sparse_test.py
-+++ b/tests/lax_scipy_sparse_test.py
-@@ -261,7 +261,7 @@ class LaxBackedScipyTests(jtu.JaxTestCase):
-     dtype=float_types + complex_types,
-     preconditioner=[None, 'identity', 'exact'],
-   )
--  @jtu.skip_on_devices("gpu")
-+  @jtu.skip_on_devices("xpu")
-   def test_bicgstab_on_identity_system(self, shape, dtype, preconditioner):
-     A = jnp.eye(shape[1], dtype=dtype)
-     solution = jnp.ones(shape[1], dtype=dtype)
-@@ -280,7 +280,7 @@ class LaxBackedScipyTests(jtu.JaxTestCase):
-     dtype=float_types + complex_types,
-     preconditioner=[None, 'identity', 'exact'],
-   )
--  @jtu.skip_on_devices("gpu")
-+  @jtu.skip_on_devices("xpu")
-   def test_bicgstab_on_random_system(self, shape, dtype, preconditioner):
-     rng = jtu.rand_default(self.rng())
-     A = rng(shape, dtype)
-@@ -367,7 +367,7 @@ class LaxBackedScipyTests(jtu.JaxTestCase):
-     preconditioner=[None, 'identity', 'exact'],
-     solve_method=['batched', 'incremental'],
-   )
--  @jtu.skip_on_devices("gpu")
-+  @jtu.skip_on_devices("xpu")
-   def test_gmres_on_identity_system(self, shape, dtype, preconditioner,
-                                     solve_method):
-     A = jnp.eye(shape[1], dtype=dtype)
-@@ -391,7 +391,7 @@ class LaxBackedScipyTests(jtu.JaxTestCase):
-     preconditioner=[None, 'identity', 'exact'],
-     solve_method=['incremental', 'batched'],
-   )
--  @jtu.skip_on_devices("gpu")
-+  @jtu.skip_on_devices("xpu")
-   def test_gmres_on_random_system(self, shape, dtype, preconditioner,
-                                   solve_method):
-     rng = jtu.rand_default(self.rng())
-diff --git a/tests/lax_scipy_test.py b/tests/lax_scipy_test.py
-index 78a24d1f3..0fc06fafb 100644
---- a/tests/lax_scipy_test.py
-+++ b/tests/lax_scipy_test.py
-@@ -463,7 +463,8 @@ class LaxBackedScipyTests(jtu.JaxTestCase):
-     actual = lsp_special.sph_harm(m, n_clipped, theta, phi, n_max)
- 
-     self.assertAllClose(actual, expected, rtol=1e-8, atol=9e-5)
--
-+  '''
-+  # depending on eigh support
-   @jtu.sample_product(
-     n_zero_sv=n_zero_svs,
-     degeneracy=degeneracies,
-@@ -526,7 +527,7 @@ class LaxBackedScipyTests(jtu.JaxTestCase):
-     with self.subTest('Test reconstruction.'):
-       self.assertAllClose(
-         matrix, recon, atol=tol * jnp.linalg.norm(matrix))
--
-+  '''
-   @jtu.sample_product(
-     n_obs=[1, 3, 5],
-     n_codes=[1, 2, 4],
-diff --git a/tests/lax_test.py b/tests/lax_test.py
-index fead85aa2..0b40cd2bd 100644
---- a/tests/lax_test.py
-+++ b/tests/lax_test.py
-@@ -154,7 +154,7 @@ class LaxTest(jtu.JaxTestCase):
-     to_dtype=jtu.dtypes.all_floating + jtu.dtypes.all_integer + jtu.dtypes.all_unsigned,
-     shape = [(), (2,), (2, 3)]
-   )
--  @jtu.skip_on_devices("gpu")  # TODO(b/313567948): Test fails on GPU jaxlib build
-+  @jtu.skip_on_devices("xpu")  # TODO(b/313567948): Test fails on GPU jaxlib build
-   def testBitcastConvertType(self, from_dtype, to_dtype, shape):
-     rng = jtu.rand_default(self.rng())
-     itemsize_in = np.dtype(from_dtype).itemsize
-@@ -301,7 +301,7 @@ class LaxTest(jtu.JaxTestCase):
-     if (jtu.test_device_matches(["tpu"]) and
-        (dtype == np.complex128 or preferred_element_type == np.complex128)):
-       raise SkipTest("np.complex128 is not yet supported on TPU")
--    if jtu.test_device_matches(["gpu"]) and np.issubdtype(dtype, np.integer):
-+    if jtu.test_device_matches(["xpu"]) and np.issubdtype(dtype, np.integer):
-       # TODO(b/183565702): Support integer convolutions on CPU/GPU.
-       raise SkipTest("Integer convolution not yet supported on GPU")
-     # x64 implementation is only accurate to ~float32 precision for this case.
-@@ -413,7 +413,7 @@ class LaxTest(jtu.JaxTestCase):
-                                dimension_numbers, perms):
-     if np.issubdtype(dtype, np.integer) or np.issubdtype(dtype, np.bool_):
-       # TODO(b/183565702): Support integer convolutions on CPU/GPU.
--      if jtu.test_device_matches(["gpu"]):
-+      if jtu.test_device_matches(["xpu"]):
-         raise SkipTest("Integer convolution not yet supported on GPU")
-     rng = jtu.rand_small(self.rng())
-     lhs_perm, rhs_perm = perms  # permute to compatible shapes
-@@ -469,7 +469,7 @@ class LaxTest(jtu.JaxTestCase):
-                              dimension_numbers, perms):
-     if np.issubdtype(dtype, np.integer) or np.issubdtype(dtype, np.bool_):
-       # TODO(b/183565702): Support integer convolutions on CPU/GPU.
--      if jtu.test_device_matches(["gpu"]):
-+      if jtu.test_device_matches(["xpu"]):
-         raise SkipTest("Integer convolution not yet supported on GPU")
-     rng = jtu.rand_small(self.rng())
-     lhs_perm, rhs_perm = perms  # permute to compatible shapes
-@@ -619,7 +619,7 @@ class LaxTest(jtu.JaxTestCase):
-                                                   precision):
-     if np.issubdtype(dtype, np.integer) or np.issubdtype(dtype, np.bool_):
-       # TODO(b/183565702): Support integer convolutions on CPU/GPU.
--      if jtu.test_device_matches(["gpu"]):
-+      if jtu.test_device_matches(["xpu"]):
-         raise SkipTest("Integer convolution not yet supported on GPU")
-     rng = jtu.rand_small(self.rng())
-     lhs = rng(lhs_shape, dtype)
-@@ -1040,7 +1040,7 @@ class LaxTest(jtu.JaxTestCase):
-     if (jtu.test_device_matches(["tpu"]) and
-        (dtype == np.complex128 or preferred_element_type == np.complex128)):
-       raise SkipTest("np.complex128 is not yet supported on TPU")
--    if jtu.test_device_matches(["gpu"]):
-+    if jtu.test_device_matches(["xpu"]):
-       # TODO(b/189287598)
-       raise SkipTest("dot_general with preferred_element_type returns NaN "
-                      "non-deterministically on GPU")
-@@ -1828,7 +1828,7 @@ class LaxTest(jtu.JaxTestCase):
-     dtype=[np.float32],
-   )
-   # TODO(b/183233858): variadic reduce-window is not implemented on XLA:GPU
--  @jtu.skip_on_devices("gpu")
-+  @jtu.skip_on_devices("xpu")
-   def testReduceWindowVariadic(self, dtype, shape, dims, strides, padding,
-                                base_dilation, window_dilation):
-     if (jtu.test_device_matches(["tpu"]) and
-diff --git a/tests/lax_vmap_test.py b/tests/lax_vmap_test.py
-index 0d22d801d..a9afd87e3 100644
---- a/tests/lax_vmap_test.py
-+++ b/tests/lax_vmap_test.py
-@@ -692,7 +692,7 @@ class LaxVmapTest(jtu.JaxTestCase):
-   # TODO Scatter
- 
-   # TODO(b/183233858): variadic reduce-window is not implemented on XLA:GPU
--  @jtu.skip_on_devices("gpu")
-+  @jtu.skip_on_devices("xpu")
-   def test_variadic_reduce_window(self):
-     # https://github.com/google/jax/discussions/9818 and
-     # https://github.com/google/jax/issues/9837
 diff --git a/tests/linalg_test.py b/tests/linalg_test.py
-index 2261876e0..35d353b0e 100644
+index 2261876e0..37889670f 100644
 --- a/tests/linalg_test.py
 +++ b/tests/linalg_test.py
 @@ -57,7 +57,9 @@ def _is_required_cuda_version_satisfied(cuda_version):
@@ -1195,61 +682,7 @@ index 2261876e0..35d353b0e 100644
    @jtu.sample_product(
      [dict(dtype=dtype, method=method)
       for dtype in float_types + complex_types
-@@ -333,7 +337,8 @@ class NumpyLinalgTest(jtu.JaxTestCase):
-     ws, vs = vmap(jnp.linalg.eig)(args)
-     self.assertTrue(np.all(np.linalg.norm(
-         np.matmul(args, vs) - ws[..., None, :] * vs) < 1e-3))
--
-+  '''
-+  # depending on eigh support
-   @jtu.sample_product(
-     n=[0, 4, 5, 50, 512],
-     dtype=float_types + complex_types,
-@@ -559,7 +564,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
-     ws = ws.astype(vs.dtype)
-     norm = np.max(np.linalg.norm(np.matmul(args, vs) - ws[..., None, :] * vs))
-     self.assertLess(norm, 1e-2)
--
-+  '''
-   @jtu.sample_product(
-     shape=[(1,), (4,), (5,)],
-     dtype=(np.int32,),
-@@ -592,7 +597,8 @@ class NumpyLinalgTest(jtu.JaxTestCase):
-     expected = jnp.arange(permutation_size - 1, -1, -1, dtype=dtype)
-     expected = jnp.broadcast_to(expected, actual.shape)
-     self.assertArraysEqual(actual, expected)
--
-+  '''
-+  # depending on eigh support
-   @jtu.sample_product(
-     [dict(axis=axis, shape=shape, ord=ord)
-      for axis, shape in [
-@@ -619,12 +625,13 @@ class NumpyLinalgTest(jtu.JaxTestCase):
-     self._CheckAgainstNumpy(np_fn, jnp_fn, args_maker, check_dtypes=False,
-                             tol=1e-3)
-     self._CompileAndCheck(jnp_fn, args_maker)
--
-+  '''
-   def testStringInfNorm(self):
-     err, msg = ValueError, r"Invalid order 'inf' for vector norm."
-     with self.assertRaisesRegex(err, msg):
-       jnp.linalg.norm(jnp.array([1.0, 2.0, 3.0]), ord="inf")
--
-+  '''
-+  # depending on eigh support
-   @jtu.sample_product(
-       shape=[(2, 3), (4, 2, 3), (2, 3, 4, 5)],
-       dtype=float_types + complex_types,
-@@ -852,7 +859,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
-     # since jax.scipy.linalg.svd is almost the same as jax.numpy.linalg.svd
-     # do not check it functionality here
-     jsp.linalg.svd(np.ones((2, 2), dtype=np.float32))
--
-+  '''
-   @jtu.sample_product(
-     shape=[(0, 2), (2, 0), (3, 4), (3, 3), (4, 3)],
-     dtype=[np.float32],
-@@ -934,7 +941,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
+@@ -934,7 +938,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
  
      if m == n or (m > n and not full_matrices):
        jtu.check_jvp(qr_and_mul, partial(jvp, qr_and_mul), (a,), atol=3e-3)
@@ -1258,7 +691,7 @@ index 2261876e0..35d353b0e 100644
    @jtu.skip_on_devices("tpu")
    def testQrInvalidDtypeCPU(self, shape=(5, 6), dtype=np.float16):
      # Regression test for https://github.com/google/jax/issues/10530
-@@ -946,7 +953,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
+@@ -946,7 +950,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
        err, msg = ValueError, r"Unsupported dtype dtype\('float16'\)"
      with self.assertRaisesRegex(err, msg):
        jnp.linalg.qr(arr)
@@ -1267,16 +700,7 @@ index 2261876e0..35d353b0e 100644
    @jtu.sample_product(
      shape=[(10, 4, 5), (5, 3, 3), (7, 6, 4)],
      dtype=float_types + complex_types,
-@@ -962,7 +969,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
-     pnorm=[jnp.inf, -jnp.inf, 1, -1, 2, -2, 'fro'],
-     dtype=float_types + complex_types,
-   )
--  @jtu.skip_on_devices("gpu")  # TODO(#2203): numerical errors
-+  @jtu.skip_on_devices("xpu")  # TODO(#2203): numerical errors
-   def testCond(self, shape, pnorm, dtype):
-     def gen_mat():
-       # arr_gen = jtu.rand_some_nan(self.rng())
-@@ -985,7 +992,8 @@ class NumpyLinalgTest(jtu.JaxTestCase):
+@@ -985,7 +989,8 @@ class NumpyLinalgTest(jtu.JaxTestCase):
        partial_norm = partial(jnp.linalg.cond, p=pnorm)
        self._CompileAndCheck(partial_norm, lambda: [gen_mat()],
                              check_dtypes=False, rtol=1e-03, atol=1e-03)
@@ -1286,7 +710,7 @@ index 2261876e0..35d353b0e 100644
    @jtu.sample_product(
      shape=[(1, 1), (4, 4), (200, 200), (7, 7, 7, 7)],
      dtype=float_types,
-@@ -1009,7 +1017,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
+@@ -1009,7 +1014,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
                              check_dtypes=False, tol=1e-3)
      partial_inv = partial(jnp.linalg.tensorinv, ind=int(np.floor(len(shape) / 2)))
      self._CompileAndCheck(partial_inv, lambda: [tensor_maker()], check_dtypes=False, rtol=1e-03, atol=1e-03)
@@ -1295,26 +719,7 @@ index 2261876e0..35d353b0e 100644
    @jtu.sample_product(
      [dict(lhs_shape=lhs_shape, rhs_shape=rhs_shape)
       for lhs_shape, rhs_shape in [
-@@ -1074,7 +1082,8 @@ class NumpyLinalgTest(jtu.JaxTestCase):
-     self._CheckAgainstNumpy(np.linalg.inv, jnp.linalg.inv, args_maker,
-                             tol=1e-3)
-     self._CompileAndCheck(jnp.linalg.inv, args_maker)
--
-+  '''
-+  # depending on eigh support
-   @jtu.sample_product(
-     [dict(shape=shape, hermitian=hermitian)
-      for shape in [(1, 1), (4, 4), (3, 10, 10), (2, 70, 7), (2000, 7),
-@@ -1111,7 +1120,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
-                          dtype=jnp.float32)
-     self.assertAllClose(
-       expected, jax.jacobian(jnp.linalg.pinv)(jnp.eye(2, dtype=jnp.float32)))
--
-+  '''
-   @jtu.sample_product(
-     shape=[(1, 1), (2, 2), (4, 4), (5, 5), (1, 2, 2), (2, 3, 3), (2, 5, 5)],
-     dtype=float_types + complex_types,
-@@ -1126,7 +1135,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
+@@ -1126,7 +1131,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
                              args_maker, tol=1e-3)
      self._CompileAndCheck(partial(jnp.linalg.matrix_power, n=n), args_maker,
                            rtol=1e-3)
@@ -1323,7 +728,7 @@ index 2261876e0..35d353b0e 100644
    @jtu.sample_product(
      shape=[(3, ), (1, 2), (8, 5), (4, 4), (5, 5), (50, 50), (3, 4, 5),
             (2, 3, 4, 5)],
-@@ -1140,7 +1149,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
+@@ -1140,7 +1145,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
                              args_maker, check_dtypes=False, tol=1e-3)
      self._CompileAndCheck(jnp.linalg.matrix_rank, args_maker,
                            check_dtypes=False, rtol=1e-3)
@@ -1332,151 +737,17 @@ index 2261876e0..35d353b0e 100644
    @jtu.sample_product(
      shapes=[
        [(3, ), (3, 1)],  # quick-out codepath
-@@ -1161,7 +1170,8 @@ class NumpyLinalgTest(jtu.JaxTestCase):
-     self._CheckAgainstNumpy(np_fun, jnp_fun, args_maker, tol=tol)
-     self._CompileAndCheck(jnp_fun, args_maker,
-                           atol=tol, rtol=tol)
--
-+  '''
-+  # depending on eigh support
-   @jtu.sample_product(
-     [dict(lhs_shape=lhs_shape, rhs_shape=rhs_shape)
-       for lhs_shape, rhs_shape in [
-@@ -1202,7 +1212,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
-     grad_test_jc = jit(grad(jit(test)))
-     xc = np.eye(3, dtype=np.complex64)
-     self.assertAllClose(xc, grad_test_jc(xc))
--
-+  '''
-   @jtu.skip_on_flag("jax_skip_slow_tests", True)
-   @jtu.ignore_warning(category=FutureWarning, message="jnp.linalg.solve: batched")
-   def testIssue1151(self):
-@@ -1217,7 +1227,8 @@ class NumpyLinalgTest(jtu.JaxTestCase):
- 
-     _ = jax.jacobian(jnp.linalg.solve, argnums=0)(A[0], b[0])
-     _ = jax.jacobian(jnp.linalg.solve, argnums=1)(A[0], b[0])
--
-+  '''
-+  # depending on eigh support
-   @jtu.skip_on_flag("jax_skip_slow_tests", True)
-   @jax.legacy_prng_key("allow")
-   def testIssue1383(self):
-@@ -1233,7 +1244,7 @@ class NumpyLinalgTest(jtu.JaxTestCase):
-     hess_func = jax.jacfwd(grad_func)
-     cube_func = jax.jacfwd(hess_func)
-     self.assertFalse(np.any(np.isnan(cube_func(a))))
--
-+  '''
-   @jtu.sample_product(
-     [dict(lhs_shape=lhs_shape, rhs_shape=rhs_shape, axis=axis)
-       for lhs_shape, rhs_shape, axis in [
-@@ -1648,7 +1659,8 @@ class ScipyLinalgTest(jtu.JaxTestCase):
-     self._CheckAgainstNumpy(sp_func, jsp_func, args_maker, rtol=1e-5, atol=1e-5,
-                             check_dtypes=not calc_q)
-     self._CompileAndCheck(jsp_func, args_maker)
--
-+  '''
-+  # depending on eigh support
-   @jtu.sample_product(
-       shape=[(1, 1), (2, 2, 2), (4, 4), (10, 10), (2, 5, 5)],
+@@ -1654,7 +1659,7 @@ class ScipyLinalgTest(jtu.JaxTestCase):
        dtype=float_types + complex_types,
-@@ -1680,7 +1692,7 @@ class ScipyLinalgTest(jtu.JaxTestCase):
-     args_maker = lambda: [rng(shape, dtype)]
-     self._CheckAgainstNumpy(sp_func, jax_func, args_maker, rtol=1e-4, atol=1e-4,
-                             check_dtypes=False)
--
-+  '''
- 
-   @jtu.sample_product(
-     n=[1, 4, 5, 20, 50, 100],
-@@ -1898,7 +1910,7 @@ class ScipyLinalgTest(jtu.JaxTestCase):
- 
-     int_types_excl_i8 = set(int_types) - {np.int8}
-     if ((rdtype in int_types_excl_i8 or cdtype in int_types_excl_i8)
--        and jtu.test_device_matches(["gpu"])):
-+        and jtu.test_device_matches(["xpu"])):
-       self.skipTest("Integer (except int8) toeplitz is not supported on GPU yet.")
- 
+       lower=[False, True],
+   )
+-  @jtu.skip_on_devices("tpu","rocm")
++  @jtu.skip_on_devices("tpu", "rocm", "sycl")
+   def testTridiagonal(self, shape, dtype, lower):
      rng = jtu.rand_default(self.rng())
-@@ -1919,7 +1931,7 @@ class ScipyLinalgTest(jtu.JaxTestCase):
- 
-     int_types_excl_i8 = set(int_types) - {np.int8}
-     if (dtype in int_types_excl_i8
--        and jtu.test_device_matches(["gpu"])):
-+        and jtu.test_device_matches(["xpu"])):
-       self.skipTest("Integer (except int8) toeplitz is not supported on GPU yet.")
- 
-     rng = jtu.rand_default(self.rng())
-@@ -1946,7 +1958,8 @@ class ScipyLinalgTest(jtu.JaxTestCase):
- 
- class LaxLinalgTest(jtu.JaxTestCase):
-   """Tests for lax.linalg primitives."""
--
-+  '''
-+  # depending on eigh support
-   @jtu.sample_product(
-     n=[0, 4, 5, 50],
-     dtype=float_types + complex_types,
-@@ -1973,7 +1986,7 @@ class LaxLinalgTest(jtu.JaxTestCase):
-     w_expected, v_expected = np.linalg.eigh(np.asarray(a))
-     self.assertAllClose(w_expected, w if sort_eigenvalues else np.sort(w),
-                         rtol=1e-4, atol=1e-4)
--
-+  '''
-   def run_eigh_tridiagonal_test(self, alpha, beta):
-     n = alpha.shape[-1]
-     # scipy.linalg.eigh_tridiagonal doesn't support complex inputs, so for
-diff --git a/tests/lobpcg_test.py b/tests/lobpcg_test.py
-index 3a4a2196c..4bd9aa91a 100644
---- a/tests/lobpcg_test.py
-+++ b/tests/lobpcg_test.py
-@@ -372,7 +372,7 @@ class F32LobpcgTest(LobpcgTest):
- 
-   def setUp(self):
-     # TODO(phawkins): investigate this failure
--    if jtu.test_device_matches(["gpu"]):
-+    if jtu.test_device_matches(["xpu"]):
-       raise unittest.SkipTest("Test is failing on CUDA gpus")
-     super().setUp()
- 
-@@ -394,7 +394,7 @@ class F32LobpcgTest(LobpcgTest):
-       linalg.lobpcg_standard(A[:50, :50], X[:50])
- 
-   @parameterized.named_parameters(_make_concrete_cases(f64=False))
--  @jtu.skip_on_devices("gpu")
-+  @jtu.skip_on_devices("xpu")
-   def testLobpcgConsistencyF32(self, matrix_name, n, k, m, tol):
-     self.checkLobpcgConsistency(matrix_name, n, k, m, tol, jnp.float32)
- 
-@@ -412,22 +412,22 @@ class F64LobpcgTest(LobpcgTest):
- 
-   def setUp(self):
-     # TODO(phawkins): investigate this failure
--    if jtu.test_device_matches(["gpu"]):
-+    if jtu.test_device_matches(["xpu"]):
-       raise unittest.SkipTest("Test is failing on CUDA gpus")
-     super().setUp()
- 
-   @parameterized.named_parameters(_make_concrete_cases(f64=True))
--  @jtu.skip_on_devices("tpu", "iree", "gpu")
-+  @jtu.skip_on_devices("tpu", "iree", "xpu")
-   def testLobpcgConsistencyF64(self, matrix_name, n, k, m, tol):
-     self.checkLobpcgConsistency(matrix_name, n, k, m, tol, jnp.float64)
- 
-   @parameterized.named_parameters(_make_concrete_cases(f64=True))
--  @jtu.skip_on_devices("tpu", "iree", "gpu")
-+  @jtu.skip_on_devices("tpu", "iree", "xpu")
-   def testLobpcgMonotonicityF64(self, matrix_name, n, k, m, tol):
-     self.checkLobpcgMonotonicity(matrix_name, n, k, m, tol, jnp.float64)
- 
-   @parameterized.named_parameters(_make_callable_cases(f64=True))
--  @jtu.skip_on_devices("tpu", "iree", "gpu")
-+  @jtu.skip_on_devices("tpu", "iree", "xpu")
-   def testCallableMatricesF64(self, matrix_name):
-     self.checkApproxEigs(matrix_name, jnp.float64)
- 
+     def jax_func(a):
 diff --git a/tests/logging_test.py b/tests/logging_test.py
-index 05bb31015..333816c40 100644
+index 05bb31015..d3d6bf5a5 100644
 --- a/tests/logging_test.py
 +++ b/tests/logging_test.py
 @@ -50,7 +50,8 @@ def capture_jax_logs():
@@ -1485,28 +756,13 @@ index 05bb31015..333816c40 100644
  class LoggingTest(jtu.JaxTestCase):
 -
 +  # skip it for sycl
-+  @jtu.skip_on_devices("xpu")
++  @jtu.skip_on_devices("sycl")
    @unittest.skipIf(platform.system() == "Windows",
                     "Subprocess test doesn't work on Windows")
    def test_no_log_spam(self):
-diff --git a/tests/memories_test.py b/tests/memories_test.py
-index 0f3bbf185..ad3f16784 100644
---- a/tests/memories_test.py
-+++ b/tests/memories_test.py
-@@ -1156,8 +1156,8 @@ class DevicePutTest(jtu.JaxTestCase):
- class ActivationOffloadingTest(jtu.JaxTestCase):
- 
-   def setUp(self):
--    if not jtu.test_device_matches(["tpu", "gpu"]):
--      self.skipTest("Memories do not work on CPU backend.")
-+    if not jtu.test_device_matches(["tpu", "gpu", "xpu"]):
-+      self.skipTest("Memories do not work on CPU and XPU backend.")
-     super().setUp()
-     self.orig_memories_flag = config.enable_memories.value
-     jax.config.update('jax_enable_memories', True)
 diff --git a/tests/mha_rewrite_test.py b/tests/mha_rewrite_test.py
 new file mode 100644
-index 000000000..58113dfac
+index 000000000..1e6d5492a
 --- /dev/null
 +++ b/tests/mha_rewrite_test.py
 @@ -0,0 +1,105 @@
@@ -1603,7 +859,7 @@ index 000000000..58113dfac
 +        lower = jax.jit(flax_attention).lower(q, k, v)
 +        compiled = lower.compile()
 +        opt_hlo = compiled.as_text()
-+        if 'HasXMX="True"' in opt_hlo and 'IsXeHPC="True"' in opt_hlo:
++        if 'is_xetla_hardware_support="True"' in opt_hlo:
 +            self.assertIn('custom_call_target="__cudnn$fmhaSoftmax"',
 +                        compiled.as_text())
 +
@@ -1628,187 +884,33 @@ index 0060df9de..e8680e868 100644
      array_size = available_memory // (6 * len(devices)) * len(devices)
      # Set up tracemalloc to track memory usage.
      tm.start()
-diff --git a/tests/multibackend_test.py b/tests/multibackend_test.py
-index 40cbb6630..bcc9aa259 100644
---- a/tests/multibackend_test.py
-+++ b/tests/multibackend_test.py
-@@ -34,7 +34,7 @@ npr.seed(0)
- class MultiBackendTest(jtu.JaxTestCase):
-   """Tests jit targeting to different backends."""
- 
--  @jtu.sample_product(backend=['cpu', 'gpu', 'tpu', None])
-+  @jtu.sample_product(backend=['cpu', 'xpu', 'tpu', None])
-   def testMultiBackend(self, backend):
-     if backend not in ('cpu', jtu.device_under_test(), None):
-       raise SkipTest("Backend is not CPU or the device under test")
-@@ -51,7 +51,7 @@ class MultiBackendTest(jtu.JaxTestCase):
-     self.assertEqual(list(z.devices())[0].platform, correct_platform)
- 
-   @jtu.sample_product(
--    ordering=[('cpu', None), ('gpu', None), ('tpu', None), (None, None)]
-+    ordering=[('cpu', None), ('xpu', None), ('tpu', None), (None, None)]
-   )
-   def testMultiBackendNestedJit(self, ordering):
-     outer, inner = ordering
-@@ -75,8 +75,8 @@ class MultiBackendTest(jtu.JaxTestCase):
-     self.assertEqual(list(z.devices())[0].platform, correct_platform)
- 
-   @jtu.sample_product(
--    ordering=[('cpu', 'gpu'), ('gpu', 'cpu'), ('cpu', 'tpu'), ('tpu', 'cpu'),
--              (None, 'cpu'), (None, 'gpu'), (None, 'tpu'),
-+    ordering=[('cpu', 'xpu'), ('xpu', 'cpu'), ('cpu', 'tpu'), ('tpu', 'cpu'),
-+              (None, 'cpu'), (None, 'xpu'), (None, 'tpu'),
-     ],
-   )
-   def testMultiBackendNestedJitConflict(self, ordering):
-@@ -105,7 +105,7 @@ class MultiBackendTest(jtu.JaxTestCase):
-     y = npr.uniform(size=(10, 10))
-     self.assertRaises(ValueError, lambda: fun(x, y))
- 
--  @jtu.sample_product(backend=['cpu', 'gpu', 'tpu'])
-+  @jtu.sample_product(backend=['cpu', 'xpu', 'tpu'])
-   def testGpuMultiBackendOpByOpReturn(self, backend):
-     if backend not in ('cpu', jtu.device_under_test()):
-       raise SkipTest("Backend is not CPU or the device under test")
-diff --git a/tests/ode_test.py b/tests/ode_test.py
-index 2d2bcc971..d3db7d9b5 100644
---- a/tests/ode_test.py
-+++ b/tests/ode_test.py
-@@ -58,7 +58,7 @@ class ODETest(jtu.JaxTestCase):
-     jtu.check_grads(integrate, (y0, ts, *args), modes=["rev"], order=2,
-                     atol=tol, rtol=tol)
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_pytree_state(self):
-     """Test calling odeint with y(t) values that are pytrees."""
-     def dynamics(y, _t):
-@@ -88,7 +88,7 @@ class ODETest(jtu.JaxTestCase):
-     jtu.check_grads(integrate, (y0, ts), modes=["rev"], order=2,
-                     rtol=tol, atol=tol)
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_decay(self):
-     def decay(_np, y, t, arg1, arg2):
-         return -_np.sqrt(t) - y + arg1 - _np.mean((y + arg2)**2)
-@@ -106,7 +106,7 @@ class ODETest(jtu.JaxTestCase):
-     jtu.check_grads(integrate, (y0, ts, *args), modes=["rev"], order=2,
-                     rtol=tol, atol=tol)
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_swoop(self):
-     def swoop(_np, y, t, arg1, arg2):
-       return _np.array(y - _np.sin(t) - _np.cos(t) * arg1 + arg2)
-@@ -122,7 +122,7 @@ class ODETest(jtu.JaxTestCase):
-     jtu.check_grads(integrate, (y0, ts, *args), modes=["rev"], order=2,
-                     rtol=tol, atol=tol)
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_swoop_bigger(self):
-     def swoop(_np, y, t, arg1, arg2):
-       return _np.array(y - _np.sin(t) - _np.cos(t) * arg1 + arg2)
-@@ -138,7 +138,7 @@ class ODETest(jtu.JaxTestCase):
-     jtu.check_grads(integrate, (big_y0, ts, *args), modes=["rev"], order=2,
-                     rtol=tol, atol=tol)
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_odeint_vmap_grad(self):
-     # https://github.com/google/jax/issues/2531
- 
-@@ -168,7 +168,7 @@ class ODETest(jtu.JaxTestCase):
-     rtol = {jnp.float32: 1e-5, jnp.float64: 2e-15}
-     self.assertAllClose(ans, expected, check_dtypes=False, atol=atol, rtol=rtol)
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_disable_jit_odeint_with_vmap(self):
-     # https://github.com/google/jax/issues/2598
-     with jax.disable_jit():
-@@ -177,7 +177,7 @@ class ODETest(jtu.JaxTestCase):
-       f = lambda x0: odeint(lambda x, _t: x, x0, t)
-       jax.vmap(f)(x0_eval)  # doesn't crash
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_grad_closure(self):
-     # simplification of https://github.com/google/jax/issues/2718
-     def experiment(x):
-@@ -187,7 +187,7 @@ class ODETest(jtu.JaxTestCase):
-       return history[-1]
-     jtu.check_grads(experiment, (0.01,), modes=["rev"], order=1)
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_grad_closure_with_vmap(self):
-     # https://github.com/google/jax/issues/2718
-     @jax.jit
-@@ -208,7 +208,7 @@ class ODETest(jtu.JaxTestCase):
- 
-     self.assertAllClose(ans, expected, check_dtypes=False, atol=1e-2, rtol=1e-2)
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_forward_mode_error(self):
-     # https://github.com/google/jax/issues/3558
- 
-@@ -218,7 +218,7 @@ class ODETest(jtu.JaxTestCase):
-     with self.assertRaisesRegex(TypeError, "can't apply forward-mode.*"):
-       jax.jacfwd(f)(3.)
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_closure_nondiff(self):
-     # https://github.com/google/jax/issues/3584
- 
-@@ -231,7 +231,7 @@ class ODETest(jtu.JaxTestCase):
- 
-     jax.grad(f)(jnp.ones(2))  # doesn't crash
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_complex_odeint(self):
-     # https://github.com/google/jax/issues/3986
-     # https://github.com/google/jax/issues/8757
-@@ -252,7 +252,7 @@ class ODETest(jtu.JaxTestCase):
-     with jax.numpy_dtype_promotion('standard'):
-       jtu.check_grads(f, (y0, ts, alpha), modes=["rev"], order=2, atol=tol, rtol=tol)
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_hmax(self):
-     """Test max step size control."""
- 
-diff --git a/tests/optimizers_test.py b/tests/optimizers_test.py
-index 3fb3101c4..b64bf6c9a 100644
---- a/tests/optimizers_test.py
-+++ b/tests/optimizers_test.py
-@@ -44,7 +44,7 @@ class OptimizerTests(jtu.JaxTestCase):
-     self.assertEqual(jax.tree.structure(opt_state),
-                      jax.tree.structure(opt_state2))
- 
--  @jtu.skip_on_devices('gpu')
-+  @jtu.skip_on_devices('xpu')
-   def _CheckRun(self, optimizer, loss, x0, num_steps, *args, **kwargs):
-     init_fun, update_fun, get_params = optimizer(*args)
- 
 diff --git a/tests/pallas/ops_test.py b/tests/pallas/ops_test.py
-index 24679d8b0..1dd94e4d6 100644
+index 24679d8b0..6ecde318c 100644
 --- a/tests/pallas/ops_test.py
 +++ b/tests/pallas/ops_test.py
 @@ -68,6 +68,7 @@ class OpsTest(jtu.JaxTestCase):
            (lax.shift_right_logical, jnp.int32),
        ]
    )
-+  @jtu.skip_on_devices("xpu")
++  @jtu.skip_on_devices("gpu")
    def test_weak_dtype(self, fn, dtype):
      @functools.partial(
          self.pallas_call, out_shape=jax.ShapeDtypeStruct([1], dtype),
+diff --git a/tests/pallas/pallas_test.py b/tests/pallas/pallas_test.py
+index 2a28e94fa..d23bcd860 100644
+--- a/tests/pallas/pallas_test.py
++++ b/tests/pallas/pallas_test.py
+@@ -139,6 +139,8 @@ class PallasTest(parameterized.TestCase):
+     if not self.INTERPRET:
+       if not jtu.test_device_matches(["gpu"]):
+         self.skipTest("Only works on GPU")
++      if jtu.test_device_matches(["sycl"]):
++        self.skipTest("Not works on Sycl")
+       if (jtu.test_device_matches(["cuda"]) and
+           not self.check_gpu_capability_at_least(80)):
+         self.skipTest("Only works on GPUs with capability >= sm80")
 diff --git a/tests/pjit_test.py b/tests/pjit_test.py
-index 48b5830ea..11f665bc5 100644
+index 48b5830ea..a157e4642 100644
 --- a/tests/pjit_test.py
 +++ b/tests/pjit_test.py
 @@ -67,6 +67,8 @@ config.parse_flags_with_absl()
@@ -1820,211 +922,8 @@ index 48b5830ea..11f665bc5 100644
  
  def setUpModule():
    global prev_xla_flags
-@@ -315,7 +317,7 @@ class PJitTest(jtu.BufferDonationTestCase):
-                         check_dtypes=False)
- 
-   @jtu.with_mesh([('x', 2)])
--  @jtu.run_on_devices('cpu', 'gpu', 'tpu')
-+  @jtu.run_on_devices('cpu', 'xpu', 'tpu')
-   def testBufferDonation(self):
-     @partial(pjit, in_shardings=P('x'), out_shardings=P('x'), donate_argnums=0)
-     def f(x, y):
-@@ -329,7 +331,7 @@ class PJitTest(jtu.BufferDonationTestCase):
-     self.assertNotDeleted(y)
-     self.assertDeleted(x)
- 
--  @jtu.run_on_devices('cpu', 'gpu', 'tpu')
-+  @jtu.run_on_devices('cpu', 'xpu', 'tpu')
-   def testBufferDonationWithNames(self):
-     mesh = jtu.create_global_mesh((2,), ('x'))
-     s = NamedSharding(mesh, P('x'))
-@@ -345,7 +347,7 @@ class PJitTest(jtu.BufferDonationTestCase):
-     self.assertNotDeleted(x)
-     self.assertDeleted(y)
- 
--  @jtu.run_on_devices('cpu', 'gpu', 'tpu')
-+  @jtu.run_on_devices('cpu', 'xpu', 'tpu')
-   def testBufferDonationWithKwargs(self):
-     mesh = jtu.create_global_mesh((2,), ('x'))
-     s = NamedSharding(mesh, P('x'))
-@@ -364,7 +366,7 @@ class PJitTest(jtu.BufferDonationTestCase):
-     self.assertDeleted(y)
-     self.assertDeleted(z)
- 
--  @jtu.run_on_devices('cpu', 'gpu', 'tpu')
-+  @jtu.run_on_devices('cpu', 'xpu', 'tpu')
-   def testBufferDonationWithPyTreeKwargs(self):
-     mesh = jtu.create_global_mesh((2,), ('x'))
-     s = NamedSharding(mesh, P('x'))
-@@ -390,7 +392,7 @@ class PJitTest(jtu.BufferDonationTestCase):
-     jax.tree.map(self.assertNotDeleted, z_tree)
- 
-   @unittest.skipIf(xla_extension_version < 220, 'jaxlib version too old')
--  @jtu.run_on_devices('tpu', 'cpu', 'gpu')
-+  @jtu.run_on_devices('tpu', 'cpu', 'xpu')
-   def testBufferDonationWithOutputShardingInference(self):
-     mesh = jtu.create_global_mesh((2,), 'x')
-     s = NamedSharding(mesh, P('x'))
-@@ -444,7 +446,7 @@ class PJitTest(jtu.BufferDonationTestCase):
-     self.assertDeleted(x)
- 
-   @unittest.skipIf(xla_extension_version < 220, 'jaxlib version too old')
--  @jtu.run_on_devices('tpu', 'cpu', 'gpu')
-+  @jtu.run_on_devices('tpu', 'cpu', 'xpu')
-   def testBufferDonationNotDonated(self):
-     mesh = jtu.create_global_mesh((2,), 'x')
-     s = NamedSharding(mesh, P('x'))
-@@ -3805,7 +3807,7 @@ class ArrayPjitTest(jtu.JaxTestCase):
-         ' manager.*SingleDeviceSharding'):
-       jax.jit(jax.vmap(f, spmd_axis_name='x'))(arr)
- 
--  @jtu.skip_on_devices("tpu", "gpu")
-+  @jtu.skip_on_devices("tpu", "xpu")
-   def test_device_put_memory_kind_not_tpu_gpu(self):
-     @jax.jit
-     def f(x):
-diff --git a/tests/pmap_test.py b/tests/pmap_test.py
-index bab14cca1..22f5bc9fd 100644
---- a/tests/pmap_test.py
-+++ b/tests/pmap_test.py
-@@ -1111,7 +1111,7 @@ class PythonPmapTest(jtu.JaxTestCase):
-     self.assertEqual((tuple(sorted(groups[0])),),
-                      ((0, 1, 2, 3, 4, 5, 6, 7,),))  # order doesn't matter
- 
--  @jtu.run_on_devices("gpu")
-+  @jtu.run_on_devices("xpu")
-   @unittest.skipIf(xla_extension_version < 250, "Requires jaxlib 0.4.26")
-   def testCollectiveBroadcast(self):
-     device_count = jax.device_count()
-@@ -1122,7 +1122,7 @@ class PythonPmapTest(jtu.JaxTestCase):
-     expected = np.take(x, [0] * device_count, axis=0)
-     self.assertAllClose(ans, expected, check_dtypes=False)
- 
--  @jtu.run_on_devices("gpu")
-+  @jtu.run_on_devices("xpu")
-   @unittest.skipIf(xla_extension_version < 250, "Requires jaxlib 0.4.26")
-   def testCollectiveBroadcastVmap(self):
-     device_count = jax.device_count()
-@@ -1133,7 +1133,7 @@ class PythonPmapTest(jtu.JaxTestCase):
-     expected = jnp.broadcast_to(x[0:1], x.shape)
-     self.assertAllClose(ans, expected, check_dtypes=False)
- 
--  @jtu.run_on_devices("gpu")
-+  @jtu.run_on_devices("xpu")
-   @unittest.skipIf(xla_extension_version < 250, "Requires jaxlib 0.4.26")
-   def testCollectiveBroadcastGrad(self):
-     device_count = jax.device_count()
-diff --git a/tests/python_callback_test.py b/tests/python_callback_test.py
-index 2329fe65e..175bd7214 100644
---- a/tests/python_callback_test.py
-+++ b/tests/python_callback_test.py
-@@ -78,7 +78,7 @@ class PythonCallbackTest(jtu.JaxTestCase):
- 
-   def setUp(self):
-     super().setUp()
--    if not jtu.test_device_matches(["cpu", "gpu", "tpu"]):
-+    if not jtu.test_device_matches(["cpu", "xpu", "tpu"]):
-       self.skipTest(f"Host callback not supported on {jtu.device_under_test()}")
- 
-   def tearDown(self):
-@@ -610,7 +610,7 @@ class PureCallbackTest(jtu.JaxTestCase):
- 
-   def setUp(self):
-     super().setUp()
--    if not jtu.test_device_matches(["cpu", "gpu", "tpu"]):
-+    if not jtu.test_device_matches(["cpu", "xpu", "tpu"]):
-       self.skipTest(f"Host callback not supported on {jtu.device_under_test()}")
- 
-   def tearDown(self):
-@@ -1071,7 +1071,7 @@ class IOCallbackTest(jtu.JaxTestCase):
- 
-   def setUp(self):
-     super().setUp()
--    if not jtu.test_device_matches(["cpu", "gpu", "tpu"]):
-+    if not jtu.test_device_matches(["cpu", "xpu", "tpu"]):
-       self.skipTest(f"Host callback not supported on {jtu.device_under_test()}")
- 
-   def tearDown(self):
-diff --git a/tests/random_lax_test.py b/tests/random_lax_test.py
-index d2d5b7c25..e38f2b836 100644
---- a/tests/random_lax_test.py
-+++ b/tests/random_lax_test.py
-@@ -754,7 +754,8 @@ class LaxRandomTest(jtu.JaxTestCase):
- 
-     for samples in [uncompiled_samples, compiled_samples]:
-       self._CheckKolmogorovSmirnovCDF(samples, scipy.stats.t(df).cdf)
--
-+  '''
-+  depends on eigh
-   @jtu.sample_product(
-     dim=[1, 3, 5],
-     dtype=float_dtypes,
-@@ -806,7 +807,7 @@ class LaxRandomTest(jtu.JaxTestCase):
-     with jax.numpy_rank_promotion('allow'):
-       samples = random.multivariate_normal(key, mean, cov, shape=shape, method=method)
-     assert samples.shape == shape + (dim,)
--
-+  '''
-   def testMultivariateNormalCovariance(self):
-     # test code based on https://github.com/google/jax/issues/1869
-     N = 100000
-@@ -833,7 +834,7 @@ class LaxRandomTest(jtu.JaxTestCase):
-                         check_dtypes=False)
- 
-   @jtu.sample_product(method=['cholesky', 'eigh', 'svd'])
--  @jtu.skip_on_devices('gpu', 'tpu')  # Some NaNs on accelerators.
-+  @jtu.skip_on_devices('xpu', 'tpu')  # Some NaNs on accelerators.
-   def testMultivariateNormalSingularCovariance(self, method):
-     # Singular covariance matrix https://github.com/google/jax/discussions/13293
-     mu = jnp.zeros((2,))
-diff --git a/tests/scipy_signal_test.py b/tests/scipy_signal_test.py
-index 70a367a04..877c9cc19 100644
---- a/tests/scipy_signal_test.py
-+++ b/tests/scipy_signal_test.py
-@@ -142,7 +142,8 @@ class LaxBackedScipySignalTests(jtu.JaxTestCase):
-     self._CheckAgainstNumpy(osp_fun, jsp_fun, args_maker, check_dtypes=False,
-                             tol=tol)
-     self._CompileAndCheck(jsp_fun, args_maker, rtol=tol, atol=tol)
--
-+  '''
-+  # depending on eigh support
-   @jtu.sample_product(
-     shape=[(5,), (4, 5), (3, 4, 5)],
-     dtype=jtu.dtypes.floating + jtu.dtypes.integer,
-@@ -337,7 +338,7 @@ class LaxBackedScipySignalTests(jtu.JaxTestCase):
- 
-     self._CheckAgainstNumpy(osp_fun, jsp_fun, args_maker, rtol=tol, atol=tol)
-     self._CompileAndCheck(jsp_fun, args_maker, rtol=tol, atol=tol)
--
-+  '''
-   @jtu.sample_product(
-     [dict(shape=shape, nperseg=nperseg, noverlap=noverlap, timeaxis=timeaxis)
-       for shape, nperseg, noverlap, timeaxis in welch_test_shapes
-diff --git a/tests/scipy_spatial_test.py b/tests/scipy_spatial_test.py
-index f51ad49ad..aeae26d20 100644
---- a/tests/scipy_spatial_test.py
-+++ b/tests/scipy_spatial_test.py
-@@ -221,7 +221,8 @@ class LaxBackedScipySpatialTransformTests(jtu.JaxTestCase):
-     np_fn = lambda q: jnp.array(osp_Rotation.from_quat(q).magnitude(), dtype=dtype)
-     self._CheckAgainstNumpy(np_fn, jnp_fn, args_maker, check_dtypes=True, tol=1e-4)
-     self._CompileAndCheck(jnp_fn, args_maker, atol=1e-4)
--
-+  '''
-+  # depending on eigh support
-   @jtu.sample_product(
-     dtype=float_dtypes,
-     shape=[(num_samples, 4)],
-@@ -235,7 +236,7 @@ class LaxBackedScipySpatialTransformTests(jtu.JaxTestCase):
-     tol = 5e-3  # 1e-4 too tight for TF32
-     self._CheckAgainstNumpy(np_fn, jnp_fn, args_maker, check_dtypes=True, tol=tol)
-     self._CompileAndCheck(jnp_fn, args_maker, tol=tol)
--
-+  '''
-   @jtu.sample_product(
-     dtype=float_dtypes,
-     shape=[(4,), (num_samples, 4)],
 diff --git a/tests/shape_poly_test.py b/tests/shape_poly_test.py
-index 700a25b5d..855193796 100644
+index 700a25b5d..599213a84 100644
 --- a/tests/shape_poly_test.py
 +++ b/tests/shape_poly_test.py
 @@ -2575,15 +2575,16 @@ _POLY_SHAPE_TEST_HARNESSES = [
@@ -2053,127 +952,51 @@ index 700a25b5d..855193796 100644
      PolyHarness("jnp.pad", "mode=edge",
                  lambda x: jnp.pad(x, [[x.shape[0], 0], [x.shape[1], 1]],
                                    mode="edge"),
-@@ -3257,7 +3258,7 @@ class ShapePolyHarnessesTest(jtu.JaxTestCase):
-       if "nr_fft_lengths_2" in harness.fullname:
-         raise unittest.SkipTest("native serialization with shape polymorphism not implemented for fft with non-constant fft_lengths on GPU and TPU")
+@@ -3227,6 +3228,7 @@ class ShapePolyHarnessesTest(jtu.JaxTestCase):
+   # If you want to run this test for only one harness that includes "foo"
+   # in the name (after test_harness), add parameter `one_containing="foo"`
+   # to parameterized below.
++  '''
+   @test_harnesses.parameterized(
+       _flatten_harnesses(_POLY_SHAPE_TEST_HARNESSES),
+       #one_containing="",
+@@ -3304,6 +3306,7 @@ class ShapePolyHarnessesTest(jtu.JaxTestCase):
+     finally:
+       for fname, _ in config_flags.items():
+         jax.config.update(fname, prev_jax_config_flags[fname])
++    '''
  
--    if harness.group_name == "vmap_eigh" and jtu.test_device_matches(["gpu"]):
-+    if harness.group_name == "vmap_eigh" and jtu.test_device_matches(["xpu"]):
-       # For eigh on GPU with shape polymorphism under native serialization,
-       # we use a different lowering for small matrices. See README.md.
-       shape = harness.original_harness.params["shape"]
-@@ -3269,7 +3270,7 @@ class ShapePolyHarnessesTest(jtu.JaxTestCase):
-       raise unittest.SkipTest(
-           "native lowering with shape polymorphism requires additional StableHLO feature support")
- 
--    if (jtu.test_device_matches(["cpu", "gpu"]) and
-+    if (jtu.test_device_matches(["cpu", "xpu"]) and
-         harness.fullname in [
-             "cumsum_reduce_axis_poly", "cumprod_reduce_axis_poly",
-             "cummin_reduce_axis_poly", "cummax_reduce_axis_poly",
+ if __name__ == "__main__":
+   absltest.main(testLoader=jtu.JaxTestLoader())
 diff --git a/tests/shard_map_test.py b/tests/shard_map_test.py
-index e817b1a79..a5053a867 100644
+index e817b1a79..e1627a9c4 100644
 --- a/tests/shard_map_test.py
 +++ b/tests/shard_map_test.py
-@@ -619,7 +619,7 @@ class ShardMapTest(jtu.JaxTestCase):
-     y_dot_expected = jnp.sin(jnp.arange(8.)) * (jnp.cos(x) * x).sum()
-     self.assertAllClose(y_dot, y_dot_expected, check_dtypes=False)
- 
--  @jtu.run_on_devices('gpu', 'tpu')
-+  @jtu.run_on_devices('xpu', 'tpu')
-   def test_axis_index(self):
-     mesh = Mesh(np.array(jax.devices()[:4]), ('x',))
- 
-@@ -757,9 +757,10 @@ class ShardMapTest(jtu.JaxTestCase):
-     self.assertEqual(e.params['in_names'], ({0: ('x', 'y',)},))
+@@ -758,6 +758,7 @@ class ShardMapTest(jtu.JaxTestCase):
      self.assertIn('out_names', e.params)
      self.assertEqual(e.params['out_names'], ({0: ('x', 'y',)},))
--
-+  '''
-+  requires python callback
-   @parameterized.parameters([True, False])
--  @jtu.run_on_devices('cpu', 'gpu', 'tpu')
-+  @jtu.run_on_devices('cpu', 'xpu', 'tpu')
-   def test_debug_print_jit(self, jit):
-     mesh = Mesh(jax.devices(), ('i',))
  
-@@ -781,7 +782,7 @@ class ShardMapTest(jtu.JaxTestCase):
++  '''
+   @parameterized.parameters([True, False])
+   @jtu.run_on_devices('cpu', 'gpu', 'tpu')
+   def test_debug_print_jit(self, jit):
+@@ -781,6 +782,7 @@ class ShardMapTest(jtu.JaxTestCase):
        jax.effects_barrier()
      for i in range(len(jax.devices())):
        self.assertIn(f'instance {i} has value', output())
--
 +  '''
+ 
    def test_debug_print_eager(self):
      mesh = Mesh(jax.devices(), ('i',))
- 
-@@ -1020,7 +1021,7 @@ class ShardMapTest(jtu.JaxTestCase):
-     # error!
-     jax.jit(g)(x)  # doesn't crash
- 
--  @jtu.run_on_devices('cpu', 'gpu', 'tpu')
-+  @jtu.run_on_devices('cpu', 'xpu', 'tpu')
-   def test_key_array_with_replicated_last_tile_dim(self):
-     # See https://github.com/google/jax/issues/16137
- 
 diff --git a/tests/sparse_bcoo_bcsr_test.py b/tests/sparse_bcoo_bcsr_test.py
-index e9091a9b9..45f771c85 100644
+index e9091a9b9..fef4b4338 100644
 --- a/tests/sparse_bcoo_bcsr_test.py
 +++ b/tests/sparse_bcoo_bcsr_test.py
 @@ -753,6 +753,7 @@ class BCOOTest(sptu.SparseTestCase):
    )
    @jax.default_matmul_precision("float32")
    @jtu.skip_on_flag("jax_skip_slow_tests", True)
-+  @jtu.skip_on_devices("xpu") # skip on atsm platform
++  @jtu.skip_on_devices("sycl") # skip on atsm platform
    def test_bcoo_dot_general_sampled(self, props, dtype):
      rng = jtu.rand_default(self.rng())
      sprng = sptu.rand_bcoo(self.rng(), n_batch=props.n_batch, n_dense=props.n_dense)
-diff --git a/tests/sparse_test.py b/tests/sparse_test.py
-index 153c0d5d7..5a98541f8 100644
---- a/tests/sparse_test.py
-+++ b/tests/sparse_test.py
-@@ -50,12 +50,12 @@ all_dtypes = jtu.dtypes.integer + jtu.dtypes.floating + jtu.dtypes.complex
- 
- class cuSparseTest(sptu.SparseTestCase):
-   def gpu_dense_conversion_warning_context(self, dtype):
--    if jtu.test_device_matches(["gpu"]) and np.issubdtype(dtype, np.integer):
-+    if jtu.test_device_matches(["xpu"]) and np.issubdtype(dtype, np.integer):
-       return self.assertWarns(sparse.CuSparseEfficiencyWarning)
-     return contextlib.nullcontext()
- 
-   def gpu_matmul_dtype_warning_context(self, dtype):
--    if jtu.test_device_matches(["gpu"]) and dtype not in [np.float32, np.float64, np.complex64, np.complex128]:
-+    if jtu.test_device_matches(["xpu"]) and dtype not in [np.float32, np.float64, np.complex64, np.complex128]:
-       return self.assertWarns(sparse.CuSparseEfficiencyWarning)
-     return contextlib.nullcontext()
- 
-@@ -354,7 +354,7 @@ class cuSparseTest(sptu.SparseTestCase):
-   @unittest.skipIf(
-       not sptu.GPU_LOWERING_ENABLED, "test requires cusparse/hipsparse"
-   )
--  @jtu.run_on_devices("gpu")
-+  @jtu.run_on_devices("xpu")
-   def test_coo_sorted_indices_gpu_lowerings(self):
-     dtype = jnp.float32
- 
-@@ -416,7 +416,7 @@ class cuSparseTest(sptu.SparseTestCase):
-     self.assertArraysEqual(matmat_expected, matmat_unsorted)
-     self.assertArraysEqual(matmat_expected, matmat_unsorted_fallback)
- 
--  @jtu.run_on_devices("gpu")
-+  @jtu.run_on_devices("xpu")
-   def test_gpu_translation_rule(self):
-     version = xla_bridge.get_backend().platform_version
-     if version.split()[0] != "rocm":
-diff --git a/tests/state_test.py b/tests/state_test.py
-index b396ee7df..d48e3ea80 100644
---- a/tests/state_test.py
-+++ b/tests/state_test.py
-@@ -939,7 +939,7 @@ if CAN_USE_HYPOTHESIS:
-     @hp.settings(deadline=None, print_blob=True,
-                  max_examples=jtu.NUM_GENERATED_CASES.value)
-     def test_set_vmap(self, set_vmap_param: SetVmapParams):
--      if jtu.test_device_matches(["gpu"]):
-+      if jtu.test_device_matches(["xpu"]):
-         self.skipTest("Scatter is nondeterministic on GPU")
-       indexed_dims = set_vmap_param.vmap_index_param.index_param.indexed_dims
- 

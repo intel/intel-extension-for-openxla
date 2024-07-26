@@ -621,19 +621,194 @@ index 9dec918f9..884b79948 100644
    }
  
    // Add any additional allocators for alternate memory spaces.
-diff --git a/xla/pjrt/pjrt_compiler.h b/xla/pjrt/pjrt_compiler.h
-index d624fd0cf..88409f0ac 100644
---- a/xla/pjrt/pjrt_compiler.h
-+++ b/xla/pjrt/pjrt_compiler.h
-@@ -45,7 +45,7 @@ inline const char* RocmName() {
-   return kRocmName;
- }
- inline const char* SyclName() {
--  static constexpr char kSyclName[] = "sycl";
-+  static constexpr char kSyclName[] = "xpu";
-   return kSyclName;
- }
- inline const char* TpuName() {
+diff --git a/xla/python/BUILD b/xla/python/BUILD
+index e2c82bad0..8401ec77d 100644
+--- a/xla/python/BUILD
++++ b/xla/python/BUILD
+@@ -1,6 +1,11 @@
+ load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+ load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
+ load("@local_config_rocm//rocm:build_defs.bzl", "if_rocm")
++load("@local_config_sycl//sycl:build_defs.bzl", "if_sycl_is_configured")
++load(
++    "//xla/stream_executor:build_defs.bzl",
++    "if_gpu_is_configured",
++)
+ load(
+     "@tsl//tsl:tsl.bzl",
+     "if_cuda_or_rocm",
+@@ -441,10 +446,10 @@ cc_library(
+ 
+ cc_library(
+     name = "py_client_gpu",
+-    srcs = if_cuda_or_rocm([
++    srcs = if_gpu_is_configured([
+         "py_client_gpu.cc",
+     ]),
+-    hdrs = if_cuda_or_rocm([
++    hdrs = if_gpu_is_configured([
+         "py_client_gpu.h",
+     ]),
+     compatible_with = [],
+@@ -471,6 +476,9 @@ cc_library(
+         "@local_config_cuda//cuda:cuda_headers",
+     ]) + if_rocm([
+         "@local_config_rocm//rocm:rocm_headers",
++    ]) + if_sycl_is_configured([
++        "@intel_extension_for_openxla//xla/stream_executor:sycl_platform",
++        "@local_config_sycl//sycl:sycl_headers",
+     ]),
+ )
+ 
+diff --git a/xla/python/py_client.cc b/xla/python/py_client.cc
+index 0afd05331..f51f71b4f 100644
+--- a/xla/python/py_client.cc
++++ b/xla/python/py_client.cc
+@@ -91,9 +91,9 @@ limitations under the License.
+ #include "tsl/platform/status.h"
+ #include "tsl/platform/statusor.h"
+ 
+-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
++#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM || TENSORFLOW_USE_SYCL
+ #include "xla/python/py_client_gpu.h"
+-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
++#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM || TENSORFLOW_USE_SYCL
+ 
+ namespace xla {
+ 
+diff --git a/xla/python/py_client_gpu.cc b/xla/python/py_client_gpu.cc
+index 100d9fd59..91df06ad4 100644
+--- a/xla/python/py_client_gpu.cc
++++ b/xla/python/py_client_gpu.cc
+@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ ==============================================================================*/
++#include "xla/python/py_client_gpu.h"
+ 
+ #include <vector>
+ 
+@@ -20,7 +21,7 @@ limitations under the License.
+ #include "tsl/platform/errors.h"
+ #if TENSORFLOW_USE_ROCM
+ #include "rocm/include/hip/hip_runtime.h"
+-#else
++#elif GOOGLE_CUDA
+ #include "third_party/gpus/cuda/include/cuda.h"
+ #include "third_party/gpus/cuda/include/cuda_runtime_api.h"
+ #endif
+@@ -38,13 +39,15 @@ limitations under the License.
+ #define gpuStreamSynchronize hipStreamSynchronize
+ #define gpuMemcpyDeviceToHost hipMemcpyDeviceToHost
+ #define gpuMemcpyHostToDevice hipMemcpyHostToDevice
+-#else
++#elif GOOGLE_CUDA
+ #define gpuSuccess cudaSuccess
+ #define gpuStreamHandle CUstream
+ #define gpuMemcpyAsync cudaMemcpyAsync
+ #define gpuStreamSynchronize cudaStreamSynchronize
+ #define gpuMemcpyDeviceToHost cudaMemcpyDeviceToHost
+ #define gpuMemcpyHostToDevice cudaMemcpyHostToDevice
++#else
++#define gpuStreamHandle ::sycl::queue*
+ #endif
+ 
+ namespace nb = nanobind;
+@@ -74,13 +77,20 @@ void XlaPythonGpuCallback(gpuStreamHandle stream, void** buffers,
+     }
+     void* buf = new char[arg.size_in_bytes];
+     host_input_buffers[i] = buf;
++#if TENSORFLOW_USE_SYCL
++    auto event = stream->memcpy(buf, (const void*)(buffers[i]), arg.size_in_bytes);
++    event.wait();
++#else
+     // TODO(b/238441608): Use pinned memory here to speed up the transfer.
+     auto gpu_res = gpuMemcpyAsync(buf, buffers[i], arg.size_in_bytes,
+                                   gpuMemcpyDeviceToHost, stream);
+     CHECK_EQ(gpu_res, gpuSuccess) << "Failed to gpuMemcpyAsync";
++#endif
+   }
++#ifndef TENSORFLOW_USE_SYCL
+   CHECK_EQ(gpuStreamSynchronize(stream), gpuSuccess)
+       << "Failed to gpuStreamSynchronize";
++#endif
+   nb::gil_scoped_acquire gil;
+   nb::tuple host_input_arrays = nb::steal<nb::tuple>(PyTuple_New(arity));
+   for (size_t i = 0; i < arity; ++i) {
+@@ -120,10 +130,15 @@ void XlaPythonGpuCallback(gpuStreamHandle stream, void** buffers,
+     absl::Span<int64_t const> strides(
+         reinterpret_cast<const int64_t*>(array.strides()), array.ndim());
+     if (strides == result.expected_strides) {
++#ifdef TENSORFLOW_USE_SYCL
++      auto event = stream->memcpy(buffers[arity + i], array.data(), result.size_in_bytes);
++      event.wait();
++#else
+       auto gpu_res =
+           gpuMemcpyAsync(buffers[arity + i], array.data(), result.size_in_bytes,
+                          gpuMemcpyHostToDevice, stream);
+       CHECK_EQ(gpu_res, gpuSuccess) << "Failed to gpuMemcpyAsync";
++#endif
+     } else {
+       void* temp = new char[result.size_in_bytes];
+       temp_buffers.push_back(temp);
+@@ -138,15 +153,22 @@ void XlaPythonGpuCallback(gpuStreamHandle stream, void** buffers,
+         throw xla::XlaRuntimeError(plan.status().ToString());
+       }
+       plan.value()->Execute(array.data(), temp);
++#ifdef TENSORFLOW_USE_SYCL
++      auto event = stream->memcpy(buffers[arity + i], temp, result.size_in_bytes);
++      event.wait();
++#else
+       auto gpu_res =
+           gpuMemcpyAsync(buffers[arity + i], temp, result.size_in_bytes,
+                          gpuMemcpyHostToDevice, stream);
+       CHECK_EQ(gpu_res, gpuSuccess) << "Failed to gpuMemcpyAsync";
++#endif
+     }
+   }
+   nb::gil_scoped_release release;
++#ifndef TENSORFLOW_USE_SYCL
+   CHECK_EQ(gpuStreamSynchronize(stream), gpuSuccess)
+       << "Failed to gpuStreamSynchronize";
++#endif
+   for (int i = 0; i < temp_buffers.size(); ++i) {
+     delete[] static_cast<char*>(temp_buffers[i]);
+   }
+diff --git a/xla/python/py_client_gpu.h b/xla/python/py_client_gpu.h
+index d7675e1b6..571a13443 100644
+--- a/xla/python/py_client_gpu.h
++++ b/xla/python/py_client_gpu.h
+@@ -18,17 +18,28 @@ limitations under the License.
+ 
+ #if TENSORFLOW_USE_ROCM
+ #include "rocm/include/hip/hip_runtime.h"
+-#else
++#elif GOOGLE_CUDA
+ #include "third_party/gpus/cuda/include/cuda.h"
+ #endif
+ #include "xla/service/custom_call_status.h"
+ 
+ #if TENSORFLOW_USE_ROCM
+ #define gpuStreamHandle hipStream_t
+-#else
++#elif GOOGLE_CUDA
+ #define gpuStreamHandle CUstream
++#else
++#define gpuStreamHandle ::sycl::queue*
+ #endif
+ 
++#if TENSORFLOW_USE_SYCL
++#if __has_include(<sycl/sycl.hpp>)
++#include <sycl/sycl.hpp>
++#elif __has_include(<CL/sycl.hpp>)
++#include <CL/sycl.hpp>
++#else
++#error "Unsupported compiler"
++#endif
++#endif
+ namespace xla {
+ 
+ void XlaPythonGpuCallback(gpuStreamHandle stream, void** buffers,
 diff --git a/xla/service/BUILD b/xla/service/BUILD
 index bcedb9890..b985764c5 100644
 --- a/xla/service/BUILD

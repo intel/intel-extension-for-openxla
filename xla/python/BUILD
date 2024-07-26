@@ -4,12 +4,14 @@ tsl_pybind_extension(
     name = "xpu_plugin_extension",
     srcs = ["xpu_plugin_extension.cc"],
     deps = [
-        "@pybind11",
+        "@nanobind",
         "@xla//xla:status",
         "@xla//xla:util",
         "@xla//xla/pjrt/c:pjrt_c_api_gpu_extension_hdrs",
         "@xla//xla/pjrt/c:pjrt_c_api_hdrs",
         "@xla//xla/pjrt/c:pjrt_c_api_helpers",
         "@xla//xla/pjrt:status_casters",
+        "@xla//xla/python:py_client_gpu",
+        "@xla//xla/tsl/python/lib/core:numpy",
     ],
 )

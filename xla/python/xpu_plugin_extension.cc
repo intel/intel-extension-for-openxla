@@ -17,20 +17,22 @@ limitations under the License.
 #include <string_view>
 #include <utility>
 
-#include "pybind11/pybind11.h"
+#include "nanobind/nanobind.h"
 #include "xla/pjrt/c/pjrt_c_api.h"
 #include "xla/pjrt/c/pjrt_c_api_gpu_extension.h"
 #include "xla/pjrt/c/pjrt_c_api_helpers.h"
+#include "xla/python/py_client_gpu.h"
 #include "xla/pjrt/status_casters.h"
 #include "xla/status.h"
+#include "xla/tsl/python/lib/core/numpy.h"
 #include "xla/util.h"
 
-namespace py = pybind11;
+namespace nb = nanobind;
 
 namespace xla {
 namespace {
 Status RegisterCustomCallTarget(const PJRT_Api* c_api,
-                                const std::string& fn_name, py::capsule fn,
+                                nb::str fn_name, nb::capsule fn,
                                 int api_version) {
   static const char* const kName = "xla._CUSTOM_CALL_TARGET";
   if (std::string_view(fn.name()) != kName) {
@@ -58,8 +60,8 @@ Status RegisterCustomCallTarget(const PJRT_Api* c_api,
   PJRT_Gpu_Register_Custom_Call_Args args;
   args.struct_size = PJRT_Gpu_Register_Custom_Call_Args_STRUCT_SIZE;
   args.function_name = fn_name.c_str();
-  args.function_name_size = fn_name.size();
-  args.custom_call_function = static_cast<void*>(fn);
+  args.function_name_size = nb::len(fn_name);
+  args.custom_call_function = static_cast<void*>(fn.data());
   args.api_version = api_version;
 
   RETURN_STATUS_IF_PJRT_ERROR(
@@ -68,17 +70,32 @@ Status RegisterCustomCallTarget(const PJRT_Api* c_api,
   return OkStatus();
 }
 
+template <typename T>
+nb::capsule EncapsulateFunction(T* fn) {
+  return nb::capsule(absl::bit_cast<void*>(fn),
+                           "xla._CUSTOM_CALL_TARGET");
+}
+
+nb::dict Registrations() {
+  nb::dict dict;
+  dict["xla_python_gpu_callback"] =
+      EncapsulateFunction(xla::XlaPythonGpuCallback);
+  return dict;
+}
+
 }  // namespace
 
-PYBIND11_MODULE(xpu_plugin_extension, m) {
+NB_MODULE(xpu_plugin_extension, m) {
+  tsl::ImportNumpy();
   m.def("register_custom_call_target",
-        [](py::capsule c_api, const std::string& fn_name, py::capsule fn,
-           const std::string& xla_platform_name, const int api_version) {
+        [](nb::capsule c_api, nb::str fn_name, nb::capsule fn,
+           nb::str xla_platform_name, const int api_version) {
           xla::ThrowIfError(RegisterCustomCallTarget(
-              static_cast<const PJRT_Api*>(c_api), fn_name, std::move(fn),
+              static_cast<const PJRT_Api*>(c_api.data()), fn_name, std::move(fn),
               api_version));
         },
-        py::arg("c_api"), py::arg("fn_name"), py::arg("fn"),
-        py::arg("xla_platform_name"), py::arg("api_version") = 0);
+        nb::arg("c_api"), nb::arg("fn_name"), nb::arg("fn"),
+        nb::arg("xla_platform_name"), nb::arg("api_version") = 0);
+  m.def("registrations", &Registrations);
 }
 }  // namespace xla
