@@ -42,6 +42,7 @@ limitations under the License.
 #include "tsl/platform/stacktrace.h"
 #include "tsl/platform/status.h"
 #include "tsl/platform/threadpool.h"
+#include "xla/profiler/utils.h"
 #include "xla/stream_executor/gpu/gpu_driver.h"
 #include "xla/stream_executor/platform/port.h"
 #include "xla/stream_executor/sycl/sycl_gpu_runtime.h"
@@ -60,8 +61,6 @@ namespace gpu {
 
 ScopedActivateContext::ScopedActivateContext(GpuContext* context) {}
 ScopedActivateContext::~ScopedActivateContext() {}
-
-#define MSEC_IN_SEC 1000
 
 class GpuContext {
  public:

@@ -404,16 +404,17 @@ index e23dcc3a4..aaaf22ed8 100644
          system_link_files = {
              "//third_party/systemlibs:BUILD": "bazel/BUILD",
 diff --git a/xla/backends/profiler/plugin/BUILD b/xla/backends/profiler/plugin/BUILD
-index 169a4eaa4..1b8c0bae0 100644
+index 169a4eaa4..161e4e045 100644
 --- a/xla/backends/profiler/plugin/BUILD
 +++ b/xla/backends/profiler/plugin/BUILD
-@@ -62,6 +62,9 @@ cc_library(
+@@ -62,6 +62,10 @@ cc_library(
      deps = [
          ":profiler_c_api_hdrs",
          ":profiler_error",
 +        "//xla/backends/profiler/cpu:host_tracer",
 +        "//xla/backends/profiler/cpu:metadata_collector",
 +        "//xla/backends/profiler/cpu:python_tracer",
++        "@intel_extension_for_openxla//xla/profiler:sycl_device_tracer",
          "@tsl//tsl/platform:logging",
          "@tsl//tsl/profiler/lib:profiler_collection",
          "@tsl//tsl/profiler/lib:profiler_factory",

@@ -232,66 +232,62 @@ static sycl::async_handler SYCLAsyncHandler = [](sycl::exception_list eL) {
   }
 };
 
-class SYCLStreamPool {
- public:
-  static SYCLError_t getDefaultStream(sycl::device* device_handle,
-                                      sycl::queue** stream_p) {
+SYCLError_t SYCLStreamPool::getDefaultStream(sycl::device* device_handle,
+                sycl::queue** stream_p) {
     *stream_p = SYCLStreamPool::GetStreamsPool(device_handle)[0].get();
     return SYCL_SUCCESS;
-  }
+}
 
-  static SYCLError_t createStream(sycl::device* device_handle,
-                                  sycl::queue** stream_p) {
-    if (IsMultipleStreamEnabled()) {
-      sycl::property_list propList{sycl::property::queue::enable_profiling(),
-                                   sycl::property::queue::in_order()};
-      SYCLStreamPool::GetStreamsPool(device_handle)
-          .push_back(std::make_shared<sycl::queue>(
-              DevicePool::getDeviceContext(), *device_handle, SYCLAsyncHandler,
-              propList));
-    }
-    *stream_p = SYCLStreamPool::GetStreamsPool(device_handle).back().get();
-    return SYCL_SUCCESS;
-  }
-
-  static SYCLError_t syncContext(sycl::device* device_handle) {
-    for (auto stream : SYCLStreamPool::GetStreamsPool(device_handle)) {
-      stream->wait();
-    }
-    return SYCL_SUCCESS;
-  }
-
-  static SYCLError_t destroyStream(sycl::device* device_handle,
-                                   sycl::queue* stream_handle) {
-    if (stream_handle == nullptr) return SYCL_ERROR_INVALID_STREAM;
-    auto stream_pool = SYCLStreamPool::GetStreamsPool(device_handle);
-    for (int i = 0; i < stream_pool.size(); i++) {
-      if (stream_pool[i].get() == stream_handle) {
-        stream_pool.erase(stream_pool.begin() + i);
-        return SYCL_SUCCESS;
-      }
-    }
-    return SYCL_ERROR_INVALID_STREAM;
-  }
-
- private:
-  static std::vector<std::shared_ptr<sycl::queue>>& GetStreamsPool(
-      sycl::device* device_handle) {
-    static std::unordered_map<sycl::device*,
-                              std::vector<std::shared_ptr<sycl::queue>>>
-        stream_pool_map;
-    auto iter = stream_pool_map.find(device_handle);
-    if (iter != stream_pool_map.end()) return iter->second;
+SYCLError_t SYCLStreamPool::createStream(sycl::device* device_handle,
+                sycl::queue** stream_p) {
+  if (IsMultipleStreamEnabled()) {
     sycl::property_list propList{sycl::property::queue::enable_profiling(),
-                                 sycl::property::queue::in_order()};
-    std::vector<std::shared_ptr<sycl::queue>> stream_pool = {
-        std::make_shared<sycl::queue>(DevicePool::getDeviceContext(),
-                                      *device_handle, SYCLAsyncHandler,
-                                      propList)};
-    stream_pool_map.insert(std::make_pair(device_handle, stream_pool));
-    return stream_pool_map[device_handle];
+                                  sycl::property::queue::in_order()};
+    SYCLStreamPool::GetStreamsPool(device_handle)
+        .push_back(std::make_shared<sycl::queue>(
+            DevicePool::getDeviceContext(), *device_handle, SYCLAsyncHandler,
+            propList));
   }
-};
+  *stream_p = SYCLStreamPool::GetStreamsPool(device_handle).back().get();
+  return SYCL_SUCCESS;
+}
+
+SYCLError_t SYCLStreamPool::syncContext(sycl::device* device_handle) {
+  for (auto stream : SYCLStreamPool::GetStreamsPool(device_handle)) {
+    stream->wait();
+  }
+  return SYCL_SUCCESS;
+}
+
+  SYCLError_t SYCLStreamPool::destroyStream(sycl::device* device_handle,
+                  sycl::queue* stream_handle) {
+  if (stream_handle == nullptr) return SYCL_ERROR_INVALID_STREAM;
+  auto stream_pool = SYCLStreamPool::GetStreamsPool(device_handle);
+  for (int i = 0; i < stream_pool.size(); i++) {
+    if (stream_pool[i].get() == stream_handle) {
+      stream_pool.erase(stream_pool.begin() + i);
+      return SYCL_SUCCESS;
+    }
+  }
+  return SYCL_ERROR_INVALID_STREAM;
+}
+
+std::vector<std::shared_ptr<sycl::queue>>& SYCLStreamPool::GetStreamsPool(
+    sycl::device* device_handle) {
+  static std::unordered_map<sycl::device*,
+                            std::vector<std::shared_ptr<sycl::queue>>>
+      stream_pool_map;
+  auto iter = stream_pool_map.find(device_handle);
+  if (iter != stream_pool_map.end()) return iter->second;
+  sycl::property_list propList{sycl::property::queue::enable_profiling(),
+                                sycl::property::queue::in_order()};
+  std::vector<std::shared_ptr<sycl::queue>> stream_pool = {
+      std::make_shared<sycl::queue>(DevicePool::getDeviceContext(),
+                                    *device_handle, SYCLAsyncHandler,
+                                    propList)};
+  stream_pool_map.insert(std::make_pair(device_handle, stream_pool));
+  return stream_pool_map[device_handle];
+}
 
 SYCLError_t SYCLGetContext(sycl::context** context) {
   *context = &DevicePool::getDeviceContext();

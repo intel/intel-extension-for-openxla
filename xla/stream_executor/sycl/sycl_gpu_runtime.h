@@ -104,4 +104,20 @@ sycl::event SYCLGetEventFromStream(sycl::queue* stream);
 void SYCLStreamDependOnEvents(sycl::queue* stream,
                               const std::vector<sycl::event>& events);
 
+class SYCLStreamPool {
+ public:
+  static SYCLError_t getDefaultStream(sycl::device* device_handle,
+                                      sycl::queue** stream_p);
+
+  static SYCLError_t createStream(sycl::device* device_handle,
+                                  sycl::queue** stream_p);
+
+  static SYCLError_t syncContext(sycl::device* device_handle);
+  static SYCLError_t destroyStream(sycl::device* device_handle,
+                                   sycl::queue* stream_handle);
+ private:
+  static std::vector<std::shared_ptr<sycl::queue>>& GetStreamsPool(
+      sycl::device* device_handle);
+};
+
 #endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_GPU_RUNTIME_H_

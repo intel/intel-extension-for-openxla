@@ -68,6 +68,7 @@ cc_library(
 
 cc_library(
     name = "sycl_driver",
+    hdrs = ["//xla/profiler:profiler_utils"],
     srcs = ["sycl_driver.cc"],
     deps = [
         ":sycl_gpu_runtime",
