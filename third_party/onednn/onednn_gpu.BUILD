@@ -87,14 +87,14 @@ template_rule(
 
 convert_cl_to_cpp(
     name = "kernel_list_generator",
-    src = "src/gpu/ocl/ocl_kernel_list.cpp.in",
-    cl_list = glob(["src/gpu/ocl/**/*.cl"]),
+    src = "src/gpu/intel/ocl/ocl_kernel_list.cpp.in",
+    cl_list = glob(["src/gpu/intel/ocl/**/*.cl"]),
 )
 
 convert_header_to_cpp(
     name = "header_generator",
-    src = "src/gpu/ocl/ocl_kernel_list.cpp.in",
-    header_list = glob(["src/gpu/**/*.h"]),
+    src = "src/gpu/intel/ocl/ocl_kernel_list.cpp.in",
+    header_list = glob(["src/gpu/intel/**/*.h"]),
 )
 
 gen_onednn_version(
@@ -116,7 +116,7 @@ filegroup(
             "src/cpu/**",
             "src/gpu/nvidia/*",
             "src/gpu/amd/*",
-            "src/gpu/jit/v2/conv/planner/*",
+            "src/gpu/intel/jit/v2/conv/planner/*",
             "src/gpu/sycl/ref*",
             "src/graph/**",
         ],
@@ -156,7 +156,7 @@ cc_library(
         "include/oneapi/dnnl",
         "src",
         "src/common",
-        "src/ocl",
+        "src/intel/ocl",
         "src/sycl",
     ],
     #nocopts = "-fno-exceptions",

@@ -206,9 +206,11 @@ class KernelList(object):
 namespace dnnl {{
 namespace impl {{
 namespace gpu {{
+namespace intel {{
 namespace ocl {{
     const char* {}_{} =
 {};
+}}
 }}
 }}
 }}
@@ -220,11 +222,13 @@ namespace ocl {{
 namespace dnnl {{
 namespace impl {{
 namespace gpu {{
+namespace intel {{
 namespace ocl {{
     const char* {}_kernel[] = {{
 {}
         nullptr
     }};
+}}
 }}
 }}
 }}
@@ -262,8 +266,8 @@ class FilesHelper(object):
         If possible, it should passed as an arguments, but for covenience, we do this
         assumption directly.
         """
-    OCL_IMPL_DIR = "src/gpu/ocl"
-    HEADER_ROOT_DIR = "src/gpu"
+    OCL_IMPL_DIR = "src/gpu/intel/ocl"
+    HEADER_ROOT_DIR = "src/gpu/intel"
     IN_FILE = "ocl_kernel_list.cpp.in"
 
     in_file = os.path.expanduser(in_file)
