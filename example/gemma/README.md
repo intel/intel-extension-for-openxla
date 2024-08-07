@@ -16,7 +16,13 @@ export KAGGLE_KEY=xxxxxxxx
 Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```bash
 cd <WORKSPACE>/example/gemma/
-pip install keras-nlp==0.10.0 keras==3.3.2
+pip install keras==3.3.2
+git clone https://github.com/keras-team/keras-nlp.git
+cd keras-nlp
+git checkout v0.10.0
+git apply ../keras_nlp.patch
+python setup.py install
+cd ..
 pip install -r ../../test/requirements.txt
 ```
 
