@@ -470,6 +470,18 @@ SYCLError_t SYCLMemsetD32Async(void* dstDevice, unsigned int ui, size_t N,
   return SYCL_SUCCESS;
 }
 
+SYCLError_t SYCLMemcpyAsync(void* dst, const void* src, size_t ByteCount,
+                            SYCLError_t (*func)(void*, const void*, size_t, sycl::queue*),
+                            sycl::queue* stream){
+  return (*func)(dst, src, ByteCount, stream);
+}
+
+SYCLError_t SYCLStreamSynchronize(sycl::queue* stream){
+  stream->wait();
+  return SYCL_SUCCESS;
+}
+
+
 void* SYCLMalloc(sycl::device* device, size_t ByteCount) {
   sycl::queue* stream;
   SYCLStreamPool::getDefaultStream(device, &stream);

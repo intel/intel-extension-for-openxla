@@ -99,6 +99,12 @@ void* SYCLMallocShared(sycl::device* device, size_t ByteCount);
 
 void SYCLFree(sycl::device* device, void* ptr);
 
+SYCLError_t SYCLMemcpyAsync(void* dst, const void* src, size_t ByteCount,
+                            SYCLError_t (*func)(void*, const void*, size_t, sycl::queue*),
+                            sycl::queue* stream);
+
+SYCLError_t SYCLStreamSynchronize(sycl::queue* stream);
+
 sycl::event SYCLGetEventFromStream(sycl::queue* stream);
 
 void SYCLStreamDependOnEvents(sycl::queue* stream,
