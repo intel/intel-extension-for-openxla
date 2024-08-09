@@ -14,7 +14,7 @@ This guide introduces the overview of OpenXLA high level integration structure a
 ## 1. Overview
 
 <p align="center">
-    <img src="openxla_for_intel_gpu.jpg" width="50%">
+    <img src="openxla_for_intel_gpu.png" width="50%">
 </p>
 
 * [JAX](https://jax.readthedocs.io/en/latest/) provides a familiar NumPy-style API, includes composable function transformations for compilation, batching, automatic differentiation, and parallelization, and the same code executes on multiple backends.
@@ -26,9 +26,9 @@ This guide introduces the overview of OpenXLA high level integration structure a
 
 Verified Hardware Platforms:
 
-* Intel® Data Center GPU Max Series, Driver Version: [803](https://dgpu-docs.intel.com/releases/LTS_803.29_20240131.html)
+* Intel® Data Center GPU Max Series, Driver Version: [803](https://dgpu-docs.intel.com/releases/LTS_803.63_20240617.html)
 
-* Intel® Data Center GPU Flex Series 170, Driver Version: [803](https://dgpu-docs.intel.com/releases/LTS_803.29_20240131.html)
+* Intel® Data Center GPU Flex Series 170, Driver Version: [803](https://dgpu-docs.intel.com/releases/LTS_803.63_20240617.html)
 
 ### Software Requirements
 
@@ -36,19 +36,19 @@ Verified Hardware Platforms:
   * Intel® Data Center GPU Flex Series
 * Ubuntu 22.04, SUSE Linux Enterprise Server(SLES) 15 SP4
   * Intel® Data Center GPU Max Series
-* Intel® oneAPI Base Toolkit 2024.1
+* [Intel® oneAPI Base Toolkit 2024.2](https://www.intel.com/content/www/us/en/developer/articles/release-notes/intel-oneapi-toolkit-release-notes.html)
 * Jax/Jaxlib 0.4.26
 * Python 3.9-3.12
 * pip 19.0 or later (requires manylinux2014 support)
 
-**NOTE: Since Jax has its own [platform limitation](https://jax.readthedocs.io/en/latest/installation.html#supported-platforms) (Ubuntu 20.04 or later), real software requirements is restricted when works with Jax.**
+**NOTE: Since JAX has its own [platform limitation](https://jax.readthedocs.io/en/latest/installation.html#supported-platforms) (Ubuntu 20.04 or later), real software requirements is restricted when works with JAX.**
 
 ### Install Intel GPU Drivers
 
 |OS|Intel GPU|Install Intel GPU Driver|
 |-|-|-|
-|Ubuntu 22.04 |Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-flex-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [803](https://dgpu-docs.intel.com/releases/LTS_803.29_20240131.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.43.27642.38-803~22.04`|
-|Ubuntu 22.04, SLES 15 SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-max-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [803](https://dgpu-docs.intel.com/releases/LTS_803.29_20240131.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.43.27642.38-803~22.04`|
+|Ubuntu 22.04 |Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-flex-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [803](https://dgpu-docs.intel.com/releases/LTS_803.63_20240617.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.43.27642.52-803~22.04`|
+|Ubuntu 22.04, SLES 15 SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-max-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [803](https://dgpu-docs.intel.com/releases/LTS_803.63_20240617.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.43.27642.52-803~22.04`|
 
 ### Install oneAPI Base Toolkit Packages
 
@@ -58,7 +58,18 @@ Need to install components of Intel® oneAPI Base Toolkit:
 * Intel® oneAPI Math Kernel Library (oneMKL)
 
 ```bash
-$ wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/fdc7a2bc-b7a8-47eb-8876-de6201297144/l_BaseKit_p_2024.1.0.596.sh
+$ wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/e6ff8e9c-ee28-47fb-abd7-5c524c983e1c/l_BaseKit_p_2024.2.1.100_offline.sh
+# 2 components are necessary: DPC++/C++ Compiler and oneMKL
+sudo sh l_BaseKit_p_2024.2.1.100_offline.sh
+
+# Source OneAPI env
+source /opt/intel/oneapi/compiler/2024.2/env/vars.sh
+source /opt/intel/oneapi/mkl/2024.2/env/vars.sh
+```
+
+**Backup**: Recommend to rollback to **Toolkit 2024.1** if meet performance issue. See [Release Notes](https://github.com/intel/intel-extension-for-openxla/releases) for more details.
+```bash
+wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/fdc7a2bc-b7a8-47eb-8876-de6201297144/l_BaseKit_p_2024.1.0.596.sh
 # 2 components are necessary: DPC++/C++ Compiler and oneMKL
 sudo sh l_BaseKit_p_2024.1.0.596.sh
 
@@ -67,25 +78,14 @@ source /opt/intel/oneapi/compiler/2024.1/env/vars.sh
 source /opt/intel/oneapi/mkl/2024.1/env/vars.sh
 ```
 
-**Backup**: Recommend to rollback to **Toolkit 2024.0** if need collective feature. See [Release Notes](https://github.com/intel-innersource/frameworks.ai.intel-extension-for-openxla.intel-extension-for-openxla/releases) for more details.
-```bash
-wget https://registrationcenter-download.intel.com/akdlm//IRC_NAS/20f4e6a1-6b0b-4752-b8c1-e5eacba10e01/l_BaseKit_p_2024.0.0.49564.sh
-# 2 components are necessary: DPC++/C++ Compiler and oneMKL
-sudo sh l_BaseKit_p_2024.0.0.49564.sh
-
-# Source OneAPI env
-source /opt/intel/oneapi/compiler/2024.0/env/vars.sh
-source /opt/intel/oneapi/mkl/2024.0/env/vars.sh
-```
-
 ### Install Jax and Jaxlib
 
 ```bash
-pip install -r test/requirements.txt
+pip install -r https://raw.githubusercontent.com/intel/intel-extension-for-openxla/main/test/requirements.txt
 ```
-Check [test/requirements.txt](test/requirements.txt) for more details.
+Please refer to [test/requirements.txt](test/requirements.txt) for the version dependency of `jax`, `jaxlib` and `flax`.
 
-The following table tracks intel-extension-for-openxla versions and compatible versions of jax and jaxlib. The compatibility between jax and jaxlib is maintained through JAX. This version restriction will be relaxed over time as the plugin API matures.
+The following table tracks intel-extension-for-openxla versions and compatible versions of `jax` and `jaxlib`. The compatibility between `jax` and `jaxlib` is maintained through JAX. This version restriction will be relaxed over time as the plugin API matures.
 |**intel-extension-for-openxla**|**jaxlib**|**jax**|
 |:-:|:-:|:-:|
 | 0.4.0 | 0.4.26 | >= 0.4.26, <= 0.4.27|
