@@ -1,31 +1,13 @@
 # Accelerated JAX on Intel GPU
 
 ## Intel® Extension for OpenXLA* plug-in
-Intel® Extension for OpenXLA includes PJRT plugin implementation, which seamlessly runs JAX models on Intel GPU. The PJRT API simplified the integration, which allowed the Intel GPU plugin to be developed separately and quickly integrated into JAX. Refer to [OpenXLA PJRT Plugin RFC](https://github.com/openxla/community/blob/main/rfcs/20230123-pjrt-plugin.md) for more details.
+Intel® Extension for OpenXLA* includes PJRT plugin implementation, which seamlessly runs JAX models on Intel GPU. The PJRT API simplified the integration, which allowed the Intel GPU plugin to be developed separately and quickly integrated into JAX. Refer to [OpenXLA PJRT Plugin RFC](https://github.com/openxla/community/blob/main/rfcs/20230123-pjrt-plugin.md) for more details.
 
 ## Requirements
-
-### Hardware Requirements
-
-Verified Hardware Platforms:
-
-* Intel® Data Center GPU Max Series, Driver Version: [803](https://dgpu-docs.intel.com/releases/LTS_803.63_20240617.html) ([Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-max-series))
-
-* Intel® Data Center GPU Flex Series 170, Driver Version: [803](https://dgpu-docs.intel.com/releases/LTS_803.63_20240617.html) ([Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-flex-series))
-
-### Software Requirements
-
-* Ubuntu 22.04 (64-bit)
-  * Intel® Data Center GPU Flex Series
-* Ubuntu 22.04, SUSE Linux Enterprise Server(SLES) 15 SP4
-  * Intel® Data Center GPU Max Series
-* Intel® oneAPI Base Toolkit 2024.1 ([Installation Guides](https://github.com/intel/intel-extension-for-openxla/?tab=readme-ov-file#install-oneapi-base-toolkit-packages))
-* Jax/Jaxlib 0.4.26
-* Python 3.9-3.12
-* pip 19.0 or later (requires manylinux2014 support)
+Please check [README#requirements](../README.md#2-requirements) for the requirements of hardware and software.
 
 ## Install
-The following table tracks intel-extension-for-openxla versions and compatible versions of jax and jaxlib. The compatibility between jax and jaxlib is maintained through JAX. This version restriction will be relaxed over time as the plugin API matures.
+The following table tracks intel-extension-for-openxla versions and compatible versions of `jax` and `jaxlib`. The compatibility between `jax` and `jaxlib` is maintained through JAX. This version restriction will be relaxed over time as the plugin API matures.
 |**intel-extension-for-openxla**|**jaxlib**|**jax**|
 |:-:|:-:|:-:|
 | 0.4.0 | 0.4.26 | >= 0.4.26, <= 0.4.27|
@@ -39,9 +21,12 @@ The following table tracks intel-extension-for-openxla versions and compatible v
 conda create -n jax-ioex python=3.10
 conda activate jax-ioex
 pip install -U pip
-pip install jax==0.4.26 jaxlib==0.4.26
 pip install intel-extension-for-openxla
+
+# Install jax, jaxlib and flax dependency
+pip install -r https://raw.githubusercontent.com/intel/intel-extension-for-openxla/main/test/requirements.txt
 ```
+Please refer to [requirements.txt](../test/requirements.txt) for the version dependency of `jax`, `jaxlib` and `flax`.
 
 ## Verify
 ```
@@ -61,12 +46,8 @@ bash Miniforge3-$(uname)-$(uname -m).sh
 ```
 
 ### Setup environment
+Please follow [Install](#install) to prepare the basic environment first.
 ```
-conda create -n stable-diffusion python=3.10
-conda activate stable-diffusion
-pip install -U pip
-pip install jax==0.4.26 jaxlib==0.4.26 flax==0.8.2
-pip install intel-extension-for-openxla
 pip install transformers==4.38 diffusers==0.26.3 datasets==2.12.0 msgpack==1.0.7
 ```
 Source OneAPI env
@@ -76,9 +57,7 @@ source /opt/intel/oneapi/mkl/2024.2/env/vars.sh
 ```
 **NOTE**: The path of OneAPI env script is based on the OneAPI installed path.
 
-
 ### Run Demo (Stable Diffusion Inference)
-
 Go to [example/stable_diffusion](../example/stable_diffusion/README.md) for detail about this demo.
 
 | **Command** | **Model** | **Output Image Resolution** | 
