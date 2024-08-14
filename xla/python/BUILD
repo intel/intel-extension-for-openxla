@@ -1,4 +1,4 @@
-load("@tsl//tsl:tsl.default.bzl", "tsl_pybind_extension")
+load("@xla//xla/tsl:tsl.default.bzl", "tsl_pybind_extension")
 
 tsl_pybind_extension(
     name = "xpu_plugin_extension",
