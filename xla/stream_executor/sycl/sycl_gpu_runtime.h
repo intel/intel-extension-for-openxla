@@ -21,15 +21,8 @@ limitations under the License.
 
 #include "absl/strings/ascii.h"
 
-#if __has_include(<sycl/sycl.hpp>)
-#include <sycl/sycl.hpp>
-#elif __has_include(<CL/sycl.hpp>)
-#include <CL/sycl.hpp>
-#else
-#error "Unsupported compiler"
-#endif
-
 #include <level_zero/ze_api.h>
+#include <sycl/sycl.hpp>
 
 enum SYCLError_t {
   SYCL_SUCCESS,
@@ -100,7 +93,8 @@ void* SYCLMallocShared(sycl::device* device, size_t ByteCount);
 void SYCLFree(sycl::device* device, void* ptr);
 
 SYCLError_t SYCLMemcpyAsync(void* dst, const void* src, size_t ByteCount,
-                            SYCLError_t (*func)(void*, const void*, size_t, sycl::queue*),
+                            SYCLError_t (*func)(void*, const void*, size_t,
+                                                sycl::queue*),
                             sycl::queue* stream);
 
 SYCLError_t SYCLStreamSynchronize(sycl::queue* stream);
@@ -121,6 +115,7 @@ class SYCLStreamPool {
   static SYCLError_t syncContext(sycl::device* device_handle);
   static SYCLError_t destroyStream(sycl::device* device_handle,
                                    sycl::queue* stream_handle);
+
  private:
   static std::vector<std::shared_ptr<sycl::queue>>& GetStreamsPool(
       sycl::device* device_handle);
