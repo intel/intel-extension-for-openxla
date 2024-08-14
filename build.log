@@ -1,0 +1,29 @@
+INFO: Options provided by the client:
+  Inherited 'common' options: --isatty=0 --terminal_columns=80
+INFO: Reading rc options for 'build' from /mnt1/sdp/qiming/xla/rebase/main/.bazelrc:
+  Inherited 'common' options: --experimental_repo_remote_exec
+INFO: Reading rc options for 'build' from /mnt1/sdp/qiming/xla/rebase/main/.bazelrc:
+  'build' options: --nocheck_visibility --announce_rc --config=gpu --define=use_fast_cpp_protos=true --define=allow_oversize_protos=true --spawn_strategy=standalone --strategy=Genrule=standalone -c opt --define=PREFIX=/usr --define=LIBDIR=$(PREFIX)/lib --define=INCLUDEDIR=$(PREFIX)/include --distinct_host_configuration=false
+INFO: Reading rc options for 'build' from /mnt1/sdp/qiming/xla/rebase/main/.xla_extension_configure.bazelrc:
+  'build' options: --action_env PYTHON_BIN_PATH=/home1/sdp/mambaforge/envs/qiming_rebase/bin/python --action_env PYTHON_LIB_PATH=/home1/sdp/mambaforge/envs/qiming_rebase/lib/python3.11/site-packages --python_path=/home1/sdp/mambaforge/envs/qiming_rebase/bin/python --action_env TF_CXX11_ABI_FLAG=1 --action_env TF_NEED_SYCL=1 --action_env SYCL_TOOLKIT_PATH=/local_dateset/basekit/596/intel/oneapi/compiler/2024.1 --action_env LD_LIBRARY_PATH=/local_dateset/basekit/596/intel/oneapi/compiler/2024.1/lib:/local_dateset/basekit/596/intel/oneapi/compiler/2024.1/compiler/lib/intel64_lin:/home2/itex/local_dateset/basekit/596/intel/oneapi/mkl/2024.1/lib:/home2/itex/local_dateset/basekit/596/intel/oneapi/compiler/2024.1/opt/oclfpga/host/linux64/lib:/home2/itex/local_dateset/basekit/596/intel/oneapi/compiler/2024.1/opt/compiler/lib:/home2/itex/local_dateset/basekit/596/intel/oneapi/compiler/2024.1/lib --action_env LIBRARY_PATH=/local_dateset/basekit/596/intel/oneapi/compiler/2024.1/lib:/local_dateset/basekit/596/intel/oneapi/compiler/2024.1/compiler/lib/intel64_lin:/home2/itex/local_dateset/basekit/596/intel/oneapi/mkl/2024.1/lib/:/home2/itex/local_dateset/basekit/596/intel/oneapi/compiler/2024.1/lib
+INFO: Found applicable config definition build:gpu in file /mnt1/sdp/qiming/xla/rebase/main/.bazelrc: --crosstool_top=@local_config_sycl//crosstool:toolchain --define=using_sycl=true --repo_env TF_NEED_SYCL=1 --define=tensorflow_mkldnn_contraction_kernel=0 --cxxopt=-std=c++17 --host_cxxopt=-std=c++17
+Loading: 
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //xla/tools/pip_package:build_pip_package (0 packages loaded, 0 targets configured)
+WARNING: /mnt1/sdp/qiming/xla/rebase/main/xla/stream_executor/sycl/BUILD:186:11: in cc_library rule //xla/stream_executor/sycl:sycl_executor: Target '//xla/stream_executor/sycl:sycl_executor' violates visibility of target '@xla//xla/stream_executor:plugin_registry'. Continuing because --nocheck_visibility is active
+WARNING: /mnt1/sdp/qiming/xla/rebase/main/xla/stream_executor/sycl/BUILD:39:11: in cc_library rule //xla/stream_executor/sycl:onednn_plugin: Target '//xla/stream_executor/sycl:onednn_plugin' violates visibility of target '@xla//xla/stream_executor:plugin_registry'. Continuing because --nocheck_visibility is active
+WARNING: /mnt1/sdp/qiming/xla/rebase/main/xla/stream_executor/sycl/BUILD:211:11: in cc_library rule //xla/stream_executor/sycl:syclblas_plugin: Target '//xla/stream_executor/sycl:syclblas_plugin' violates visibility of target '@xla//xla/stream_executor:plugin_registry'. Continuing because --nocheck_visibility is active
+WARNING: /mnt1/sdp/qiming/xla/rebase/main/xla/stream_executor/sycl/BUILD:233:11: in cc_library rule //xla/stream_executor/sycl:syclfft_plugin: Target '//xla/stream_executor/sycl:syclfft_plugin' violates visibility of target '@xla//xla/stream_executor:plugin_registry'. Continuing because --nocheck_visibility is active
+WARNING: /mnt1/sdp/qiming/xla/rebase/main/xla/python/BUILD:3:21: in cc_binary rule //xla/python:xpu_plugin_extension.so: Target '//xla/python:xpu_plugin_extension.so' violates visibility of target '@xla//xla/pjrt:status_casters'. Continuing because --nocheck_visibility is active
+WARNING: /mnt1/sdp/qiming/xla/rebase/main/xla/stream_executor/sycl/BUILD:277:11: in cc_library rule //xla/stream_executor/sycl:stream_executor_sycl: Target '//xla/stream_executor/sycl:stream_executor_sycl' violates visibility of target '@xla//xla/stream_executor:stream_executor_bundle'. Continuing because --nocheck_visibility is active
+WARNING: /mnt1/sdp/qiming/xla/rebase/main/xla/BUILD:1:10: in cc_binary rule //xla:pjrt_plugin_xpu.so: Target '//xla:pjrt_plugin_xpu.so' violates visibility of target '@xla//xla/pjrt/c:pjrt_c_api_gpu'. Continuing because --nocheck_visibility is active
+WARNING: /mnt1/sdp/qiming/xla/rebase/main/xla/tools/pip_package/BUILD:24:10: in sh_binary rule //xla/tools/pip_package:build_pip_package: Target '//xla/tools/pip_package:build_pip_package' violates visibility of target '//xla/python:xpu_plugin_extension.so'. Continuing because --nocheck_visibility is active
+INFO: Analyzed target //xla/tools/pip_package:build_pip_package (1 packages loaded, 150 targets configured).
+INFO: Found 1 target...
+[0 / 1] [Prepa] BazelWorkspaceStatusAction stable-status.txt
+Target //xla/tools/pip_package:build_pip_package up-to-date:
+  bazel-bin/xla/tools/pip_package/build_pip_package
+INFO: Elapsed time: 1.760s, Critical Path: 0.06s
+INFO: 1 process: 1 internal.
+INFO: Build completed successfully, 1 total action

@@ -432,10 +432,11 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
   return absl::OkStatus();
 }
 
-/* static */ bool GpuDriver::GetModuleSymbol(GpuContext* context,
-                                             ze_module_handle_t module,
-                                             const char* symbol_name,
-                                             void** dptr, size_t* bytes) {
+/* static */ absl::Status GpuDriver::GetModuleSymbol(GpuContext* context,
+                                                     ze_module_handle_t module,
+                                                     const char* symbol_name,
+                                                     void** dptr,
+                                                     size_t* bytes) {
   CHECK(module != nullptr && symbol_name != nullptr &&
         (*dptr != nullptr || bytes != nullptr));
   ze_result_t status =
@@ -443,11 +444,11 @@ GpuDriver::GraphGetMemAllocNodeParams(GpuGraphNodeHandle node) {
   if (status != ZE_RESULT_SUCCESS) {
     // symbol may not be found in the current module, but it may reside in
     // another module.
-    VLOG(2) << "failed to get symbol \"" << symbol_name
-            << "\" from module. L0 error: " << status;
-    return false;
+    return absl::InternalError(
+      absl::StrCat("Failed to get symbol '", symbol_name, 
+        "\" from module. L0 error: ", status));
   }
-  return true;
+  return absl::OkStatus();
 }
 
 /* static */ void GpuDriver::UnloadModule(GpuContext* context,

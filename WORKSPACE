@@ -33,6 +33,31 @@ http_archive(
 #    path = "/path/to/xla",
 # )
 
+# Initialize hermetic Python
+load("@xla//third_party/py:python_init_rules.bzl", "python_init_rules")
+
+python_init_rules()
+
+load("@xla//third_party/py:python_init_repositories.bzl", "python_init_repositories")
+
+python_init_repositories(
+    requirements = {
+        "3.11": "@xla//:requirements_lock_3_11.txt",
+    },
+)
+
+load("@xla//third_party/py:python_init_toolchains.bzl", "python_init_toolchains")
+
+python_init_toolchains()
+
+load("@xla//third_party/py:python_init_pip.bzl", "python_init_pip")
+
+python_init_pip()
+
+load("@pypi//:requirements.bzl", "install_deps")
+
+install_deps()
+
 load("@xla//:workspace4.bzl", "xla_workspace4")
 
 xla_workspace4()

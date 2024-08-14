@@ -403,8 +403,7 @@ void initialize_syclblas() {
   absl::Status status =
       PluginRegistry::Instance()->RegisterFactory<PluginRegistry::BlasFactory>(
           kSyclPlatformId, "syBLAS",
-          [](::stream_executor::internal::StreamExecutorInterface *parent)
-              -> blas::BlasSupport * {
+          [](::stream_executor::StreamExecutor* parent) -> blas::BlasSupport * {
             gpu::GpuExecutor *sycl_executor =
                 dynamic_cast<gpu::GpuExecutor *>(parent);
             if (sycl_executor == nullptr) {
