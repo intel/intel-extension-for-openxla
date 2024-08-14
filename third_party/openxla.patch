@@ -6380,10 +6380,10 @@ index 0000000000..ce441527d5
 +
 +#endif  // XLA_STREAM_EXECUTOR_GPU_GPU_MALLOC_ALLOCATOR_H_
 diff --git a/xla/stream_executor/gpu/gpu_types.h b/xla/stream_executor/gpu/gpu_types.h
-index c8d6266b35..05d29efe79 100644
+index c8d6266b35..a6b4afa2bd 100644
 --- a/xla/stream_executor/gpu/gpu_types.h
 +++ b/xla/stream_executor/gpu/gpu_types.h
-@@ -18,7 +18,17 @@ limitations under the License.
+@@ -18,7 +18,18 @@ limitations under the License.
  #ifndef XLA_STREAM_EXECUTOR_GPU_GPU_TYPES_H_
  #define XLA_STREAM_EXECUTOR_GPU_GPU_TYPES_H_
  
@@ -6397,12 +6397,13 @@ index c8d6266b35..05d29efe79 100644
 +#else
 +#error "Unsupported compiler"
 +#endif
++#include <complex>
 +
 +#elif TENSORFLOW_USE_ROCM
  
  #define __HIP_DISABLE_CPP_FUNCTIONS__
  
-@@ -40,7 +50,34 @@ namespace gpu {
+@@ -40,7 +51,34 @@ namespace gpu {
  // current CUDA/HIP version.
  struct UnsupportedGpuFeature {};
  
