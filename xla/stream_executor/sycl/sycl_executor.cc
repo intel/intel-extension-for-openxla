@@ -550,6 +550,33 @@ fft::FftSupport* GpuExecutor::AsFft() {
   return fft_.get();
 }
 
+absl::StatusOr<std::unique_ptr<Event>> GpuExecutor::CreateEvent() {
+  auto gpu_event = std::make_unique<SYCLEvent>(this);
+  TF_RETURN_IF_ERROR(gpu_event->Init());
+  return std::move(gpu_event);
+}
+
+absl::StatusOr<std::unique_ptr<Stream>> GpuExecutor::CreateStream(
+    std::optional<std::variant<StreamPriority, int>> priority) {
+  auto gpu_stream = std::make_unique<GpuStream>(this);
+  if (priority.has_value()) {
+    if (std::holds_alternative<StreamPriority>(*priority)) {
+      gpu_stream->SetPriority(std::get<StreamPriority>(*priority));
+    } else {
+      gpu_stream->SetPriority(std::get<int>(*priority));
+    }
+  }
+  absl::MutexLock l(&alive_gpu_streams_mu_);
+  bool init_worked = gpu_stream->Init();
+  if (init_worked) {
+    auto platform_specific_stream = gpu_stream->platform_specific_stream();
+    alive_gpu_streams_[platform_specific_stream] = gpu_stream.get();
+    return std::move(gpu_stream);
+  } else {
+    return absl::InvalidArgumentError("Failed to initialize gpu stream");
+  }
+}
+
 bool GpuExecutor::CanEnablePeerAccessTo(StreamExecutor* other) {
   return false;
 }

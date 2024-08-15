@@ -7,6 +7,7 @@ tsl_pybind_extension(
         "@nanobind",
         "@xla//xla:status",
         "@xla//xla:util",
+        "@xla//xla/ffi/api:c_api",
         "@xla//xla/pjrt/c:pjrt_c_api_gpu_extension_hdrs",
         "@xla//xla/pjrt/c:pjrt_c_api_hdrs",
         "@xla//xla/pjrt/c:pjrt_c_api_helpers",
