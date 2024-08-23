@@ -1473,7 +1473,7 @@ index ccea46d992..88863b3f91 100644
  }  // namespace gpu
  }  // namespace xla
 diff --git a/xla/service/gpu/cusolver_context.h b/xla/service/gpu/cusolver_context.h
-index 74f287254f..c531f0013a 100644
+index 74f287254f..68b5269ea0 100644
 --- a/xla/service/gpu/cusolver_context.h
 +++ b/xla/service/gpu/cusolver_context.h
 @@ -31,6 +31,12 @@ limitations under the License.
@@ -1550,7 +1550,7 @@ index 74f287254f..c531f0013a 100644
 +        try {
 +          std::rethrow_exception(e);
 +        } catch (oneapi::mkl::lapack::exception& e) {
-+          LOG(ERROR) << "Exception " << ids[i++]
++          LOG(FATAL) << "Exception " << ids[i++]
 +                     << " in a batch says: " << e.what()
 +                     << " (info code: " << e.info() << ")";
 +        }
@@ -1584,7 +1584,7 @@ index 74f287254f..c531f0013a 100644
 +      oneapi::mkl::lapack::potrf(*gpu_stream_, params_uplo, n, a_data,
 +                                 lda, scratch_data, scratchpad_size);
 +    } catch (oneapi::mkl::lapack::computation_error const& ce) {
-+        LOG(ERROR) << "Exception " << ce.what()
++        LOG(FATAL) << "Exception " << ce.what()
 +                   << " (info code: " << ce.info() << ")";
 +    }
 +    return absl::OkStatus();
