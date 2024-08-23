@@ -5409,6 +5409,22 @@ index 8fd8c1cbe6..2819cc840b 100644
  
  HloModule SingleInplaceDusWithBitcastToTheRootAndFromTheParameter, is_scheduled=true, input_output_alias={ {}: (0, {}) }
  
+diff --git a/xla/service/gpu/topk_specializer.cc b/xla/service/gpu/topk_specializer.cc
+index bd01a076cc..a99d49e837 100644
+--- a/xla/service/gpu/topk_specializer.cc
++++ b/xla/service/gpu/topk_specializer.cc
+@@ -106,7 +106,10 @@ class SpecializeTopkVisitor : public DfsHloRewriteVisitor {
+ absl::StatusOr<bool> TopkSpecializer::Run(
+     HloModule* module,
+     const absl::flat_hash_set<absl::string_view>& execution_threads) {
+-  return SpecializeTopkVisitor().RunOnModule(module, execution_threads);
++  // SYCL TODO: disable this pass until sycl topk custom call is ready
++  // SYCL extension should implement custom_call_target="__gpu$TopK" through FFI
++  return false;
++  // return SpecializeTopkVisitor().RunOnModule(module, execution_threads);
+ }
+ 
+ }  // namespace gpu
 diff --git a/xla/service/instruction_fusion.cc b/xla/service/instruction_fusion.cc
 index 0439364a06..f83383564f 100644
 --- a/xla/service/instruction_fusion.cc
