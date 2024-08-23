@@ -4710,7 +4710,7 @@ index d10d82d315..6bb8dcbc30 100644
        for (const std::unique_ptr<SequentialThunk>& branch :
             tensorflow::down_cast<const ConditionalThunk*>(thunk)
 diff --git a/xla/service/gpu/runtime/fused_mha_thunk.cc b/xla/service/gpu/runtime/fused_mha_thunk.cc
-index 4370178b40..af50ea7dc2 100644
+index 4370178b40..7fa0a74e10 100644
 --- a/xla/service/gpu/runtime/fused_mha_thunk.cc
 +++ b/xla/service/gpu/runtime/fused_mha_thunk.cc
 @@ -32,6 +32,10 @@ limitations under the License.
@@ -4724,7 +4724,23 @@ index 4370178b40..af50ea7dc2 100644
  namespace xla {
  namespace gpu {
  
-@@ -100,6 +104,13 @@ absl::Status FusedMHAThunk::ExecuteOnStream(const ExecuteParams& params) {
+@@ -77,10 +81,15 @@ std::optional<se::DeviceMemoryBase> AssignBufferIfNotNull(
+ }
+ 
+ absl::Status FusedMHAThunk::Initialize(const InitializeParams& params) {
++#ifdef TENSORFLOW_USE_SYCL
++  // SYCL does not need runner
++  return absl::OkStatus();
++#else
+   se::dnn::LazyOpRunner<se::dnn::FusedMHAOp>* lazy_runner =
+       GetOrCreateRunner(params.stream).AsFusedMHARunner();
+   TF_ASSIGN_OR_RETURN(auto config, config_.AsDnnFusedMHAOpConfig());
+   return lazy_runner->GetOrCreateRunner(config, params.stream).status();
++#endif
+ }
+ 
+ absl::Status FusedMHAThunk::ExecuteOnStream(const ExecuteParams& params) {
+@@ -100,6 +109,13 @@ absl::Status FusedMHAThunk::ExecuteOnStream(const ExecuteParams& params) {
        AssignBufferIfNotNull(buffer_allocations, bias_buffer_);
    std::optional<se::DeviceMemoryBase> activation_buffer =
        AssignBufferIfNotNull(buffer_allocations, activation_buffer_);
@@ -4738,7 +4754,7 @@ index 4370178b40..af50ea7dc2 100644
    std::optional<se::DeviceMemoryBase> seqlen_q_buffer =
        AssignBufferIfNotNull(buffer_allocations, seqlen_q_buffer_);
    std::optional<se::DeviceMemoryBase> seqlen_k_buffer =
-@@ -110,7 +121,7 @@ absl::Status FusedMHAThunk::ExecuteOnStream(const ExecuteParams& params) {
+@@ -110,7 +126,7 @@ absl::Status FusedMHAThunk::ExecuteOnStream(const ExecuteParams& params) {
                                  rhs_bmm2_buffer, output_buffer, scratch_buffer,
                                  bias_buffer, activation_buffer, seqlen_q_buffer,
                                  seqlen_k_buffer, params.stream, opts));
@@ -4747,7 +4763,7 @@ index 4370178b40..af50ea7dc2 100644
    if (!params.stream->ok()) {
      return Internal("FusedMHAThunk::ExecuteOnStream failed.");
    }
-@@ -212,6 +223,13 @@ absl::Status FusedMHABackwardThunk::ExecuteOnStream(
+@@ -212,6 +228,13 @@ absl::Status FusedMHABackwardThunk::ExecuteOnStream(
        AssignBufferIfNotNull(buffer_allocations, seqlen_k_buffer_);
    RunFusedMHABackwardOptions opts;
  
@@ -4761,7 +4777,7 @@ index 4370178b40..af50ea7dc2 100644
    opts.runner_cache = &GetOrCreateRunner(params.stream);
  
    TF_RETURN_IF_ERROR(RunGpuFMHABackward(
-@@ -220,6 +238,7 @@ absl::Status FusedMHABackwardThunk::ExecuteOnStream(
+@@ -220,6 +243,7 @@ absl::Status FusedMHABackwardThunk::ExecuteOnStream(
        scratch_buffer, d_bmm1_lhs_buffer, d_bmm1_rhs_buffer, d_bmm2_rhs_buffer,
        d_s_buffer, d_bias_buffer, fwd_output_buffer, bias_buffer,
        seqlen_q_buffer, seqlen_k_buffer, params.stream, opts));
