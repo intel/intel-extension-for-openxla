@@ -1473,7 +1473,7 @@ index ccea46d992..88863b3f91 100644
  }  // namespace gpu
  }  // namespace xla
 diff --git a/xla/service/gpu/cusolver_context.h b/xla/service/gpu/cusolver_context.h
-index 74f287254f..68b5269ea0 100644
+index 74f287254f..18bab8fc66 100644
 --- a/xla/service/gpu/cusolver_context.h
 +++ b/xla/service/gpu/cusolver_context.h
 @@ -31,6 +31,12 @@ limitations under the License.
@@ -1584,7 +1584,7 @@ index 74f287254f..68b5269ea0 100644
 +      oneapi::mkl::lapack::potrf(*gpu_stream_, params_uplo, n, a_data,
 +                                 lda, scratch_data, scratchpad_size);
 +    } catch (oneapi::mkl::lapack::computation_error const& ce) {
-+        LOG(FATAL) << "Exception " << ce.what()
++        LOG(ERROR) << "Exception " << ce.what()
 +                   << " (info code: " << ce.info() << ")";
 +    }
 +    return absl::OkStatus();
@@ -5837,10 +5837,10 @@ index cb0c5d1a3c..94aae0dd3e 100644
  // keeping the returned semaphore alive until the kernel finished executing.
  // Setting the semaphore to `kRelease` makes the kernel quit.
 diff --git a/xla/stream_executor/gpu/gpu_types.h b/xla/stream_executor/gpu/gpu_types.h
-index 3964b0777e..f53555ca9e 100644
+index 3964b0777e..81a9228911 100644
 --- a/xla/stream_executor/gpu/gpu_types.h
 +++ b/xla/stream_executor/gpu/gpu_types.h
-@@ -18,7 +18,11 @@ limitations under the License.
+@@ -18,7 +18,12 @@ limitations under the License.
  #ifndef XLA_STREAM_EXECUTOR_GPU_GPU_TYPES_H_
  #define XLA_STREAM_EXECUTOR_GPU_GPU_TYPES_H_
  
@@ -5848,12 +5848,13 @@ index 3964b0777e..f53555ca9e 100644
 +#if TENSORFLOW_USE_SYCL
 +
 +#include <sycl/sycl.hpp>
++#include <complex>
 +
 +#elif TENSORFLOW_USE_ROCM
  
  #define __HIP_DISABLE_CPP_FUNCTIONS__
  
-@@ -40,7 +44,34 @@ namespace gpu {
+@@ -40,7 +45,34 @@ namespace gpu {
  // current CUDA/HIP version.
  struct UnsupportedGpuFeature {};
  

@@ -38,9 +38,11 @@ def workspace(path_prefix = "", tf_repo_name = ""):
 
     new_git_repository(
         name = "xetla",
+        patch_args = ["-p1"],
+        patches = ["//third_party/xetla:xetla.patch"],
         # v0.3.7.2
         commit = "ae46a690bac364a93437e248418636c2a8423134",
-        remote = "https://github.com/intel/xetla",
+        remote = "https://github.com/intel/xetla.git",
         verbose = True,
         build_file = "//third_party/xetla:BUILD",
         patch_cmds = [
