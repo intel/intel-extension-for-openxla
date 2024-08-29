@@ -1288,15 +1288,32 @@ index 624d324e73..f7e1a2a090 100644
        if (user->custom_call_target() == kCusolverCholeskyCallTarget) {
          return user_index.size() == 1 && user_index[0] == 0;
 diff --git a/xla/service/gpu/cudnn_fused_conv_rewriter.cc b/xla/service/gpu/cudnn_fused_conv_rewriter.cc
-index e9cb21b9fa..9582d55239 100644
+index e9cb21b9fa..1ba8c60b50 100644
 --- a/xla/service/gpu/cudnn_fused_conv_rewriter.cc
 +++ b/xla/service/gpu/cudnn_fused_conv_rewriter.cc
-@@ -868,6 +868,13 @@ absl::StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
+@@ -823,6 +823,8 @@ absl::StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
+     bool can_accept_bias =
+         Match(conv->operand(2), m::Broadcast(m::ConstantEffectiveScalar(0)));
+     bool can_accept_side_input = conv->operand_count() < 4;
++    // Flag to tell whether the `side_input` is really accepted.
++    bool accepted_side_input = false;
+ 
+     // The addend can be fused as a bias if
+     //  - it is 1D broadcasted in the output feature dimension, and
+@@ -859,6 +861,7 @@ absl::StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
+       CHECK_EQ(new_operands.size(), 3);
+       new_operands.push_back(addend);
+       config.set_side_input_scale(1);
++      accepted_side_input = true;
+     } else {
+       // Can't fuse; this op already has a bias and a side-input.
+       continue;
+@@ -868,6 +871,13 @@ absl::StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
          conv->CloneWithNewOperands(conv->shape(), new_operands));
      comp->parent()->SetAndUniquifyInstrName(new_conv, conv->name());
      TF_RETURN_IF_ERROR(new_conv->set_backend_config(gpu_config));
 +#if TENSORFLOW_USE_SYCL
-+    if (can_accept_side_input) {
++    if (accepted_side_input) {
 +      xla::Cast<HloCustomCallInstruction>(new_conv)
 +          ->set_output_to_operand_aliasing(
 +              {{{0}, {static_cast<long>(new_operands.size()) - 1, {}}}});
