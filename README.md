@@ -37,7 +37,7 @@ Verified Hardware Platforms:
 * Ubuntu 22.04, SUSE Linux Enterprise Server(SLES) 15 SP4
   * Intel® Data Center GPU Max Series
 * [Intel® oneAPI Base Toolkit 2024.2](https://www.intel.com/content/www/us/en/developer/articles/release-notes/intel-oneapi-toolkit-release-notes.html)
-* Jax/Jaxlib 0.4.26
+* Jax/Jaxlib 0.4.30
 * Python 3.9-3.12
 * pip 19.0 or later (requires manylinux2014 support)
 
