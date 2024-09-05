@@ -1,5 +1,5 @@
 diff --git a/setup.py b/setup.py
-index 37238ba..5ee7b8a 100644
+index 37238ba..e63cf16 100644
 --- a/setup.py
 +++ b/setup.py
 @@ -27,8 +27,8 @@ from version import __version__  # pylint: disable=g-import-not-at-top
@@ -8,8 +8,8 @@ index 37238ba..5ee7b8a 100644
  
 -_jax_version = '0.4.11'
 -_jaxlib_version = '0.4.11'
-+_jax_version = '0.4.26'
-+_jaxlib_version = '0.4.26'
++_jax_version = '0.4.30'
++_jaxlib_version = '0.4.30'
  
  setuptools.setup(
      name='t5x',
@@ -20,10 +20,22 @@ index 37238ba..5ee7b8a 100644
 -        'clu @ git+https://github.com/google/CommonLoopUtils#egg=clu',
 -        'flax @ git+https://github.com/google/flax#egg=flax',
 +        'clu == 0.0.9',
-+        'flax >= 0.8.2',
++        'flax >= 0.8.5',
          'fiddle >= 0.2.5',
          'gin-config',
          f'jax >= {_jax_version}',
+diff --git a/t5x/checkpoints.py b/t5x/checkpoints.py
+index c8af7d0..4945b2c 100644
+--- a/t5x/checkpoints.py
++++ b/t5x/checkpoints.py
+@@ -45,7 +45,6 @@ from flax import serialization
+ from flax import traverse_util
+ import jax
+ from jax import monitoring
+-import jax.config
+ from jax.experimental import multihost_utils
+ from jax.experimental.array_serialization import serialization as array_serialization
+ import jax.numpy as jnp
 diff --git a/t5x/config_utils.py b/t5x/config_utils.py
 index abd3f8f..e6e1bd9 100644
 --- a/t5x/config_utils.py
