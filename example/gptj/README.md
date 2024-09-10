@@ -22,6 +22,7 @@ pip install -r ../../test/requirements.txt
 | *```--max-new-tokens```*| *```32```*| Output max new tokens. |
 | *```--greedy```*| *```False```*| Enable greedy search or beam search. |
 | *```--num-iter```*| *```10```*| Number of iterations. |
+| *```--num-layer```*| *```28```*| Number of hidden layers. |
 | *```--num-warmup```*| *```3```*| Number of warmup iterations. |
 | *```--accuracy```*| *```False```*| Run accuracy check. |
 
@@ -49,6 +50,7 @@ python jax_gptj.py --input-tokens 1024 --max-new-tokens 128
 ```
 
 ### Performance Output
+
 ```
 Inference latency: x.xxx sec.
 Inference throughput: x.xxx samples/sec.
@@ -66,4 +68,12 @@ Inference latency: x.xxx sec.
 Inference throughput: x.xxx samples/sec.
 
 Accuracy = 1.00
+```
+
+### Test with less memory
+
+Set option `--num-layer` (default value: `28`) to a small number, to reduce the memory footprint for test.
+```bash
+export ZE_AFFINITY_MASK=0
+python jax_gptj.py --input-tokens 1024 --max-new-tokens 128 --accuracy --num-layer 14
 ```
