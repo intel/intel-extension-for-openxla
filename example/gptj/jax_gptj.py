@@ -55,14 +55,16 @@ print(args)
 print("---- Model loading", flush=True)
 model_id = args.model_id
 if args.dtype == "float16":
-    model = FlaxGPTJForCausalLM.from_pretrained(model_id, dtype=jax.numpy.float16)
+    model = FlaxGPTJForCausalLM.from_pretrained(
+        pretrained_model_name_or_path=model_id, n_layer=args.num_layer, dtype=jax.numpy.float16)
     model.params = model.to_fp16(model.params)
 elif args.dtype == "bfloat16":
-    model = FlaxGPTJForCausalLM.from_pretrained(model_id, dtype=jax.numpy.bfloat16)
+    model = FlaxGPTJForCausalLM.from_pretrained(
+        pretrained_model_name_or_path=model_id, n_layer=args.num_layer, dtype=jax.numpy.bfloat16)
     model.params = model.to_bf16(model.params)
 else:
-    model = FlaxGPTJForCausalLM.from_pretrained(model_id, dtype=jax.numpy.float32)
-model.config.n_layer = args.num_layer
+    model = FlaxGPTJForCausalLM.from_pretrained(
+        pretrained_model_name_or_path=model_id, n_layer=args.num_layer, dtype=jax.numpy.float32)
 print(model.config)
 print("---- Model loading done", flush=True)
 
