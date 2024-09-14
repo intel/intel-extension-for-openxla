@@ -1323,7 +1323,7 @@ index e9cb21b9fa..1ba8c60b50 100644
                          MakeGetTupleElementHlo(new_conv, 0));
      TF_RETURN_IF_ERROR(comp->ReplaceInstruction(instr, new_instr));
 diff --git a/xla/service/gpu/cudnn_fused_mha_rewriter.cc b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
-index f03fe4f0fa..646883b3e9 100644
+index f03fe4f0fa..468fa5c6dd 100644
 --- a/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 +++ b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 @@ -234,12 +234,14 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
@@ -1382,7 +1382,23 @@ index f03fe4f0fa..646883b3e9 100644
    return is_flash_attention;
  }
  
-@@ -676,6 +684,12 @@ MatchFwdResult MatchFwdMHAPatternsForCanonicalization(HloInstruction* instr) {
+@@ -621,6 +629,7 @@ MatchFwdResult MatchBmm1UnfusedBiasSoftmaxBmm2(MatchFwdResult previous_result,
+         has_dropout ? kCudnnfMHAScaleBiasSoftmaxDropoutCallTarget
+                     : kCudnnfMHAScaleBiasSoftmaxCallTarget;
+     match_result.is_causal_mask |= IsCausalMaskPattern(bias);
++#if !TENSORFLOW_USE_SYCL
+     if (!match_result.is_causal_mask &&
+         bias->opcode() == HloOpcode::kBroadcast) {
+       // we can take the bias before broadcast
+@@ -640,6 +649,7 @@ MatchFwdResult MatchBmm1UnfusedBiasSoftmaxBmm2(MatchFwdResult previous_result,
+             bias_bc));
+       }
+     }
++#endif
+     match_result.matched_bias = bias;
+     match_result.has_match = true;
+   } else {
+@@ -676,6 +686,12 @@ MatchFwdResult MatchFwdMHAPatternsForCanonicalization(HloInstruction* instr) {
        continue;
      }
      has_dropout = match_result.matched_dropout_rate > 0.0;
@@ -1395,7 +1411,7 @@ index f03fe4f0fa..646883b3e9 100644
      match_result = MatchBmm1UnfusedBiasSoftmaxBmm2(
          match_result, match_result.matched_softmax_input, has_dropout);
      if (match_result.has_match) {
-@@ -1087,6 +1101,7 @@ absl::StatusOr<bool> IsMHABlockSupported(
+@@ -1087,6 +1103,7 @@ absl::StatusOr<bool> IsMHABlockSupported(
    TF_ASSIGN_OR_RETURN(
        bool is_flash_attention,
        IsFlashAttention(qkv_layout.value(), is_training, cc, cudnn_version));
@@ -1403,7 +1419,7 @@ index f03fe4f0fa..646883b3e9 100644
    if (is_flash_attention) {
      if (is_causal_mask) {
        // if bias is causal mask, needs to remove bias from name
-@@ -1098,6 +1113,11 @@ absl::StatusOr<bool> IsMHABlockSupported(
+@@ -1098,6 +1115,11 @@ absl::StatusOr<bool> IsMHABlockSupported(
      }
    }
    return is_flash_attention;
@@ -1415,7 +1431,7 @@ index f03fe4f0fa..646883b3e9 100644
  }
  
  absl::StatusOr<HloInstruction*> CanonicalizeBatchedGemmForcuDNNFMHA(
-@@ -1627,6 +1647,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1627,6 +1649,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
          comp->parent()->config().debug_options();
      const se::dnn::VersionInfo cudnn_version =
          GetDnnVersionInfoOrDefault(stream_executor_, cudnn_version_);
@@ -1423,7 +1439,7 @@ index f03fe4f0fa..646883b3e9 100644
  #if !defined(GOOGLE_CUDA) || CUDA_VERSION < 12000
      // CUDA needs to be >= 12.0 for cuDNN to work with all supported hardware.
      // Some cuDNN versions work with CUDA 11, but it is impractical for us to
-@@ -1639,6 +1660,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1639,6 +1662,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
              stream_executor::dnn::VersionInfo(8, 9, 4))) {
        return false;
      }
@@ -1431,7 +1447,7 @@ index f03fe4f0fa..646883b3e9 100644
      for (HloInstruction* instr : comp->MakeInstructionPostOrder()) {
        bool v_transposed = false;
        bool changed = false;
-@@ -1721,6 +1743,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1721,6 +1745,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
                                matched_result.need_canonicalization));
            continue;
          }
@@ -1439,7 +1455,7 @@ index f03fe4f0fa..646883b3e9 100644
          if (matched_bwd_result.matched_dbias &&
              !(compute_capability_.IsAtLeastHopper() &&
                compute_capability_.minor == 0 &&
-@@ -1734,6 +1757,17 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
+@@ -1734,6 +1759,17 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
                                matched_result.need_canonicalization));
            continue;
          }
