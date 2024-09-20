@@ -41,8 +41,12 @@ python_init_rules()
 load("@xla//third_party/py:python_init_repositories.bzl", "python_init_repositories")
 
 python_init_repositories(
+    default_python_version = "system",
     requirements = {
+        "3.9": "@xla//:requirements_lock_3_9.txt",
+        "3.10": "@xla//:requirements_lock_3_10.txt",
         "3.11": "@xla//:requirements_lock_3_11.txt",
+        "3.12": "@xla//:requirements_lock_3_12.txt",
     },
 )
 
