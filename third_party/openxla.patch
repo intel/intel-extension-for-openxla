@@ -23,7 +23,7 @@ index 23644329d2..44ffa9c943 100644
 +)
 diff --git a/requirements.in b/requirements.in
 new file mode 100644
-index 0000000000..53c8b0828d
+index 0000000000..66dd73a662
 --- /dev/null
 +++ b/requirements.in
 @@ -0,0 +1,10 @@
@@ -37,7 +37,6 @@ index 0000000000..53c8b0828d
 +scipy<1.12.0
 +ml_dtypes>=0.4.0
 +lit
-\ No newline at end of file
 diff --git a/requirements_lock_3_10.txt b/requirements_lock_3_10.txt
 new file mode 100644
 index 0000000000..20bd3ed1de
@@ -1098,18 +1097,21 @@ index d7675e1b6a..17da528bec 100644
  
  namespace xla {
 diff --git a/xla/service/BUILD b/xla/service/BUILD
-index a0b65b2012..73ad7b142f 100644
+index a0b65b2012..9fc6094208 100644
 --- a/xla/service/BUILD
 +++ b/xla/service/BUILD
-@@ -3,6 +3,7 @@
- 
- load("@bazel_skylib//rules:build_test.bzl", "build_test")
- load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
-+load("@local_config_sycl//sycl:build_defs.bzl", "if_sycl_is_configured")
- load(
-     "@local_config_rocm//rocm:build_defs.bzl",
+@@ -8,6 +8,10 @@ load(
      "if_rocm",
-@@ -1473,6 +1474,9 @@ cc_library(
+     "if_rocm_is_configured",
+ )
++load(
++    "@local_config_sycl//sycl:build_defs.bzl",
++    "if_sycl_is_configured",
++)
+ load(
+     "@tsl//tsl/platform:build_config.bzl",
+     "tf_proto_library",
+@@ -1473,6 +1477,9 @@ cc_library(
      ]) + if_rocm_is_configured([
          "//xla/service/gpu:amdgpu_compiler",
          "//xla/stream_executor/rocm:stream_executor_rocm",
@@ -1119,7 +1121,7 @@ index a0b65b2012..73ad7b142f 100644
      ]),
  )
  
-@@ -4131,6 +4135,7 @@ cc_library(
+@@ -4131,6 +4138,7 @@ cc_library(
          "//xla/stream_executor/cuda:cuda_platform_id",
          "//xla/stream_executor/host:host_platform_id",
          "//xla/stream_executor/rocm:rocm_platform_id",
@@ -1127,7 +1129,7 @@ index a0b65b2012..73ad7b142f 100644
          "@com_google_absl//absl/container:flat_hash_map",
          "@com_google_absl//absl/memory",
          "@com_google_absl//absl/status",
-@@ -7572,6 +7577,19 @@ cc_library(
+@@ -7572,6 +7580,19 @@ cc_library(
      ],
  )
  
@@ -1147,7 +1149,7 @@ index a0b65b2012..73ad7b142f 100644
  cc_library(
      name = "scatter_simplifier",
      srcs = ["scatter_simplifier.cc"],
-@@ -7653,8 +7671,10 @@ cc_library(
+@@ -7653,8 +7674,10 @@ cc_library(
      deps = [
          ":hlo_creation_utils",
          ":hlo_pass",
@@ -1698,7 +1700,7 @@ index e9cb21b9fa..1ba8c60b50 100644
                          MakeGetTupleElementHlo(new_conv, 0));
      TF_RETURN_IF_ERROR(comp->ReplaceInstruction(instr, new_instr));
 diff --git a/xla/service/gpu/cudnn_fused_mha_rewriter.cc b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
-index f03fe4f0fa..468fa5c6dd 100644
+index f03fe4f0fa..d7975eba83 100644
 --- a/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 +++ b/xla/service/gpu/cudnn_fused_mha_rewriter.cc
 @@ -234,12 +234,14 @@ auto GetUnfusedReduceMaxSumSoftmaxPattern(
@@ -1794,18 +1796,18 @@ index f03fe4f0fa..468fa5c6dd 100644
    if (is_flash_attention) {
      if (is_causal_mask) {
        // if bias is causal mask, needs to remove bias from name
-@@ -1098,6 +1115,11 @@ absl::StatusOr<bool> IsMHABlockSupported(
+@@ -1097,6 +1114,11 @@ absl::StatusOr<bool> IsMHABlockSupported(
+       }
      }
    }
-   return is_flash_attention;
 +#else
-+  if (!is_flash_attention || is_causal_mask) {
++  if (is_causal_mask) {
 +    return false;
-+  } else return true;
++  }
 +#endif
+   return is_flash_attention;
  }
  
- absl::StatusOr<HloInstruction*> CanonicalizeBatchedGemmForcuDNNFMHA(
 @@ -1627,6 +1649,7 @@ absl::StatusOr<bool> CudnnFusedMHARewriter::Run(
          comp->parent()->config().debug_options();
      const se::dnn::VersionInfo cudnn_version =
@@ -2146,7 +2148,7 @@ index cc01f915d0..109df9d880 100644
    // kernels makes sense.
  
 diff --git a/xla/service/gpu/fusions/reduction.cc b/xla/service/gpu/fusions/reduction.cc
-index 881b17a52c..b5146a6a85 100644
+index 881b17a52c..f08d077cc4 100644
 --- a/xla/service/gpu/fusions/reduction.cc
 +++ b/xla/service/gpu/fusions/reduction.cc
 @@ -1153,7 +1153,11 @@ ReductionInfo ReductionInfo::Create(const HloFusionAnalysis& analysis) {
@@ -2161,13 +2163,6 @@ index 881b17a52c..b5146a6a85 100644
    if (reduction_dimensions.is_row_reduction &&
        num_threads_x * 2 <= kThreadsPerBlockTarget) {
      int64_t kept_size =
-@@ -1324,4 +1328,4 @@ std::optional<IndexingMap> ReductionInfo::ComputeThreadIdToInputIndexing(
- }
- 
- }  // namespace gpu
--}  // namespace xla
-+}  // namespace xla
-\ No newline at end of file
 diff --git a/xla/service/gpu/fusions/reduction_base.cc b/xla/service/gpu/fusions/reduction_base.cc
 index 66b095a617..e680411f6e 100644
 --- a/xla/service/gpu/fusions/reduction_base.cc
@@ -2178,17 +2173,6 @@ index 66b095a617..e680411f6e 100644
  }  // namespace gpu
 -}  // namespace xla
 +}  // namespace xla
-\ No newline at end of file
-diff --git a/xla/service/gpu/fusions/reduction_base.h b/xla/service/gpu/fusions/reduction_base.h
-index 7bf4437dea..8d0487fdd9 100644
---- a/xla/service/gpu/fusions/reduction_base.h
-+++ b/xla/service/gpu/fusions/reduction_base.h
-@@ -53,4 +53,4 @@ void AddGroupIdConstraint(IndexingMap& map, int64_t root_index,
- }  // namespace gpu
- }  // namespace xla
- 
--#endif  // XLA_SERVICE_GPU_FUSIONS_REDUCTION_BASE_H_
-+#endif  // XLA_SERVICE_GPU_FUSIONS_REDUCTION_BASE_H_
 \ No newline at end of file
 diff --git a/xla/service/gpu/fusions/reduction_mlir.cc b/xla/service/gpu/fusions/reduction_mlir.cc
 index b3ec1f8e00..fefe200e34 100644
@@ -2957,7 +2941,7 @@ index 069ae1cf75..8440a33b4f 100644
         rhs_shape.element_type() == S8);
  
 diff --git a/xla/service/gpu/ir_emitter_context.cc b/xla/service/gpu/ir_emitter_context.cc
-index 0a51d97622..040c9c8cdd 100644
+index 0a51d97622..03672a9fc8 100644
 --- a/xla/service/gpu/ir_emitter_context.cc
 +++ b/xla/service/gpu/ir_emitter_context.cc
 @@ -67,6 +67,8 @@ void IrEmitterContext::emit_constant(int64_t num_elements,
@@ -2980,11 +2964,10 @@ index 0a51d97622..040c9c8cdd 100644
    // These globals will be looked up by name by GpuExecutable so we need to
    // give them an external linkage.  Not all of their uses are visible in
    // the LLVM IR so we can't give then a linkage that merely preserves their
-@@ -95,7 +97,28 @@ void IrEmitterContext::emit_constant(int64_t num_elements,
+@@ -95,6 +97,27 @@ void IrEmitterContext::emit_constant(int64_t num_elements,
        /*AddressSpace=*/addrspace,
        /*isExternallyInitialized=*/false);
    global_for_const->setAlignment(llvm::Align(kConstantBufferAlignBytes));
--  llvm_module_constants()->insertGlobalVariable(global_for_const);
 +
 +  if (is_spir) {
 +    // SYCL: Add spirv.Decorations for global variable. See document about the
@@ -3006,10 +2989,9 @@ index 0a51d97622..040c9c8cdd 100644
 +    llvm::MDNode* md_list = llvm::MDNode::get(context, metadatas);
 +    global_for_const->setMetadata("spirv.Decorations", md_list);
 +  }
-+  llvm_module_->insertGlobalVariable(global_for_const);
+   llvm_module_constants()->insertGlobalVariable(global_for_const);
  
    info.symbol_name.assign(symbol_name);
-   info.allocation_index = allocation_idx;
 diff --git a/xla/service/gpu/ir_emitter_context.h b/xla/service/gpu/ir_emitter_context.h
 index b1a7760c6a..5fd29e2cc6 100644
 --- a/xla/service/gpu/ir_emitter_context.h
@@ -4006,7 +3988,7 @@ index 22d7f17813..5d64dfd606 100644
  namespace gpu {
  
 diff --git a/xla/service/gpu/model/gpu_performance_model_base.cc b/xla/service/gpu/model/gpu_performance_model_base.cc
-index 2d0fc0ab3d..c7b888e3e6 100644
+index 2d0fc0ab3d..5940bcf7ce 100644
 --- a/xla/service/gpu/model/gpu_performance_model_base.cc
 +++ b/xla/service/gpu/model/gpu_performance_model_base.cc
 @@ -77,8 +77,12 @@ int GetCoalescingWasteFactor(PrimitiveType element_type,
@@ -4022,16 +4004,14 @@ index 2d0fc0ab3d..c7b888e3e6 100644
    float max_bandwidth = num_blocks * per_block_bandwidth;
  
    return std::min(bandwidth, max_bandwidth);
-@@ -175,7 +179,12 @@ LaunchDimensions GpuPerformanceModelBase::EstimateFusionLaunchDimensions(
-   // threads per block. In multi-output fusions, only look at one root.
+@@ -176,6 +180,11 @@ LaunchDimensions GpuPerformanceModelBase::EstimateFusionLaunchDimensions(
    VLOG(5) << "Using fallback launch dimensions estimate for "
            << fusion_analysis.fusion().ToString();
--  int64_t num_threads_per_block = 128;
+   int64_t num_threads_per_block = 128;
 +#if TENSORFLOW_USE_SYCL
 +  const se::DeviceDescription device_info = fusion_analysis.device_info();
-+  int64_t num_threads_per_block = RoundUpTo(device_info.threads_per_block_limit(),int64_t{32});
-+#else
-+  int64_t num_threads_per_block = 128; // Result for default LaunchDimensionsConfig.
++  num_threads_per_block =
++      RoundUpTo(device_info.threads_per_block_limit(), int64_t{32});
 +#endif
    int64_t estimated_num_threads =
        ShapeUtil::ElementsInRecursive(fusion_analysis.fusion_root(0).shape());
@@ -5496,18 +5476,6 @@ index bd01a076cc..a99d49e837 100644
  }
  
  }  // namespace gpu
-diff --git a/xla/service/instruction_fusion.cc b/xla/service/instruction_fusion.cc
-index 0439364a06..f83383564f 100644
---- a/xla/service/instruction_fusion.cc
-+++ b/xla/service/instruction_fusion.cc
-@@ -938,7 +938,6 @@ bool IsSafeToFuseSliceIntoDusFusion(const HloInstruction* producer,
-       };
-       // A common special case is a slice or dynamic-slice and a
-       // dynamic-update-slice that use the same indices. This pattern is safe.
--
-       auto is_nonelementwise_op = [](const HloInstruction* inst) {
-         return inst->opcode() != HloOpcode::kFusion && !inst->IsElementwise() &&
-                inst->opcode() != HloOpcode::kBitcast &&
 diff --git a/xla/service/llvm_ir/llvm_util.cc b/xla/service/llvm_ir/llvm_util.cc
 index 1992f0dea0..e72edb2840 100644
 --- a/xla/service/llvm_ir/llvm_util.cc
