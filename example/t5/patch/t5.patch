@@ -1,5 +1,5 @@
 diff --git a/setup.py b/setup.py
-index 37238ba..e63cf16 100644
+index 37238ba..6a97d34 100644
 --- a/setup.py
 +++ b/setup.py
 @@ -27,8 +27,8 @@ from version import __version__  # pylint: disable=g-import-not-at-top
@@ -24,6 +24,15 @@ index 37238ba..e63cf16 100644
          'fiddle >= 0.2.5',
          'gin-config',
          f'jax >= {_jax_version}',
+@@ -61,7 +61,7 @@ setuptools.setup(
+         'numpy',
+         'optax @ git+https://github.com/deepmind/optax#egg=optax',
+         'orbax-checkpoint',
+-        'seqio @ git+https://github.com/google/seqio#egg=seqio',
++        'seqio >= 0.0.18',
+         'tensorflow-cpu',
+         'tensorstore >= 0.1.20',
+         # remove this when sentencepiece_model_pb2 is re-generated in the
 diff --git a/t5x/checkpoints.py b/t5x/checkpoints.py
 index c8af7d0..4945b2c 100644
 --- a/t5x/checkpoints.py
