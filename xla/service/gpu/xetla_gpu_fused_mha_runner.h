@@ -39,7 +39,6 @@ absl::Status RunXetlaGpuFMHA(
     const GpufMHAConfig& fmha_config, se::DeviceMemoryBase lhs_bmm1_buffer,
     se::DeviceMemoryBase rhs_bmm1_buffer, se::DeviceMemoryBase rhs_bmm2_buffer,
     se::DeviceMemoryBase output_buffer, se::DeviceMemoryBase scratch_buffer,
-    std::optional<se::DeviceMemoryBase> mask_buffer,
     std::optional<se::DeviceMemoryBase> bias_buffer,
     std::optional<se::DeviceMemoryBase> activation_buffer, se::Stream* stream);
 
@@ -54,9 +53,6 @@ absl::Status RunXetlaGpuFMHABackward(
     se::DeviceMemoryBase d_bmm1_rhs_buffer,
     se::DeviceMemoryBase d_bmm2_rhs_buffer,
     std::optional<se::DeviceMemoryBase> d_s_buffer,
-    std::optional<se::DeviceMemoryBase> softmax_sum_buffer,
-    std::optional<se::DeviceMemoryBase> d_Q_accum_buffer,
-    std::optional<se::DeviceMemoryBase> mask_buffer,
     std::optional<se::DeviceMemoryBase> d_bias_buffer,
     std::optional<se::DeviceMemoryBase> fwd_output_buffer,
     std::optional<se::DeviceMemoryBase> bias_buffer, se::Stream* stream);

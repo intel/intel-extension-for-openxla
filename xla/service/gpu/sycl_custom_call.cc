@@ -39,47 +39,47 @@ static absl::Status SyclConvolutionBase(
 // input  + filter => output
 static absl::Status SyclConvolutionForward(
     se::Stream* stream, se::OwningScratchAllocator<> scratch_allocator,
-    ffi::RemainingArgs args, ffi::Dictionary dict) {
+    ffi::RemainingArgs args, ffi::RemainingResults rets, ffi::Dictionary dict) {
   std::vector<ffi::BufferBase> operand_se_buffers;
   operand_se_buffers.reserve(2);
   operand_se_buffers.push_back(*args.get<ffi::BufferBase>(0));
   operand_se_buffers.push_back(*args.get<ffi::BufferBase>(1));
   CudnnConvKind conv_kind = CudnnConvKind::kForward;
   return SyclConvolutionBase(stream, &scratch_allocator, operand_se_buffers,
-                             *args.get<ffi::BufferBase>(2), dict, conv_kind);
+                             *rets.get<ffi::BufferBase>(0), dict, conv_kind);
 }
 
 // input  + output => filter
 static absl::Status SyclConvolutionBackwardFilter(
     se::Stream* stream, se::OwningScratchAllocator<> scratch_allocator,
-    ffi::RemainingArgs args, ffi::Dictionary dict) {
+    ffi::RemainingArgs args, ffi::RemainingResults rets, ffi::Dictionary dict) {
   std::vector<ffi::BufferBase> operand_se_buffers;
   operand_se_buffers.reserve(2);
   operand_se_buffers.push_back(*args.get<ffi::BufferBase>(0));
   operand_se_buffers.push_back(*args.get<ffi::BufferBase>(1));
   CudnnConvKind conv_kind = CudnnConvKind::kBackwardFilter;
   return SyclConvolutionBase(stream, &scratch_allocator, operand_se_buffers,
-                             *args.get<ffi::BufferBase>(2), dict, conv_kind);
+                             *rets.get<ffi::BufferBase>(0), dict, conv_kind);
 }
 
 // filter  + output => input
 static absl::Status SyclConvolutionBackwardInput(
     se::Stream* stream, se::OwningScratchAllocator<> scratch_allocator,
-    ffi::RemainingArgs args, ffi::Dictionary dict) {
+    ffi::RemainingArgs args, ffi::RemainingResults rets, ffi::Dictionary dict) {
   std::vector<ffi::BufferBase> operand_se_buffers;
   operand_se_buffers.reserve(2);
   operand_se_buffers.push_back(*args.get<ffi::BufferBase>(0));
   operand_se_buffers.push_back(*args.get<ffi::BufferBase>(1));
   CudnnConvKind conv_kind = CudnnConvKind::kBackwardInput;
   return SyclConvolutionBase(stream, &scratch_allocator, operand_se_buffers,
-                             *args.get<ffi::BufferBase>(2), dict, conv_kind);
+                             *rets.get<ffi::BufferBase>(0), dict, conv_kind);
 }
 
 // activation(conv(input, filter) + broadcast(bias) + (optionally) side_input)
 // => output
 static absl::Status SyclConvolutionBiasActivationForward(
     se::Stream* stream, se::OwningScratchAllocator<> scratch_allocator,
-    ffi::RemainingArgs args, ffi::Dictionary dict) {
+    ffi::RemainingArgs args, ffi::RemainingResults rets, ffi::Dictionary dict) {
   std::vector<ffi::BufferBase> operand_se_buffers;
   operand_se_buffers.reserve(args.size() - 2);
   operand_se_buffers.push_back(*args.get<ffi::BufferBase>(0));  // X
@@ -89,11 +89,11 @@ static absl::Status SyclConvolutionBiasActivationForward(
   // The first and the last element in the result tuple for a convolution are
   // always the result and the scratch buffer. It may have auxiliary results in
   // addition to the main result.
-  // So here need to pick the second to last buffer as the real result buffer.
-  ffi::BufferBase Y = *args.get<ffi::BufferBase>(args.size() - 2);
+  // So here need to pick the first buffer as the real result buffer.
+  ffi::BufferBase Y = *rets.get<ffi::BufferBase>(0);
 
   // SYCL: OneDNN requires inplace sum.
-  if (args.size() > 3 && args.size() - 2 != 3) {
+  if (args.size() > 3) {
     ffi::BufferBase S = *args.get<ffi::BufferBase>(3);
     operand_se_buffers.push_back(S);
     TF_RETURN_IF_ERROR(stream->MemcpyD2D(
@@ -111,6 +111,7 @@ XLA_FFI_DEFINE_HANDLER(kSyclConvolutionForward, SyclConvolutionForward,
                            .Ctx<ffi::Stream>()
                            .Ctx<ffi::ScratchAllocator>()
                            .RemainingArgs()
+                           .RemainingResults()
                            .Attrs());
 
 XLA_FFI_DEFINE_HANDLER(kSyclConvolutionBackwardFilter,
@@ -119,6 +120,7 @@ XLA_FFI_DEFINE_HANDLER(kSyclConvolutionBackwardFilter,
                            .Ctx<ffi::Stream>()
                            .Ctx<ffi::ScratchAllocator>()
                            .RemainingArgs()
+                           .RemainingResults()
                            .Attrs());
 
 XLA_FFI_DEFINE_HANDLER(kSyclConvolutionBackwardInput,
@@ -127,6 +129,7 @@ XLA_FFI_DEFINE_HANDLER(kSyclConvolutionBackwardInput,
                            .Ctx<ffi::Stream>()
                            .Ctx<ffi::ScratchAllocator>()
                            .RemainingArgs()
+                           .RemainingResults()
                            .Attrs());
 
 XLA_FFI_DEFINE_HANDLER(kSyclConvolutionBiasActivationForward,
@@ -135,6 +138,7 @@ XLA_FFI_DEFINE_HANDLER(kSyclConvolutionBiasActivationForward,
                            .Ctx<ffi::Stream>()
                            .Ctx<ffi::ScratchAllocator>()
                            .RemainingArgs()
+                           .RemainingResults()
                            .Attrs());
 
 XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(), "__cudnn$convForward", PLATFORM,
@@ -149,10 +153,12 @@ XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(),
 
 static absl::Status SyclGemm(se::Stream* stream,
                              se::OwningScratchAllocator<> scratch_allocator,
-                             ffi::RemainingArgs args, ffi::Dictionary dict) {
+                             ffi::RemainingArgs args,
+                             ffi::RemainingResults rets,
+                             ffi::Dictionary dict) {
   ffi::BufferBase lhs = *args.get<ffi::BufferBase>(0);
   ffi::BufferBase rhs = *args.get<ffi::BufferBase>(1);
-  ffi::BufferBase output = *args.get<ffi::BufferBase>(2);
+  ffi::BufferBase output = *rets.get<ffi::BufferBase>(0);
   return RunGemmCustomCall(&lhs, &rhs, /*add*/ nullptr, &output,
                            /*bias*/ nullptr, stream, dict,
                            SYCLGemm::GemmBackendEpilogue::DEFAULT,
@@ -162,6 +168,7 @@ static absl::Status SyclGemm(se::Stream* stream,
 static absl::Status SyclLtMatmul(se::Stream* stream,
                                  se::OwningScratchAllocator<> scratch_allocator,
                                  ffi::RemainingArgs args,
+                                 ffi::RemainingResults rets,
                                  ffi::Dictionary dict) {
   int32_t epilogue = *dict.get<int32_t>("epilogue");
   auto epilogue_cuda =
@@ -179,15 +186,13 @@ static absl::Status SyclLtMatmul(se::Stream* stream,
   ffi::BufferBase lhs = *args.get<ffi::BufferBase>(0);
   ffi::BufferBase rhs = *args.get<ffi::BufferBase>(1);
   ffi::BufferBase output;
-  ffi::BufferBase add = *args.get<ffi::BufferBase>(
-      2 + has_matrix_bias + has_vector_bias + (has_aux_output ? 1 : 0));
+  ffi::BufferBase add = *rets.get<ffi::BufferBase>(has_aux_output ? 1 : 0);
   ffi::BufferBase bias;
 
   if (has_matrix_bias) {
     output = *args.get<ffi::BufferBase>(2);
   } else {
-    output = *args.get<ffi::BufferBase>(2 + has_matrix_bias + has_vector_bias +
-                                        (has_aux_output ? 1 : 0));
+    output = *rets.get<ffi::BufferBase>(has_aux_output ? 1 : 0);
   }
 
   if (has_vector_bias) {
@@ -205,6 +210,7 @@ XLA_FFI_DEFINE_HANDLER(kSyclGemm, SyclGemm,
                            .Ctx<ffi::Stream>()
                            .Ctx<ffi::ScratchAllocator>()
                            .RemainingArgs()
+                           .RemainingResults()
                            .Attrs());
 
 XLA_FFI_DEFINE_HANDLER(kSyclLtMatmul, SyclLtMatmul,
@@ -212,6 +218,7 @@ XLA_FFI_DEFINE_HANDLER(kSyclLtMatmul, SyclLtMatmul,
                            .Ctx<ffi::Stream>()
                            .Ctx<ffi::ScratchAllocator>()
                            .RemainingArgs()
+                           .RemainingResults()
                            .Attrs());
 
 XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(), "__cublas$gemm", PLATFORM,

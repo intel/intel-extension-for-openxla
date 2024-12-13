@@ -35,6 +35,11 @@ _CMAKE_COMMON_LIST = {
     "#cmakedefine DNNL_ENABLE_STACK_CHECKER": "#undef DNNL_ENABLE_STACK_CHECKER",
     "#cmakedefine DNNL_EXPERIMENTAL": "#define DNNL_EXPERIMENTAL",
     "#cmakedefine ONEDNN_BUILD_GRAPH": "#undef ONEDNN_BUILD_GRAPH",
+    "#cmakedefine DNNL_SYCL_GENERIC": "#define DNNL_SYCL_GENERIC",
+    "#cmakedefine DNNL_GPU_VENDOR DNNL_VENDOR_${DNNL_GPU_VENDOR}": "#define DNNL_GPU_VENDOR DNNL_VENDOR_INTEL",
+    "#cmakedefine DNNL_DISABLE_GPU_REF_KERNELS": "#define DNNL_DISABLE_GPU_REF_KERNELS",
+    "#cmakedefine DNNL_EXPERIMENTAL_LOGGING": "#undef DNNL_EXPERIMENTAL_LOGGING",
+    "#cmakedefine01 BUILD_SDPA": "#define BUILD_SDPA 1",
     "#cmakedefine01 BUILD_TRAINING": "#define BUILD_TRAINING 1",
     "#cmakedefine01 BUILD_INFERENCE": "#define BUILD_INFERENCE 0",
     "#cmakedefine01 BUILD_PRIMITIVE_ALL": "#define BUILD_PRIMITIVE_ALL 1",
@@ -103,6 +108,12 @@ gen_onednn_version(
     header_out = "include/oneapi/dnnl/dnnl_version.h",
 )
 
+gen_onednn_version(
+    name = "dnnl_version_hash_h",
+    header_in = "include/oneapi/dnnl/dnnl_version_hash.h.in",
+    header_out = "include/oneapi/dnnl/dnnl_version_hash.h",
+)
+
 filegroup(
     name = "onednn_src",
     srcs = glob(
@@ -122,6 +133,7 @@ filegroup(
         ],
     ) + [
         ":dnnl_config_h",
+	":dnnl_version_hash_h",
         ":header_generator",
         ":kernel_list_generator",
         ":onednn_version_generator",
@@ -156,6 +168,9 @@ cc_library(
         "include/oneapi/dnnl",
         "src",
         "src/common",
+	"src/gpu/intel/jit/gemm/",
+        "src/gpu/intel/jit/gemm/include/",
+        "src/gpu/intel/jit/ngen/",
         "src/intel/ocl",
         "src/sycl",
     ],

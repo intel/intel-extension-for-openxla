@@ -17,7 +17,7 @@ cc_library(
     hdrs = ["matrix_descriptor.h"],
     deps = [
         "//xla/stream_executor/sycl:sycl_executor",
-        "@xla//xla/stream_executor:stream_executor_headers",
+        "@xla//xla/stream_executor:stream_executor_h",
     ],
 )
 
@@ -111,8 +111,8 @@ xpu_library(
         "@xla//xla/service/gpu:gpu_executable_run_options",
         "@xla//xla/service/gpu:ir_emission_utils",
         "@xla//xla/service/gpu/runtime:nccl_api",
-        "@xla//xla/service/gpu:nccl_clique",
-        "@xla//xla/service/gpu:nccl_clique_key",
+        "@xla//xla/service/gpu/runtime:nccl_clique",
+        "@xla//xla/service/gpu/runtime:nccl_clique_key",
         "@xla//xla/service/gpu/runtime:thunk",
         "@xla//xla:shape_util",
         "@xla//xla:status",
@@ -121,7 +121,6 @@ xpu_library(
         "@xla//xla:util",
         "@xla//xla:xla_data_proto_cc",
         "@xla//xla/hlo/ir:hlo",
-        "@xla//xla/mlir_hlo:lhlo",
         "@xla//xla/service:buffer_assignment",
         "@xla//xla/service:collective_ops_utils",
         "@xla//xla/service:computation_placer",

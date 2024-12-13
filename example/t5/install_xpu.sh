@@ -8,7 +8,7 @@ git apply ../patch/t5.patch
 ln -s /usr/local/bin/pip /usr/bin/pip
 pip uninstall tensorflow-metadata numba cudf -y
 pip uninstall tensorflow -y
-pip install tensorflow==2.12.0
+pip install tensorflow==2.18.0
 
 conda install libstdcxx-ng==12.2.0 -c conda-forge -y
 

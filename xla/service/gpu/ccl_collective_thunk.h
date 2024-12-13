@@ -40,8 +40,8 @@ limitations under the License.
 #include "xla/service/gpu/buffer_allocations.h"
 #include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/runtime/nccl_api.h"
-#include "xla/service/gpu/nccl_clique.h"
-#include "xla/service/gpu/nccl_clique_key.h"
+#include "xla/service/gpu/runtime/nccl_clique.h"
+#include "xla/service/gpu/runtime/nccl_clique_key.h"
 #include "xla/service/gpu/runtime/thunk.h"
 #include "xla/service/llvm_ir/llvm_util.h"
 #include "xla/service/rendezvous.h"
@@ -142,7 +142,7 @@ class NcclCollectiveThunk : public Thunk {
 
    private:
     absl::Mutex mu_;
-    absl::node_hash_map<se::StreamExecutor*, se::Event> events_
+    absl::flat_hash_map<se::StreamExecutor*, std::unique_ptr<se::Event>> events_
         ABSL_GUARDED_BY(mu_);
   };
 
@@ -181,7 +181,7 @@ class NcclCollectiveThunk : public Thunk {
 
  private:
   bool IsAsync() const { return async_events_ != nullptr; }
-  int64_t GetStreamId() const {
+  NcclStreamId GetStreamId() const {
     return xla::gpu::GetStreamId(IsAsync(), GetAsyncStreamKind());
   }
 

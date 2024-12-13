@@ -14,10 +14,10 @@ http_archive(
     name = "xla",
     patch_args = ["-p1"],
     patches = ["//third_party:openxla.patch"],
-    sha256 = "fa6e7d17acc362b56c57c43224e6e3eca8569adae864e2fa191cc9d13edf4309",
-    strip_prefix = "xla-4e8e23f16bc925b6f27817de098a8e1e81296bb5",
+    sha256 = "083c7281a629647ab2cc32f054afec74893c33e75328783b8085c818f48235ff",
+    strip_prefix = "xla-79fd5733f99b3c0948d7202bc1bbe1ee3980da5c",
     urls = [
-        "https://github.com/openxla/xla/archive/4e8e23f16bc925b6f27817de098a8e1e81296bb5.tar.gz",
+        "https://github.com/openxla/xla/archive/79fd5733f99b3c0948d7202bc1bbe1ee3980da5c.tar.gz",
     ],
 )
 
@@ -32,6 +32,35 @@ http_archive(
 #    name = "xla",
 #    path = "/path/to/xla",
 # )
+
+# Initialize hermetic Python
+load("@xla//third_party/py:python_init_rules.bzl", "python_init_rules")
+
+python_init_rules()
+
+load("@xla//third_party/py:python_init_repositories.bzl", "python_init_repositories")
+
+python_init_repositories(
+    default_python_version = "system",
+    requirements = {
+        "3.9": "@xla//:requirements_lock_3_9.txt",
+        "3.10": "@xla//:requirements_lock_3_10.txt",
+        "3.11": "@xla//:requirements_lock_3_11.txt",
+        "3.12": "@xla//:requirements_lock_3_12.txt",
+    },
+)
+
+load("@xla//third_party/py:python_init_toolchains.bzl", "python_init_toolchains")
+
+python_init_toolchains()
+
+load("@xla//third_party/py:python_init_pip.bzl", "python_init_pip")
+
+python_init_pip()
+
+load("@pypi//:requirements.bzl", "install_deps")
+
+install_deps()
 
 load("@xla//:workspace4.bzl", "xla_workspace4")
 
