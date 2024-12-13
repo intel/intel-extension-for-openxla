@@ -19,7 +19,7 @@ index 37238ba..6a97d34 100644
          'cached_property',
 -        'clu @ git+https://github.com/google/CommonLoopUtils#egg=clu',
 -        'flax @ git+https://github.com/google/flax#egg=flax',
-+        'clu == 0.0.9',
++        'clu == 0.0.12',
 +        'flax >= 0.8.5',
          'fiddle >= 0.2.5',
          'gin-config',

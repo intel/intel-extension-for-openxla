@@ -19,7 +19,7 @@ please got the [main page](https://github.com/intel/intel-extension-for-openxla/
 Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```bash
 cd <WORKSPACE>/example/sdxl/
-pip install transformers==4.38 diffusers==0.26.3 datasets==2.20.0 msgpack==1.0.7
+pip install transformers==4.47 diffusers==0.31.0 datasets==2.20.0 msgpack==1.1.0
 pip install -r ../../test/requirements.txt
 ```
 
