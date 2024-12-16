@@ -1,4 +1,4 @@
-load("@tsl//tsl:tsl.default.bzl", "tsl_pybind_extension")
+load("@xla//xla/tsl:tsl.default.bzl", "tsl_pybind_extension")
 
 tsl_pybind_extension(
     name = "xpu_plugin_extension",
@@ -7,6 +7,7 @@ tsl_pybind_extension(
         "@nanobind",
         "@xla//xla:status",
         "@xla//xla:util",
+        "@xla//xla/ffi/api:c_api",
         "@xla//xla/pjrt/c:pjrt_c_api_gpu_extension_hdrs",
         "@xla//xla/pjrt/c:pjrt_c_api_hdrs",
         "@xla//xla/pjrt/c:pjrt_c_api_helpers",

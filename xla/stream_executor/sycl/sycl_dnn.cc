@@ -49,7 +49,6 @@ limitations under the License.
 #include "xla/stream_executor/scratch_allocator.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor.h"
-#include "xla/stream_executor/stream_executor_internal.h"
 #include "absl/strings/string_view.h"
 
 
@@ -72,7 +71,7 @@ void initialize_onednn() {
   absl::Status status =
       PluginRegistry::Instance()->RegisterFactory<PluginRegistry::DnnFactory>(
           sycl::kSyclPlatformId, "oneDNN",
-          [](internal::StreamExecutorInterface* parent) -> dnn::DnnSupport* {
+          [](StreamExecutor* parent) -> dnn::DnnSupport* {
             gpu::GpuExecutor* sycl_executor =
                 dynamic_cast<gpu::GpuExecutor*>(parent);
             if (sycl_executor == nullptr) {

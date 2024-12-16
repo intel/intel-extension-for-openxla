@@ -531,7 +531,7 @@ void initialize_syclfft() {
   absl::Status status =
       PluginRegistry::Instance()->RegisterFactory<PluginRegistry::FftFactory>(
           sycl::kSyclPlatformId, "syclFFT",
-          [](internal::StreamExecutorInterface *parent) -> fft::FftSupport * {
+          [](StreamExecutor* parent) -> fft::FftSupport * {
             gpu::GpuExecutor *sycl_executor =
                 dynamic_cast<gpu::GpuExecutor *>(parent);
             if (sycl_executor == nullptr) {

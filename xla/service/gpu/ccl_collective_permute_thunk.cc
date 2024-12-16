@@ -47,11 +47,12 @@ namespace gpu {
 NcclCollectivePermuteStartThunk::NcclCollectivePermuteStartThunk(
     ThunkInfo thunk_info, NcclApi* nccl_api,
     const HloCollectivePermuteInstruction* instr, int64_t replica_count,
-    int64_t partition_count, const Buffer& buffer)
+    int64_t partition_count, const Buffer& buffer, bool p2p_memcpy_enabled)
     : NcclCollectiveThunk(Thunk::kNcclCollectivePermuteStart, thunk_info,
                           nccl_api, IsSyncCollective(instr)),
       config_(GetNcclP2PConfig(instr, replica_count, partition_count)),
-      buffer_(buffer) {}
+      buffer_(buffer),
+      p2p_memcpy_enabled_(p2p_memcpy_enabled) {}
 
 /*static*/ NcclP2PConfig NcclCollectivePermuteStartThunk::GetNcclP2PConfig(
     const HloCollectivePermuteInstruction* instr, int64_t replica_count,

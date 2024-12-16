@@ -127,17 +127,8 @@ absl::StatusOr<StreamExecutor*> SyclPlatform::GetExecutor(
 
 absl::StatusOr<std::unique_ptr<StreamExecutor>>
 SyclPlatform::GetUncachedExecutor(const StreamExecutorConfig& config) {
-  auto executor = std::make_unique<StreamExecutor>(
-      this, std::make_unique<GpuExecutor>(), config.ordinal);
-  auto init_status = executor->Init();
-  if (!init_status.ok()) {
-    return absl::Status(
-        absl::StatusCode::kInternal,
-        absl::StrFormat(
-            "failed initializing StreamExecutor for CUDA device ordinal %d: %s",
-            config.ordinal, init_status.ToString()));
-  }
-
+  auto executor = std::make_unique<GpuExecutor>(this, config.ordinal);
+  TF_RETURN_IF_ERROR(executor->Init());
   return std::move(executor);
 }
 

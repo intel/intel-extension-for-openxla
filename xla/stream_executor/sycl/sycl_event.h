@@ -20,12 +20,16 @@ limitations under the License.
 
 #include "xla/stream_executor/gpu/gpu_event.h"
 
-namespace stream_executor {
-namespace sycl {
+namespace stream_executor::gpu {
 
-using SYCLEvent = gpu::GpuEvent;
+// This class implements Event::PollForStatus for CUDA devices.
+class SYCLEvent : public GpuEvent {
+ public:
+  explicit SYCLEvent(GpuExecutor *executor) : GpuEvent(executor) {}
 
-}  // namespace sycl
-}  // namespace stream_executor
+  Event::Status PollForStatus() override;
+};
+
+}  // namespace stream_executor::gpu
 
 #endif  // XLA_STREAM_EXECUTOR_SYCL_SYCL_EVENT_H_

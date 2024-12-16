@@ -27,8 +27,8 @@ namespace gpu {
 
 namespace sycl = ::sycl;
 
-Event::Status GpuEvent::PollForStatus() {
-  auto* event = gpu_event_->event;
+Event::Status SYCLEvent::PollForStatus() {
+  auto* event = gpu_event()->event;
   auto event_status =
       event->get_info<sycl::info::event::command_execution_status>();
 

@@ -43,8 +43,8 @@ class NcclCollectivePermuteStartThunk : public NcclCollectiveThunk {
   NcclCollectivePermuteStartThunk(ThunkInfo thunk_info, NcclApi* nccl_api,
                                   const HloCollectivePermuteInstruction* instr,
                                   int64_t replica_count,
-                                  int64_t partition_count,
-                                  const Buffer& buffer);
+                                  int64_t partition_count, const Buffer& buffer,
+                                  bool p2p_memcpy_enabled);
 
   static const char* GetHloOpName() { return "collective-permute-start"; }
 
@@ -57,6 +57,7 @@ class NcclCollectivePermuteStartThunk : public NcclCollectiveThunk {
  private:
   const NcclP2PConfig config_;
   const Buffer buffer_;
+  bool p2p_memcpy_enabled_ = false;
 };
 
 absl::Status RunCollectivePermute(
