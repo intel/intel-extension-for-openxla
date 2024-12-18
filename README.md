@@ -26,9 +26,9 @@ This guide introduces the overview of OpenXLA high level integration structure a
 
 Verified Hardware Platforms:
 
-* Intel® Data Center GPU Max Series, Driver Version: [803](https://dgpu-docs.intel.com/releases/LTS_803.63_20240617.html)
+* Intel® Data Center GPU Max Series, Driver Version: [LTS release 2350.125](https://dgpu-docs.intel.com/releases/LTS-release-notes.html)
 
-* Intel® Data Center GPU Flex Series 170, Driver Version: [803](https://dgpu-docs.intel.com/releases/LTS_803.63_20240617.html)
+* Intel® Data Center GPU Flex Series, Driver Version: [LTS release 2350.125](https://dgpu-docs.intel.com/driver/installation.html)
 
 ### Software Requirements
 
@@ -36,7 +36,7 @@ Verified Hardware Platforms:
   * Intel® Data Center GPU Flex Series
 * Ubuntu 22.04, SUSE Linux Enterprise Server(SLES) 15 SP4
   * Intel® Data Center GPU Max Series
-* [Intel® oneAPI Base Toolkit 2024.2](https://www.intel.com/content/www/us/en/developer/articles/release-notes/intel-oneapi-toolkit-release-notes.html)
+* [Intel® oneAPI Base Toolkit 2025.0](https://www.intel.com/content/www/us/en/developer/articles/release-notes/intel-oneapi-toolkit-release-notes.html)
 * Jax/Jaxlib 0.4.30
 * Python 3.9-3.12
 * pip 19.0 or later (requires manylinux2014 support)
@@ -47,8 +47,8 @@ Verified Hardware Platforms:
 
 |OS|Intel GPU|Install Intel GPU Driver|
 |-|-|-|
-|Ubuntu 22.04 |Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-flex-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [803](https://dgpu-docs.intel.com/releases/LTS_803.63_20240617.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.43.27642.52-803~22.04`|
-|Ubuntu 22.04, SLES 15 SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/installation-guides/index.html#intel-data-center-gpu-max-series) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [803](https://dgpu-docs.intel.com/releases/LTS_803.63_20240617.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==23.43.27642.52-803~22.04`|
+|Ubuntu 22.04 |Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/driver/installation.html) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [LTS release 2350.125](https://dgpu-docs.intel.com/driver/installation.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==24.45.31740.10-1057~22.04`|
+|Ubuntu 22.04, SLES 15 SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/driver/installation.html) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [LTS release 2350.125](https://dgpu-docs.intel.com/releases/LTS-release-notes.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==24.45.31740.10-1057~22.04`|
 
 ### Install oneAPI Base Toolkit Packages
 
@@ -58,13 +58,14 @@ Need to install components of Intel® oneAPI Base Toolkit:
 * Intel® oneAPI Math Kernel Library (oneMKL)
 
 ```bash
-$ wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/e6ff8e9c-ee28-47fb-abd7-5c524c983e1c/l_BaseKit_p_2024.2.1.100_offline.sh
+$ wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/96aa5993-5b22-4a9b-91ab-da679f422594/intel-oneapi-base-toolkit-2025.0.0.885_offline.sh
 # 2 components are necessary: DPC++/C++ Compiler and oneMKL
-sudo sh l_BaseKit_p_2024.2.1.100_offline.sh
+sudo sh intel-oneapi-base-toolkit-2025.0.0.885_offline.sh
 
 # Source OneAPI env
-source /opt/intel/oneapi/compiler/2024.2/env/vars.sh
-source /opt/intel/oneapi/mkl/2024.2/env/vars.sh
+source /opt/intel/oneapi/compiler/2025.0/env/vars.sh
+source /opt/intel/oneapi/mkl/2025.0/env/vars.sh
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/intel/oneapi/umf/latest/lib
 ```
 
 **Backup**: Recommend to rollback to **Toolkit 2024.1** if meet performance issue. See [Release Notes](https://github.com/intel/intel-extension-for-openxla/releases) for more details.
@@ -88,6 +89,7 @@ Please refer to [test/requirements.txt](test/requirements.txt) for the version d
 The following table tracks intel-extension-for-openxla versions and compatible versions of `jax` and `jaxlib`. The compatibility between `jax` and `jaxlib` is maintained through JAX. This version restriction will be relaxed over time as the plugin API matures.
 |**intel-extension-for-openxla**|**jaxlib**|**jax**|
 |:-:|:-:|:-:|
+| 0.5.0 | 0.4.30 | >= 0.4.30, <= 0.4.31|
 | 0.4.0 | 0.4.26 | >= 0.4.26, <= 0.4.27|
 | 0.3.0 | 0.4.24 | >= 0.4.24, <= 0.4.27|
 | 0.2.1 | 0.4.20 | >= 0.4.20, <= 0.4.26|
@@ -110,7 +112,7 @@ git clone https://github.com/intel/intel-extension-for-openxla.git
 ./configure        # Choose Yes for all.
 bazel build //xla/tools/pip_package:build_pip_package
 ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-pip install intel_extension_for_openxla-0.4.0-cp39-cp39-linux_x86_64.whl
+pip install intel_extension_for_openxla-0.5.0-cp39-cp39-linux_x86_64.whl
 ```
 
 **Aditional Build Option**:
@@ -126,7 +128,7 @@ bazel build --override_repository=xla=/path/to/xla //xla/tools/pip_package:build
 By default, bazel will automatically search for the required libraries on your system. This eliminates the need for manual configuration in most cases. For more advanced use cases, you can specify a custom location for the libraries using environment variables:
 
 ```bash
-export MKL_INSTALL_PATH=/opt/intel/oneapi/mkl/2024.2
+export MKL_INSTALL_PATH=/opt/intel/oneapi/mkl/2025.0
 export L0_INSTALL_PATH=/usr
 bazel build //xla/tools/pip_package:build_pip_package
 ```
