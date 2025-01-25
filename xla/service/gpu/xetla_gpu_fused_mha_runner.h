@@ -55,7 +55,9 @@ absl::Status RunXetlaGpuFMHABackward(
     std::optional<se::DeviceMemoryBase> d_s_buffer,
     std::optional<se::DeviceMemoryBase> d_bias_buffer,
     std::optional<se::DeviceMemoryBase> fwd_output_buffer,
-    std::optional<se::DeviceMemoryBase> bias_buffer, se::Stream* stream);
+    std::optional<se::DeviceMemoryBase> bias_buffer,
+    std::optional<se::DeviceMemoryBase> softmax_buffer,
+    std::optional<se::DeviceMemoryBase> accum_buffer, se::Stream* stream);
 
 }  // namespace gpu
 }  // namespace xla
