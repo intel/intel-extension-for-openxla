@@ -1,4 +1,4 @@
 datasets==2.20.0
 optax>=0.0.8
-transformers==4.38
+transformers==4.48.0
 evaluate>=0.4.1
