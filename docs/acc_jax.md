@@ -1,15 +1,16 @@
 # Accelerated JAX on Intel GPU
 
 ## Intel® Extension for OpenXLA* plug-in
-Intel® Extension for OpenXLA* includes PJRT plugin implementation, which seamlessly runs JAX models on Intel GPU. The PJRT API simplified the integration, which allowed the Intel GPU plugin to be developed separately and quickly integrated into JAX. Refer to [OpenXLA PJRT Plugin RFC](https://github.com/openxla/community/blob/main/rfcs/20230123-pjrt-plugin.md) for more details.
+Intel® Extension for OpenXLA includes PJRT plugin implementation, which seamlessly runs JAX models on Intel GPU. The PJRT API simplifies the integration, enabling the Intel GPU plugin to be developed separately and allowing smooth integration with JAX. This same PJRT implementation also enables initial Intel GPU support for TensorFlow and PyTorch models with XLA acceleration. Refer to [OpenXLA PJRT Plugin RFC](https://github.com/openxla/community/blob/main/rfcs/20230123-pjrt-plugin.md) for more details.
 
 ## Requirements
-Please check [README#requirements](../README.md#2-requirements) for the requirements of hardware and software.
+Please check the [Requirements section](../README.md#2-requirements) for the hardware and software requirements.
 
 ## Install
 The following table tracks intel-extension-for-openxla versions and compatible versions of `jax` and `jaxlib`. The compatibility between `jax` and `jaxlib` is maintained through JAX. This version restriction will be relaxed over time as the plugin API matures.
 |**intel-extension-for-openxla**|**jaxlib**|**jax**|
 |:-:|:-:|:-:|
+| 0.6.0 | 0.4.38 | 0.4.38 |
 | 0.5.0 | 0.4.30 | >= 0.4.30, <= 0.4.31|
 | 0.4.0 | 0.4.26 | >= 0.4.26, <= 0.4.27|
 | 0.3.0 | 0.4.24 | >= 0.4.24, <= 0.4.27|
@@ -35,7 +36,7 @@ python -c "import jax; print(jax.devices())"
 ```
 Reference result:
 ```
-[xpu(id=0), xpu(id=1)]
+[sycl(id=0), sycl(id=1)]
 ```
 
 ## Example - Run Stable Diffusion Inference
@@ -53,8 +54,8 @@ pip install transformers==4.47 diffusers==0.31.0 datasets==4.9.7 msgpack==1.1.0
 ```
 Source OneAPI env
 ```
-source /opt/intel/oneapi/compiler/2025.0/env/vars.sh
-source /opt/intel/oneapi/mkl/2025.0/env/vars.sh
+source /opt/intel/oneapi/compiler/2025.1/env/vars.sh
+source /opt/intel/oneapi/mkl/2025.1/env/vars.sh
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/intel/oneapi/umf/latest/lib
 ```
 **NOTE**: The path of OneAPI env script is based on the OneAPI installed path.
@@ -89,5 +90,5 @@ To submit questions, feature requests, and bug reports about the intel-extension
 2. If there is an error 'version GLIBCXX_3.4.30' not found, upgrade libstdc++ to the latest, for example for conda
 
     ```bash
-    conda install libstdcxx-ng==12.2.0 -c conda-forge
+    conda install libstdcxx-ng -c conda-forge -y
     ```

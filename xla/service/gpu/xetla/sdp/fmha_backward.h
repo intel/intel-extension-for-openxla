@@ -879,9 +879,9 @@ void fmha_backward_impl(sycl::queue& q, T* query, T* key, T* value, T* out,
     cgh.parallel_for<
         class FmhaBackwardDotDOO<fmha_policy, T, kUseBias, kIsDropout>>(
         NdRange0, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-      sycl::nd_item<3> ei(item);
-      fmha_bwd_dot_do_op_t fmha_bwd_dot_do_o_op;
-      fmha_bwd_dot_do_o_op(ei, args);
+          sycl::nd_item<3> ei(item);
+          fmha_bwd_dot_do_op_t fmha_bwd_dot_do_o_op;
+          fmha_bwd_dot_do_o_op(ei, args);
         });
   });
 
@@ -893,9 +893,9 @@ void fmha_backward_impl(sycl::queue& q, T* query, T* key, T* value, T* out,
     cgh.parallel_for<
         class FmhaBackwardKernel<fmha_policy, T, kUseBias, kIsDropout>>(
         NdRange1, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-      sycl::nd_item<3> ei(item);
-      fmha_backward_op_t fmha_bwd_op;
-      fmha_bwd_op(ei, args);
+          sycl::nd_item<3> ei(item);
+          fmha_backward_op_t fmha_bwd_op;
+          fmha_bwd_op(ei, args);
         });
   });
 
@@ -907,9 +907,9 @@ void fmha_backward_impl(sycl::queue& q, T* query, T* key, T* value, T* out,
     cgh.parallel_for<
         class FmhaBackwardConvertDQ<fmha_policy, T, kUseBias, kIsDropout>>(
         NdRange2, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-      sycl::nd_item<3> ei(item);
-      fmha_bwd_convert_dq_op_t fmha_bwd_convert_dq_op;
-      fmha_bwd_convert_dq_op(ei, args);
+          sycl::nd_item<3> ei(item);
+          fmha_bwd_convert_dq_op_t fmha_bwd_convert_dq_op;
+          fmha_bwd_convert_dq_op(ei, args);
         });
   });
 }

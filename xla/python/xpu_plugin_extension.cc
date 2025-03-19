@@ -17,6 +17,7 @@ limitations under the License.
 #include <string_view>
 #include <utility>
 
+#include "absl/status/status.h"
 #include "nanobind/nanobind.h"
 #include "xla/ffi/api/c_api.h"
 #include "xla/pjrt/c/pjrt_c_api.h"
@@ -24,7 +25,6 @@ limitations under the License.
 #include "xla/pjrt/c/pjrt_c_api_helpers.h"
 #include "xla/python/py_client_gpu.h"
 #include "xla/pjrt/status_casters.h"
-#include "xla/status.h"
 #include "xla/tsl/python/lib/core/numpy.h"
 #include "xla/util.h"
 
@@ -32,7 +32,7 @@ namespace nb = nanobind;
 
 namespace xla {
 namespace {
-Status RegisterCustomCallTarget(const PJRT_Api* c_api,
+absl::Status RegisterCustomCallTarget(const PJRT_Api* c_api,
                                 const char* fn_name_c_str, size_t fn_name_size,
                                 nb::capsule fn, int api_version,
                                 XLA_FFI_Handler_Traits traits) {
@@ -63,7 +63,7 @@ Status RegisterCustomCallTarget(const PJRT_Api* c_api,
   RETURN_STATUS_IF_PJRT_ERROR(
       reinterpret_cast<const PJRT_Gpu_Custom_Call*>(next)->custom_call(&args),
       c_api);
-  return OkStatus();
+  return absl::OkStatus();
 }
 
 template <typename T>

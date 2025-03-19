@@ -22,14 +22,14 @@ limitations under the License.
 #include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"
 #include "tsl/platform/statusor.h"
-#include "xla/tsl/util/env_var.h"
-#include "xla/tsl/util/proto/proto_utils.h"
 #include "xla/service/gpu/cublas_cudnn.h"
 #include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/onednn_matmul_utils.h"
 #include "xla/stream_executor/gpu/gpu_stream.h"
 #include "xla/stream_executor/gpu/gpu_timer.h"
 #include "xla/stream_executor/sycl/hw_info.h"
+#include "xla/tsl/util/env_var.h"
+#include "xla/tsl/util/proto/proto_utils.h"
 
 namespace xla {
 namespace gpu {
@@ -102,7 +102,8 @@ absl::StatusOr<absl::Duration> GetExecuteTime(
             autotune_config, rng_state));
   }
 
-  TF_ASSIGN_OR_RETURN(auto epilogue, SYCLGemm::AsSYCLEpilogue(gemm_config.epilogue()));
+  TF_ASSIGN_OR_RETURN(auto epilogue,
+                      SYCLGemm::AsSYCLEpilogue(gemm_config.epilogue()));
   se::OwningScratchAllocator<> scratch_allocator(
       stream->parent()->device_ordinal(), autotune_config.GetAllocator());
 

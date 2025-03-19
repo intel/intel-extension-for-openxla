@@ -10,7 +10,7 @@ pip uninstall tensorflow-metadata numba cudf -y
 pip uninstall tensorflow -y
 pip install tensorflow==2.18.0
 
-conda install libstdcxx-ng==12.2.0 -c conda-forge -y
+conda install libstdcxx-ng -c conda-forge -y
 
 pip uninstall mdit-py-plugins jupytext -y
 pip install t5

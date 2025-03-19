@@ -1,10 +1,217 @@
+diff --git a/lib/SPIRV/OCLToSPIRV.cpp b/lib/SPIRV/OCLToSPIRV.cpp
+index 6c08c9e0..944c1f39 100644
+--- a/lib/SPIRV/OCLToSPIRV.cpp
++++ b/lib/SPIRV/OCLToSPIRV.cpp
+@@ -1421,7 +1421,7 @@ bool usesSpvExtImageRaw10Raw12Constants(const CallInst *CI) {
+   for (auto *U : CI->users()) {
+     for (auto C : ExtConstants) {
+       ICmpInst::Predicate Pred;
+-      if (match(U, m_c_ICmp(Pred, m_Value(), m_SpecificInt(C)))) {
++      if (match(U, m_c_ICmp(Pred, m_Value(), m_SpecificInt(C)))) {
+         return true;
+       }
+       if (auto *Switch = dyn_cast<SwitchInst>(U)) {
+diff --git a/lib/SPIRV/OCLUtil.cpp b/lib/SPIRV/OCLUtil.cpp
+index 2e215687..def66719 100644
+--- a/lib/SPIRV/OCLUtil.cpp
++++ b/lib/SPIRV/OCLUtil.cpp
+@@ -1035,11 +1035,11 @@ public:
+       setVarArg(1);
+     else if (NameRef.starts_with("write_imageui"))
+       addUnsignedArg(2);
+-    else if (NameRef.equals("prefetch")) {
++    else if (NameRef.equals_insensitive("prefetch")) {
+       addUnsignedArg(1);
+       setArgAttr(0, SPIR::ATTR_CONST);
+-    } else if (NameRef.equals("get_kernel_work_group_size") ||
+-               NameRef.equals(
++    } else if (NameRef.equals_insensitive("get_kernel_work_group_size") ||
++               NameRef.equals_insensitive(
+                    "get_kernel_preferred_work_group_size_multiple")) {
+       assert(F && "lack of necessary information");
+       const size_t BlockArgIdx = 0;
+@@ -1049,8 +1049,8 @@ public:
+     } else if (NameRef.starts_with("__enqueue_kernel")) {
+       // clang doesn't mangle enqueue_kernel builtins
+       setAsDontMangle();
+-    } else if (NameRef.starts_with("get_") || NameRef.equals("nan") ||
+-               NameRef.equals("mem_fence") || NameRef.starts_with("shuffle")) {
++    } else if (NameRef.starts_with("get_") || NameRef.equals_insensitive("nan") ||
++               NameRef.equals_insensitive("mem_fence") || NameRef.starts_with("shuffle")) {
+       addUnsignedArg(-1);
+       if (NameRef.starts_with(kOCLBuiltinName::GetFence)) {
+         setArgAttr(0, SPIR::ATTR_CONST);
+@@ -1058,10 +1058,10 @@ public:
+       }
+     } else if (NameRef.contains("barrier")) {
+       addUnsignedArg(0);
+-      if (NameRef.equals("work_group_barrier") ||
+-          NameRef.equals("sub_group_barrier") ||
+-          NameRef.equals("intel_work_group_barrier_arrive") ||
+-          NameRef.equals("intel_work_group_barrier_wait"))
++      if (NameRef.equals_insensitive("work_group_barrier") ||
++          NameRef.equals_insensitive("sub_group_barrier") ||
++          NameRef.equals_insensitive("intel_work_group_barrier_arrive") ||
++          NameRef.equals_insensitive("intel_work_group_barrier_wait"))
+         setEnumArg(1, SPIR::PRIMITIVE_MEMORY_SCOPE);
+     } else if (NameRef.starts_with("atomic_work_item_fence")) {
+       addUnsignedArg(0);
+@@ -1117,18 +1117,18 @@ public:
+       NameRef = NameRef.drop_front(1);
+       UnmangledName.erase(0, 1);
+     } else if (NameRef.starts_with("s_")) {
+-      if (NameRef.equals("s_upsample"))
++      if (NameRef.equals_insensitive("s_upsample"))
+         addUnsignedArg(1);
+       NameRef = NameRef.drop_front(2);
+     } else if (NameRef.starts_with("u_")) {
+       addUnsignedArg(-1);
+       NameRef = NameRef.drop_front(2);
+-    } else if (NameRef.equals("fclamp")) {
++    } else if (NameRef.equals_insensitive("fclamp")) {
+       NameRef = NameRef.drop_front(1);
+     }
+     // handle [read|write]pipe builtins (plus two i32 literal args
+     // required by SPIR 2.0 provisional specification):
+-    else if (NameRef.equals("read_pipe_2") || NameRef.equals("write_pipe_2")) {
++    else if (NameRef.equals_insensitive("read_pipe_2") || NameRef.equals_insensitive("write_pipe_2")) {
+       // with 2 arguments (plus two i32 literals):
+       // int read_pipe (read_only pipe gentype p, gentype *ptr)
+       // int write_pipe (write_only pipe gentype p, const gentype *ptr)
+@@ -1136,16 +1136,16 @@ public:
+       addUnsignedArg(2);
+       addUnsignedArg(3);
+       // OpenCL-like representation of blocking pipes
+-    } else if (NameRef.equals("read_pipe_2_bl") ||
+-               NameRef.equals("write_pipe_2_bl")) {
++    } else if (NameRef.equals_insensitive("read_pipe_2_bl") ||
++               NameRef.equals_insensitive("write_pipe_2_bl")) {
+       // with 2 arguments (plus two i32 literals):
+       // int read_pipe_bl (read_only pipe gentype p, gentype *ptr)
+       // int write_pipe_bl (write_only pipe gentype p, const gentype *ptr)
+       addVoidPtrArg(1);
+       addUnsignedArg(2);
+       addUnsignedArg(3);
+-    } else if (NameRef.equals("read_pipe_4") ||
+-               NameRef.equals("write_pipe_4")) {
++    } else if (NameRef.equals_insensitive("read_pipe_4") ||
++               NameRef.equals_insensitive("write_pipe_4")) {
+       // with 4 arguments (plus two i32 literals):
+       // int read_pipe (read_only pipe gentype p, reserve_id_t reserve_id, uint
+       // index, gentype *ptr) int write_pipe (write_only pipe gentype p,
+@@ -1165,10 +1165,10 @@ public:
+       // process [|work_group|sub_group]commit[read|write]pipe builtins
+       addUnsignedArg(2);
+       addUnsignedArg(3);
+-    } else if (NameRef.equals("capture_event_profiling_info")) {
++    } else if (NameRef.equals_insensitive("capture_event_profiling_info")) {
+       addVoidPtrArg(2);
+       setEnumArg(1, SPIR::PRIMITIVE_CLK_PROFILING_INFO);
+-    } else if (NameRef.equals("enqueue_marker")) {
++    } else if (NameRef.equals_insensitive("enqueue_marker")) {
+       setArgAttr(2, SPIR::ATTR_CONST);
+       addUnsignedArg(1);
+     } else if (NameRef.starts_with("vload")) {
+@@ -1529,7 +1529,7 @@ SPIRV::transSPIRVMemoryScopeIntoOCLMemoryScope(Value *MemScope,
+ 
+   if (auto *CI = dyn_cast<CallInst>(MemScope)) {
+     Function *F = CI->getCalledFunction();
+-    if (F && F->getName().equals(kSPIRVName::TranslateOCLMemScope)) {
++    if (F && F->getName().equals_insensitive(kSPIRVName::TranslateOCLMemScope)) {
+       // In case the SPIR-V module was created from an OpenCL program by
+       // *this* SPIR-V generator, we know that the value passed to
+       // __translate_ocl_memory_scope is what we should pass to the
+@@ -1553,7 +1553,7 @@ SPIRV::transSPIRVMemorySemanticsIntoOCLMemoryOrder(Value *MemorySemantics,
+ 
+   if (auto *CI = dyn_cast<CallInst>(MemorySemantics)) {
+     Function *F = CI->getCalledFunction();
+-    if (F && F->getName().equals(kSPIRVName::TranslateOCLMemOrder)) {
++    if (F && F->getName().equals_insensitive(kSPIRVName::TranslateOCLMemOrder)) {
+       // In case the SPIR-V module was created from an OpenCL program by
+       // *this* SPIR-V generator, we know that the value passed to
+       // __translate_ocl_memory_order is what we should pass to the
+diff --git a/lib/SPIRV/PassPlugin.cpp b/lib/SPIRV/PassPlugin.cpp
+index 526c2194..6762d911 100644
+--- a/lib/SPIRV/PassPlugin.cpp
++++ b/lib/SPIRV/PassPlugin.cpp
+@@ -65,7 +65,7 @@ PassPluginLibraryInfo getSPIRVPluginInfo() {
+         PB.registerPipelineParsingCallback(
+             [](StringRef Name, FunctionPassManager &PM,
+                ArrayRef<PassBuilder::PipelineElement>) {
+-              if (Name.equals("spirv-lower-bitcast")) {
++              if (Name.equals_insensitive("spirv-lower-bitcast")) {
+                 PM.addPass(
+                     SPIRVLowerBitCastToNonStandardTypePass(TranslatorOpts{}));
+                 return true;
+@@ -75,50 +75,50 @@ PassPluginLibraryInfo getSPIRVPluginInfo() {
+         PB.registerPipelineParsingCallback(
+             [](StringRef Name, ModulePassManager &PM,
+                ArrayRef<PassBuilder::PipelineElement>) {
+-              if (Name.equals("ocl-to-spirv")) {
++              if (Name.equals_insensitive("ocl-to-spirv")) {
+                 PM.addPass(OCLToSPIRVPass());
+                 return true;
+               }
+-              if (Name.equals("llvm-to-spirv")) {
++              if (Name.equals_insensitive("llvm-to-spirv")) {
+                 SPIRV::TranslatorOpts DefaultOpts;
+                 DefaultOpts.enableAllExtensions();
+                 SPIRVModule *BM = SPIRVModule::createSPIRVModule(DefaultOpts);
+                 PM.addPass(LLVMToSPIRVPass(BM));
+                 return true;
+               }
+-              if (Name.equals("process-metadata")) {
++              if (Name.equals_insensitive("process-metadata")) {
+                 PM.addPass(PreprocessMetadataPass());
+                 return true;
+               }
+-              if (Name.equals("spirv-lower-bool")) {
++              if (Name.equals_insensitive("spirv-lower-bool")) {
+                 PM.addPass(SPIRVLowerBoolPass());
+                 return true;
+               }
+-              if (Name.equals("spirv-lower-constexpr")) {
++              if (Name.equals_insensitive("spirv-lower-constexpr")) {
+                 PM.addPass(SPIRVLowerConstExprPass());
+                 return true;
+               }
+-              if (Name.equals("spirv-lower-memmove")) {
++              if (Name.equals_insensitive("spirv-lower-memmove")) {
+                 PM.addPass(SPIRVLowerMemmovePass());
+                 return true;
+               }
+-              if (Name.equals("spirv-lower-ocl-blocks")) {
++              if (Name.equals_insensitive("spirv-lower-ocl-blocks")) {
+                 PM.addPass(SPIRVLowerOCLBlocksPass());
+                 return true;
+               }
+-              if (Name.equals("spirv-lower-llvm-intrinsic")) {
++              if (Name.equals_insensitive("spirv-lower-llvm-intrinsic")) {
+                 PM.addPass(SPIRVLowerLLVMIntrinsicPass(TranslatorOpts{}));
+                 return true;
+               }
+-              if (Name.equals("spirv-regularize-llvm")) {
++              if (Name.equals_insensitive("spirv-regularize-llvm")) {
+                 PM.addPass(SPIRVRegularizeLLVMPass());
+                 return true;
+               }
+-              if (Name.equals("spirv-to-ocl12")) {
++              if (Name.equals_insensitive("spirv-to-ocl12")) {
+                 PM.addPass(SPIRVToOCL12Pass());
+                 return true;
+               }
+-              if (Name.equals("spirv-to-ocl20")) {
++              if (Name.equals_insensitive("spirv-to-ocl20")) {
+                 PM.addPass(SPIRVToOCL20Pass());
+                 return true;
+               }
 diff --git a/lib/SPIRV/SPIRVInternal.h b/lib/SPIRV/SPIRVInternal.h
-index a828add8..924e13b4 100644
+index b2d8bb75..9f3be8ad 100644
 --- a/lib/SPIRV/SPIRVInternal.h
 +++ b/lib/SPIRV/SPIRVInternal.h
-@@ -179,11 +179,12 @@ typedef SPIRVMap<Op, Op, IntBoolOpMapId> IntBoolOpMap;
+@@ -180,11 +180,12 @@ typedef SPIRVMap<Op, Op, IntBoolOpMapId> IntBoolOpMap;
    "-v512:512:512-v1024:1024:1024"
-
+ 
  enum SPIRAddressSpace {
 -  SPIRAS_Private,
 +  SPIRAS_Generic,
@@ -18,3 +225,63 @@ index a828add8..924e13b4 100644
    SPIRAS_GlobalDevice,
    SPIRAS_GlobalHost,
    SPIRAS_Input,
+diff --git a/lib/SPIRV/SPIRVLowerConstExpr.h b/lib/SPIRV/SPIRVLowerConstExpr.h
+index 4e8900bc..93d0bb51 100644
+--- a/lib/SPIRV/SPIRVLowerConstExpr.h
++++ b/lib/SPIRV/SPIRVLowerConstExpr.h
+@@ -16,6 +16,7 @@
+ #define SPIRV_LOWERCONSTEXPR_H
+ 
+ #include "llvm/IR/PassManager.h"
++#include "llvm/IR/LLVMContext.h"
+ 
+ namespace SPIRV {
+ 
+diff --git a/lib/SPIRV/SPIRVReader.cpp b/lib/SPIRV/SPIRVReader.cpp
+index d0282035..badc7a75 100644
+--- a/lib/SPIRV/SPIRVReader.cpp
++++ b/lib/SPIRV/SPIRVReader.cpp
+@@ -70,6 +70,7 @@
+ #include "llvm/IR/MDBuilder.h"
+ #include "llvm/IR/Metadata.h"
+ #include "llvm/IR/Module.h"
++#include "llvm/IR/PassInstrumentation.h"
+ #include "llvm/IR/Type.h"
+ #include "llvm/IR/TypedPointerType.h"
+ #include "llvm/Support/Casting.h"
+@@ -2939,7 +2940,7 @@ void SPIRVToLLVM::transFunctionAttrs(SPIRVFunction *BF, Function *F) {
+     auto *BA = BF->getArgument(I->getArgNo());
+     mapValue(BA, &(*I));
+     setName(&(*I), BA);
+-    AttributeMask IllegalAttrs = AttributeFuncs::typeIncompatible(I->getType());
++    AttributeMask IllegalAttrs = AttributeFuncs::typeIncompatible(I->getType());
+     BA->foreachAttr([&](SPIRVFuncParamAttrKind Kind) {
+       Attribute::AttrKind LLVMKind = SPIRSPIRVFuncParamAttrMap::rmap(Kind);
+       if (IllegalAttrs.contains(LLVMKind))
+diff --git a/lib/SPIRV/SPIRVUtil.cpp b/lib/SPIRV/SPIRVUtil.cpp
+index b0ff6289..a1f55b54 100644
+--- a/lib/SPIRV/SPIRVUtil.cpp
++++ b/lib/SPIRV/SPIRVUtil.cpp
+@@ -909,8 +909,8 @@ bool getRetParamSignedness(Function *F, ParamSignedness &RetSignedness,
+       StringRef Arg(stringify(Name));
+       if (Arg.starts_with("unsigned"))
+         return ParamSignedness::Unsigned;
+-      if (Arg.equals("char") || Arg.equals("short") || Arg.equals("int") ||
+-          Arg.equals("long"))
++      if (Arg.equals_insensitive("char") || Arg.equals_insensitive("short") || Arg.equals_insensitive("int") ||
++          Arg.equals_insensitive("long"))
+         return ParamSignedness::Signed;
+     }
+     return ParamSignedness::Unknown;
+diff --git a/lib/SPIRV/libSPIRV/SPIRVDebug.cpp b/lib/SPIRV/libSPIRV/SPIRVDebug.cpp
+index 03ea45a7..c5b90403 100644
+--- a/lib/SPIRV/libSPIRV/SPIRVDebug.cpp
++++ b/lib/SPIRV/libSPIRV/SPIRVDebug.cpp
+@@ -42,6 +42,7 @@
+ #include "llvm/IR/Verifier.h"
+ #include "llvm/Support/CommandLine.h"
+ #include "llvm/Support/raw_ostream.h"
++#include "llvm/Support/Debug.h"
+ 
+ #define DEBUG_TYPE "spirv-regularization"
+ 

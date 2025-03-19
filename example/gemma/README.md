@@ -93,7 +93,7 @@ pip install -U tensorflow-text
 
 ### Examples
 
-#### Parameters of Single GPU finetune.
+#### Parameters for Single GPU finetune.
 ```
 python finetune.py \
 --model gemma_7b \
@@ -109,7 +109,7 @@ python finetune.py \
 --lora_rank 4 
 ```
 
-#### Parameters of Multiple GPUs data parallel distributed finetune
+#### Parameters for Multiple GPUs data parallel distributed finetune
 
 ```
 python finetune.py \

@@ -1,12 +1,12 @@
 diff --git a/include/common/core/barrier.hpp b/include/common/core/barrier.hpp
-index 7924f5a..88daa89 100644
+index 7924f5a..1f384e4 100644
 --- a/include/common/core/barrier.hpp
 +++ b/include/common/core/barrier.hpp
 @@ -33,7 +33,11 @@ namespace gpu::xetla {
  template <uint8_t NbarCount>
  __XETLA_API void xetla_nbarrier_init() {
      if constexpr (NbarCount != 0) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +        __ESIMD_NS::named_barrier_init<NbarCount>();
 +#else
          __ESIMD_ENS::named_barrier_init<NbarCount>();
@@ -18,7 +18,7 @@ index 7924f5a..88daa89 100644
  __XETLA_API void named_barrier_signal(uint8_t barrier_id,
          uint8_t producer_consumer_mode, uint32_t num_producers,
          uint32_t num_consumers) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    __ESIMD_NS::named_barrier_signal(
 +            barrier_id, producer_consumer_mode, num_producers, num_consumers);
 +#else
@@ -32,7 +32,7 @@ index 7924f5a..88daa89 100644
  /// @param barrier_id  [in] is the named barrier id.
  /// It’s value cannot exceed the total count of initialized named barriers.
  __XETLA_API void named_barrier_wait(uint8_t barrier_id) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    __ESIMD_NS::named_barrier_wait(barrier_id);
 +#else
      __ESIMD_ENS::named_barrier_wait(barrier_id);
@@ -41,14 +41,14 @@ index 7924f5a..88daa89 100644
  
  /// @} xetla_core_barrier
 diff --git a/include/common/core/bit_mask_manipulation.hpp b/include/common/core/bit_mask_manipulation.hpp
-index 53afe0b..5dd6107 100644
+index 53afe0b..0319b8d 100644
 --- a/include/common/core/bit_mask_manipulation.hpp
 +++ b/include/common/core/bit_mask_manipulation.hpp
 @@ -43,8 +43,13 @@ template <typename T0, typename T1, int SZ, typename U,
          class Sat = xetla_saturation_off_tag>
  __XETLA_API xetla_vector<T0, SZ> xetla_shl(
          xetla_vector<T1, SZ> src0, U src1, Sat sat = {}) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::shl<T0, T1, SZ, U, typename Sat::sat_tag>(
 +            src0, src1, Sat::value);
 +#else
@@ -62,7 +62,7 @@ index 53afe0b..5dd6107 100644
  template <typename T0, typename T1, typename T2,
          class Sat = xetla_saturation_off_tag>
  typename std::remove_const<T0>::type xetla_shl(T1 src0, T2 src1, Sat sat = {}) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::shl<T0, T1, T2, typename Sat::sat_tag>(
 +            src0, src1, Sat::value);
 +#else
@@ -76,7 +76,7 @@ index 53afe0b..5dd6107 100644
          class Sat = xetla_saturation_off_tag>
  __XETLA_API xetla_vector<T0, SZ> xetla_shr(
          xetla_vector<T1, SZ> src0, U src1, Sat sat = {}) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::shr<T0, T1, SZ, U, typename Sat::sat_tag>(
 +            src0, src1, Sat::value);
 +#else
@@ -90,7 +90,7 @@ index 53afe0b..5dd6107 100644
          class Sat = xetla_saturation_off_tag>
  __XETLA_API typename std::remove_const<T0>::type xetla_shr(
          T1 src0, T2 src1, Sat sat = {}) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::shr<T0, T1, T2, typename Sat::sat_tag>(
 +            src0, src1, Sat::value);
 +#else
@@ -104,7 +104,7 @@ index 53afe0b..5dd6107 100644
  template <typename T0, typename T1, int SZ>
  __XETLA_API xetla_vector<T0, SZ> xetla_rol(
          xetla_vector<T1, SZ> src0, xetla_vector<T1, SZ> src1) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::rol<T0, T1, SZ>(src0, src1);
 +#else
      return __ESIMD_ENS::rol<T0, T1, SZ>(src0, src1);
@@ -116,7 +116,7 @@ index 53afe0b..5dd6107 100644
                  && is_xetla_scalar<U>::value,
          xetla_vector<T0, SZ>>
  xetla_rol(xetla_vector<T1, SZ> src0, U src1) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::rol<T0, T1, SZ, U>(src0, src1);
 +#else
      return __ESIMD_ENS::rol<T0, T1, SZ, U>(src0, src1);
@@ -128,7 +128,7 @@ index 53afe0b..5dd6107 100644
                  && std::is_integral<T1>::value && std::is_integral<T2>::value,
          remove_const_t<T0>>
  xetla_rol(T1 src0, T2 src1) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::rol<T0, T1, T2>(src0, src1);
 +#else
      return __ESIMD_ENS::rol<T0, T1, T2>(src0, src1);
@@ -140,7 +140,7 @@ index 53afe0b..5dd6107 100644
  template <typename T0, typename T1, int SZ>
  __XETLA_API xetla_vector<T0, SZ> xetla_ror(
          xetla_vector<T1, SZ> src0, xetla_vector<T1, SZ> src1) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::ror<T0, T1, SZ>(src0, src1);
 +#else
      return __ESIMD_ENS::ror<T0, T1, SZ>(src0, src1);
@@ -152,7 +152,7 @@ index 53afe0b..5dd6107 100644
                  && is_xetla_scalar<U>::value,
          xetla_vector<T0, SZ>>
  xetla_ror(xetla_vector<T1, SZ> src0, U src1) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::ror<T0, T1, SZ, U>(src0, src1);
 +#else
      return __ESIMD_ENS::ror<T0, T1, SZ, U>(src0, src1);
@@ -164,7 +164,7 @@ index 53afe0b..5dd6107 100644
                  && std::is_integral<T1>::value && std::is_integral<T2>::value,
          remove_const_t<T0>>
  xetla_ror(T1 src0, T2 src1) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::ror<T0, T1, T2>(src0, src1);
 +#else
      return __ESIMD_ENS::ror<T0, T1, T2>(src0, src1);
@@ -176,7 +176,7 @@ index 53afe0b..5dd6107 100644
          class Sat = xetla_saturation_off_tag>
  __XETLA_API xetla_vector<T0, SZ> xetla_lsr(
          xetla_vector<T1, SZ> src0, U src1, Sat sat = {}) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::lsr<T0, T1, SZ, U, typename Sat::sat_tag>(
 +            src0, src1, Sat::value);
 +#else
@@ -190,7 +190,7 @@ index 53afe0b..5dd6107 100644
          class Sat = xetla_saturation_off_tag>
  __XETLA_API typename std::remove_const<T0>::type xetla_lsr(
          T1 src0, T2 src1, Sat sat = {}) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::lsr<T0, T1, T2, typename Sat::sat_tag>(
 +            src0, src1, Sat::value);
 +#else
@@ -204,7 +204,7 @@ index 53afe0b..5dd6107 100644
          class Sat = xetla_saturation_off_tag>
  __XETLA_API xetla_vector<T0, SZ> xetla_asr(
          xetla_vector<T1, SZ> src0, U src1, Sat sat = {}) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::asr<T0, T1, SZ, U, typename Sat::sat_tag>(
 +            src0, src1, Sat::value);
 +#else
@@ -218,7 +218,7 @@ index 53afe0b..5dd6107 100644
          class Sat = xetla_saturation_off_tag>
  __XETLA_API typename std::remove_const<T0>::type xetla_asr(
          T1 src0, T2 src1, Sat sat = {}) {
-+#if __SYCL_COMPILER_VERSION >= 20240620 && __LIBSYCL_MAJOR_VERSION >= 8
++#if __LIBSYCL_MAJOR_VERSION >= 8
 +    return __ESIMD_NS::asr<T0, T1, T2, typename Sat::sat_tag>(
 +            src0, src1, Sat::value);
 +#else
@@ -229,10 +229,26 @@ index 53afe0b..5dd6107 100644
  
  /// Pack a xetla_mask into a single unsigned 32-bit integer value.
 diff --git a/include/common/core/common.hpp b/include/common/core/common.hpp
-index 75e72bb..7804188 100644
+index 75e72bb..7122ccc 100644
 --- a/include/common/core/common.hpp
 +++ b/include/common/core/common.hpp
-@@ -111,21 +111,19 @@ enum class data_size : uint8_t {
+@@ -19,9 +19,14 @@
+ 
+ #pragma once
+ 
+-#include <version.hpp>
+ #include <CL/sycl.hpp>
++#include <sycl/version.hpp>
++
++#if __LIBSYCL_MAJOR_VERSION >= 8
++#include <sycl/ext/intel/esimd.hpp>
++#else
+ #include <ext/intel/esimd.hpp>
++#endif
+ 
+ template <class T>
+ using remove_const_t = typename std::remove_const<T>::type;
+@@ -111,21 +116,19 @@ enum class data_size : uint8_t {
  
  /// The specific LSC shared function to fence with xetla_fence
  enum class memory_kind : uint8_t {
@@ -263,7 +279,7 @@ index 75e72bb..7804188 100644
  };
  /// The scope that xetla_fence operation should apply to
  enum class fence_scope : uint8_t {
-@@ -223,9 +221,9 @@ enum class reduce_op : uint8_t {
+@@ -223,9 +226,9 @@ enum class reduce_op : uint8_t {
  };
  
  /// SW_BARRIER, insert software scheduling barrier, for better code control
@@ -275,6 +291,23 @@ index 75e72bb..7804188 100644
  
  __XETLA_API void xetla_wait(uint16_t val) {
      __ESIMD_ENS::wait(__ESIMD_NS::simd<uint16_t, 1>(val));
+diff --git a/include/common/core/debug.hpp b/include/common/core/debug.hpp
+index 857d2bc..e210ec0 100644
+--- a/include/common/core/debug.hpp
++++ b/include/common/core/debug.hpp
+@@ -18,7 +18,12 @@
+ 
+ #include "common/core/common.hpp"
+ #include <CL/sycl.hpp>
++
++#if __LIBSYCL_MAJOR_VERSION >= 8
++#include <sycl/ext/intel/esimd.hpp>
++#else
+ #include <ext/intel/esimd.hpp>
++#endif
+ 
+ namespace gpu::xetla {
+ 
 diff --git a/include/common/core/math_general.hpp b/include/common/core/math_general.hpp
 index a9e5b57..8b521e2 100644
 --- a/include/common/core/math_general.hpp
@@ -411,4 +444,4 @@ index a78a1e5..acf7117 100644
 +        this->payloads = rhs.payloads;
          return *this;
      }
-
+ 

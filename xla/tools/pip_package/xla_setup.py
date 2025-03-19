@@ -56,7 +56,8 @@ if '--project_name' in sys.argv:
   sys.argv.pop(project_name_idx)
 REQUIRED_PACKAGES.append('wheel')
 REQUIRED_PACKAGES.append('numpy>=1.24.0')
-REQUIRED_PACKAGES.append('scipy<1.12.0')
+REQUIRED_PACKAGES.append('scipy<1.12.0; python_version<="3.12"')
+REQUIRED_PACKAGES.append('scipy<1.15.0; python_version=="3.13"')
 CONSOLE_SCRIPTS = []
 
 _ext_path = 'jax_plugins.intel_extension_for_openxla'
@@ -150,6 +151,7 @@ setup(
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
         'Topic :: Scientific/Engineering',
         'Topic :: Scientific/Engineering :: Mathematics',
         'Topic :: Scientific/Engineering :: Artificial Intelligence',

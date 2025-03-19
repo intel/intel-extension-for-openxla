@@ -16,12 +16,18 @@ limitations under the License.
 #pragma once
 
 #include <cmath>
+#include <sycl/ext/intel/esimd.hpp>
+#include <sycl/sycl.hpp>
 
 #include "xetla.hpp"
 
 namespace gpu::xetla {
 
 namespace fmha {
+
+using namespace sycl;
+namespace syclex = sycl::ext::oneapi::experimental;
+namespace intelex = sycl::ext::intel::experimental;
 
 template <typename mat_t>
 struct tile_mask_t {
