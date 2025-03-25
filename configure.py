@@ -744,9 +744,11 @@ def config_info_line(name, help_text):
 
 def check_safe_workspace_path(workspace):
   """Check whether if the workspace path is safe"""
-  normal_flag = True
   if workspace is None:
-    normal_flag = False
+    remove_configure_file()
+    raise Exception("Invalid workspace path: workspace is None!")
+
+  normal_flag = True
   for c in _DENY_PATH_LIST:
     if c in workspace:
       normal_flag = False
