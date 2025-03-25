@@ -50,7 +50,7 @@ bash Miniforge3-$(uname)-$(uname -m).sh
 ### Setup environment
 Please follow [Install](#install) to prepare the basic environment first.
 ```
-pip install transformers==4.47 diffusers==0.31.0 datasets==4.9.7 msgpack==1.1.0
+pip install transformers==4.49 diffusers==0.31.0 datasets==2.20.0 msgpack==1.1.0
 ```
 Source OneAPI env
 ```

@@ -38,7 +38,7 @@ Verified Hardware Platforms:
   * Intel® Data Center GPU Max Series
 * [Intel® Deep Learning Essentials 2025.1](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?packages=dl-essentials&dl-lin=offline&dl-essentials-os=linux)
 * Jax/Jaxlib 0.4.38
-* Python 3.9-3.13
+* Python 3.10-3.13
 * pip 19.0 or later (requires manylinux2014 support)
 
 **NOTE: Since JAX has its own [platform limitation](https://jax.readthedocs.io/en/latest/installation.html#supported-platforms) (Ubuntu 20.04 or later), real software requirements are restricted when working with JAX.**
