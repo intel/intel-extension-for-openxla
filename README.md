@@ -58,9 +58,9 @@ Need to install components of Intel® Deep Learning Essentials:
 * Intel® oneAPI Math Kernel Library (oneMKL)
 
 ```bash
-$ wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/e7705a6d-954d-465c-a5bc-4f820e2e4e90/intel-deep-learning-essentials-2025.0.2.9_offline.sh
+$ wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/e04d067d-4bce-4eed-a6fc-80a5df45c78c/intel-deep-learning-essentials-2025.1.0.581_offline.sh
 # 2 components are necessary: DPC++/C++ Compiler and oneMKL
-sudo sh ./intel-deep-learning-essentials-2025.0.2.9_offline.sh -a --silent --eula accept
+sudo sh ./intel-deep-learning-essentials-2025.1.0.581_offline.sh -a --silent --eula accept
 
 # Source OneAPI env
 source /opt/intel/oneapi/compiler/2025.1/env/vars.sh
