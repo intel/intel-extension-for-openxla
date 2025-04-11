@@ -22,19 +22,19 @@ limitations under the License.
 
 #include "absl/status/status.h"
 #include "absl/strings/str_format.h"
+#include "tsl/platform/errors.h"
+#include "tsl/platform/logging.h"
+#include "tsl/platform/statusor.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/gpu/backend_configs.pb.h"
-#include "xla/service/gpu/runtime/nccl_api.h"
 #include "xla/service/gpu/ccl_collective_thunk.h"
+#include "xla/service/gpu/runtime/nccl_api.h"
 #include "xla/service/gpu/runtime/thunk.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/stream_executor/stream.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/logging.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace gpu {
@@ -46,7 +46,6 @@ NcclAllGatherConfig GetNcclAllGatherConfig(
   config.config = GetNcclCollectiveConfig(inst, inst->use_global_device_ids());
   return config;
 }
-
 
 absl::Status CheckImplementableInst(const HloAllGatherInstruction* inst) {
   for (HloInstruction* operand : inst->operands()) {

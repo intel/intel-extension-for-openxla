@@ -453,7 +453,8 @@ absl::Status CreateOneDnnPrimitive(
            onednn_primitive->bias_memory});
     }
     if (conv_kind == CudnnConvKind::kForwardActivation) {
-      auto activation_mode = static_cast<stream_executor::dnn::ActivationMode>(*dict.get<int32_t>("activation_mode"));
+      auto activation_mode = static_cast<stream_executor::dnn::ActivationMode>(
+          *dict.get<int32_t>("activation_mode"));
       switch (activation_mode) {
         case stream_executor::dnn::kSigmoid:
           po.append_eltwise(dnnl::algorithm::eltwise_logistic, 1, 0);
@@ -471,7 +472,8 @@ absl::Status CreateOneDnnPrimitive(
           po.append_eltwise(dnnl::algorithm::eltwise_elu, 1, 0);
           break;
         case stream_executor::dnn::kLeakyRelu:
-          po.append_eltwise(dnnl::algorithm::eltwise_relu, *dict.get<float>("leakyrelu_alpha"), 0);
+          po.append_eltwise(dnnl::algorithm::eltwise_relu,
+                            *dict.get<float>("leakyrelu_alpha"), 0);
           break;
         case stream_executor::dnn::kNone:
           break;
@@ -681,10 +683,9 @@ absl::StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
     const ffi::BufferBase& result_buffer,
     se::ScratchAllocator* scratch_allocator, CudnnConvKind conv_kind) {
   OneDnnConvPrimitive primitive;
-  auto status = CreateOneDnnPrimitive(&primitive, dict,
-                                      absl::MakeSpan(operand_se_buffers),
-                                      result_buffer, stream, scratch_allocator,
-                                      conv_kind);
+  auto status = CreateOneDnnPrimitive(
+      &primitive, dict, absl::MakeSpan(operand_se_buffers), result_buffer,
+      stream, scratch_allocator, conv_kind);
   if (TF_PREDICT_FALSE(!status.ok())) {
     return status;
   }
@@ -694,7 +695,8 @@ absl::StatusOr<OneDnnConvPrimitive> GetOrCreateOneDnnConvPrimitive(
 absl::Status RunGpuConv(const OneDnnConvPrimitive& onednn_primitive,
                         const ffi::Dictionary& dict,
                         absl::Span<const ffi::BufferBase> operand_buffers,
-                        ffi::BufferBase result_buffer, CudnnConvKind conv_kind) {
+                        ffi::BufferBase result_buffer,
+                        CudnnConvKind conv_kind) {
   void* input_data;
   void* filter_data;
   void* output_data;

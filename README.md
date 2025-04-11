@@ -7,7 +7,7 @@
 
 The [OpenXLA](https://github.com/openxla/xla) Project brings together a community of developers and leading AI/ML teams to accelerate ML and address infrastructure fragmentation across ML frameworks and hardware.
 
-Intel® Extension for OpenXLA includes PJRT plugin implementation, which seamlessly runs JAX models on Intel GPU. The PJRT API simplified the integration, which allowed the Intel GPU plugin to be developed separately and quickly integrated into JAX. This same PJRT implementation also enables initial Intel GPU support for TensorFlow and PyTorch models with XLA acceleration. Refer to [OpenXLA PJRT Plugin RFC](https://github.com/openxla/community/blob/main/rfcs/20230123-pjrt-plugin.md) for more details.
+Intel® Extension for OpenXLA includes PJRT plugin implementation, which seamlessly runs JAX models on Intel GPU. The PJRT API simplifies the integration, enabling the Intel GPU plugin to be developed separately and allowing smooth integration with JAX. This same PJRT implementation also enables initial Intel GPU support for TensorFlow and PyTorch models with XLA acceleration. Refer to [OpenXLA PJRT Plugin RFC](https://github.com/openxla/community/blob/main/rfcs/20230123-pjrt-plugin.md) for more details.
 
 This guide introduces the overview of OpenXLA high level integration structure and demonstrates how to build Intel® Extension for OpenXLA and run JAX example with OpenXLA on Intel GPU. JAX is the first supported front-end.
 
@@ -26,9 +26,9 @@ This guide introduces the overview of OpenXLA high level integration structure a
 
 Verified Hardware Platforms:
 
-* Intel® Data Center GPU Max Series, Driver Version: [LTS release 2350.125](https://dgpu-docs.intel.com/releases/LTS-release-notes.html)
+* Intel® Data Center GPU Max Series, Driver Version: [LTS release 2350.136](https://dgpu-docs.intel.com/releases/LTS-release-notes.html)
 
-* Intel® Data Center GPU Flex Series, Driver Version: [LTS release 2350.125](https://dgpu-docs.intel.com/driver/installation.html)
+* Intel® Data Center GPU Flex Series, Driver Version: [LTS release 2350.136](https://dgpu-docs.intel.com/driver/installation.html)
 
 ### Software Requirements
 
@@ -36,47 +36,36 @@ Verified Hardware Platforms:
   * Intel® Data Center GPU Flex Series
 * Ubuntu 22.04, SUSE Linux Enterprise Server(SLES) 15 SP4
   * Intel® Data Center GPU Max Series
-* [Intel® oneAPI Base Toolkit 2025.0](https://www.intel.com/content/www/us/en/developer/articles/release-notes/intel-oneapi-toolkit-release-notes.html)
-* Jax/Jaxlib 0.4.30
-* Python 3.9-3.12
+* [Intel® Deep Learning Essentials 2025.1](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?packages=dl-essentials&dl-lin=offline&dl-essentials-os=linux)
+* Jax/Jaxlib 0.4.38
+* Python 3.10-3.13
 * pip 19.0 or later (requires manylinux2014 support)
 
-**NOTE: Since JAX has its own [platform limitation](https://jax.readthedocs.io/en/latest/installation.html#supported-platforms) (Ubuntu 20.04 or later), real software requirements is restricted when works with JAX.**
+**NOTE: Since JAX has its own [platform limitation](https://jax.readthedocs.io/en/latest/installation.html#supported-platforms) (Ubuntu 20.04 or later), real software requirements are restricted when working with JAX.**
 
 ### Install Intel GPU Drivers
 
 |OS|Intel GPU|Install Intel GPU Driver|
 |-|-|-|
-|Ubuntu 22.04 |Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/driver/installation.html) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [LTS release 2350.125](https://dgpu-docs.intel.com/driver/installation.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==24.45.31740.10-1057~22.04`|
-|Ubuntu 22.04, SLES 15 SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/driver/installation.html) for latest driver installation. If install the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [LTS release 2350.125](https://dgpu-docs.intel.com/releases/LTS-release-notes.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==24.45.31740.10-1057~22.04`|
+|Ubuntu 22.04 |Intel® Data Center GPU Flex Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/driver/installation.html) for latest driver installation. If installing the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [LTS release 2350.136](https://dgpu-docs.intel.com/driver/installation.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==24.45.31740.10-1057~22.04`|
+|Ubuntu 22.04, SLES 15 SP4|Intel® Data Center GPU Max Series|  Refer to the [Installation Guides](https://dgpu-docs.intel.com/driver/installation.html) for latest driver installation. If installing the verified Intel® Data Center GPU Max Series/Intel® Data Center GPU Flex Series [LTS release 2350.136](https://dgpu-docs.intel.com/releases/LTS-release-notes.html), please append the specific version after components, such as `sudo apt-get install intel-opencl-icd==24.45.31740.10-1057~22.04`|
 
-### Install oneAPI Base Toolkit Packages
+### Install Intel® Deep Learning Essentials Packages
 
-Need to install components of Intel® oneAPI Base Toolkit:
+Need to install components of Intel® Deep Learning Essentials:
 
 * Intel® oneAPI DPC++ Compiler
 * Intel® oneAPI Math Kernel Library (oneMKL)
 
 ```bash
-$ wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/96aa5993-5b22-4a9b-91ab-da679f422594/intel-oneapi-base-toolkit-2025.0.0.885_offline.sh
+$ wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/e04d067d-4bce-4eed-a6fc-80a5df45c78c/intel-deep-learning-essentials-2025.1.0.581_offline.sh
 # 2 components are necessary: DPC++/C++ Compiler and oneMKL
-sudo sh intel-oneapi-base-toolkit-2025.0.0.885_offline.sh
+sudo sh ./intel-deep-learning-essentials-2025.1.0.581_offline.sh -a --silent --eula accept
 
 # Source OneAPI env
-source /opt/intel/oneapi/compiler/2025.0/env/vars.sh
-source /opt/intel/oneapi/mkl/2025.0/env/vars.sh
+source /opt/intel/oneapi/compiler/2025.1/env/vars.sh
+source /opt/intel/oneapi/mkl/2025.1/env/vars.sh
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/intel/oneapi/umf/latest/lib
-```
-
-**Backup**: Recommend to rollback to **Toolkit 2024.1** if meet performance issue. See [Release Notes](https://github.com/intel/intel-extension-for-openxla/releases) for more details.
-```bash
-wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/fdc7a2bc-b7a8-47eb-8876-de6201297144/l_BaseKit_p_2024.1.0.596.sh
-# 2 components are necessary: DPC++/C++ Compiler and oneMKL
-sudo sh l_BaseKit_p_2024.1.0.596.sh
-
-# Source OneAPI env
-source /opt/intel/oneapi/compiler/2024.1/env/vars.sh
-source /opt/intel/oneapi/mkl/2024.1/env/vars.sh
 ```
 
 ### Install Jax and Jaxlib
@@ -89,6 +78,7 @@ Please refer to [test/requirements.txt](test/requirements.txt) for the version d
 The following table tracks intel-extension-for-openxla versions and compatible versions of `jax` and `jaxlib`. The compatibility between `jax` and `jaxlib` is maintained through JAX. This version restriction will be relaxed over time as the plugin API matures.
 |**intel-extension-for-openxla**|**jaxlib**|**jax**|
 |:-:|:-:|:-:|
+| 0.6.0 | 0.4.38 | 0.4.38 |
 | 0.5.0 | 0.4.30 | >= 0.4.30, <= 0.4.31|
 | 0.4.0 | 0.4.26 | >= 0.4.26, <= 0.4.27|
 | 0.3.0 | 0.4.24 | >= 0.4.24, <= 0.4.27|
@@ -112,7 +102,7 @@ git clone https://github.com/intel/intel-extension-for-openxla.git
 ./configure        # Choose Yes for all.
 bazel build //xla/tools/pip_package:build_pip_package
 ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-pip install intel_extension_for_openxla-0.5.0-cp39-cp39-linux_x86_64.whl
+pip install intel_extension_for_openxla-0.6.0-cp312-cp312-linux_x86_64.whl
 ```
 
 **Aditional Build Option**:
@@ -128,7 +118,7 @@ bazel build --override_repository=xla=/path/to/xla //xla/tools/pip_package:build
 By default, bazel will automatically search for the required libraries on your system. This eliminates the need for manual configuration in most cases. For more advanced use cases, you can specify a custom location for the libraries using environment variables:
 
 ```bash
-export MKL_INSTALL_PATH=/opt/intel/oneapi/mkl/2025.0
+export MKL_INSTALL_PATH=/opt/intel/oneapi/mkl/2025.1
 export L0_INSTALL_PATH=/usr
 bazel build //xla/tools/pip_package:build_pip_package
 ```
@@ -162,7 +152,7 @@ print(lax_conv())
 ### Reference result
 
 ```bash
-jax.local_devices():  [xpu(id=0), xpu(id=1)]
+jax.local_devices():  [sycl(id=0), sycl(id=1)]
 [[[[2.0449753 2.093208  2.1844783 1.9769732 1.5857391 1.6942389]
    [1.9218378 2.2862523 2.1549542 1.8367321 1.3978379 1.3860377]
    [1.9456574 2.062028  2.0365305 1.901286  1.5255247 1.1421617]
@@ -189,7 +179,7 @@ jax.local_devices():  [xpu(id=0), xpu(id=1)]
 2. If there is an error 'version GLIBCXX_3.4.30' not found, upgrade libstdc++ to the latest, for example for conda
 
     ```bash
-    conda install libstdcxx-ng==12.2.0 -c conda-forge
+    conda install libstdcxx-ng -c conda-forge -y
     ```
 
 3. If there is an error '/usr/bin/ld: cannot find -lstdc++: No such file or directory' during source build under Ubuntu 22.04, check the selected GCC-toolchain path and the installed libstdc++.so library path, then create symbolic link of the selected GCC-toolchain path to the libstdc++.so path, for example:

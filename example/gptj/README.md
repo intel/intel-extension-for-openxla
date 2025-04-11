@@ -7,7 +7,7 @@ Script jax_gptj.py for [EleutherAI/gpt-j-6B](https://huggingface.co/EleutherAI/g
 Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```bash
 cd <WORKSPACE>/example/gptj/
-pip install transformers==4.38 datasets==2.20.0
+pip install transformers==4.49 datasets==2.20.0
 pip install -r ../../test/requirements.txt
 ```
 

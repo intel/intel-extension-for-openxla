@@ -21,8 +21,8 @@ limitations under the License.
 #include <vector>
 
 #include "xla/service/collective_ops_utils.h"
-#include "xla/service/gpu/runtime/nccl_api.h"
 #include "xla/service/gpu/ccl_collective_thunk.h"
+#include "xla/service/gpu/runtime/nccl_api.h"
 
 namespace xla {
 namespace gpu {
