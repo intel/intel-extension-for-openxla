@@ -34,6 +34,11 @@ def if_sycl_build_is_configured(x, y):
       return x
     return y
 
+def if_ccl_is_configured(if_true, if_false = []):
+    if %{ccl_is_configured}:
+      return select({"//conditions:default": if_true})
+    return select({"//conditions:default": if_false})
+
 def sycl_library(copts = [], **kwargs):
     """Wrapper over cc_library which adds default SYCL options."""
     native.cc_library(copts = sycl_default_copts() + copts, **kwargs)

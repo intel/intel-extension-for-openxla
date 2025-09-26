@@ -178,6 +178,14 @@ def _find_mkl_config(base_paths):
     "mkl_library_dir": library_path,
   }
 
+def _find_ccl_config(base_paths):
+  header_path = os.path.dirname(_find_header(base_paths, "ccl.hpp"))
+  library_path = os.path.dirname(_find_library(base_paths, "ccl"))
+  return {
+    "ccl_include_dir":  "/".join(header_path.split("/")[:-1]),
+    "ccl_library_dir": library_path,
+  }
+
 def _find_l0_config(base_paths):
   header_path = os.path.dirname(_find_header(base_paths, "ze_api.h"))
   library_path = os.path.dirname(_find_library(base_paths, "ze_loader"))
@@ -199,6 +207,11 @@ def find_sycl_config():
   default_mkl_path = [basekit_path + "/mkl/" + _get_basekit_version()]
   mkl_paths = _get_legacy_path("MKL_INSTALL_PATH", default_mkl_path)
   result.update(_find_mkl_config(mkl_paths))
+
+  if "TF_NEED_CCL" in os.environ:
+    default_ccl_path = [basekit_path + "/ccl/latest"]
+    ccl_paths = _get_legacy_path("CCL_TOOLKIT_PATH", default_ccl_path)
+    result.update(_find_ccl_config(ccl_paths))
 
   default_l0_path = ["/usr"]
   l0_paths = _get_legacy_path("L0_INSTALL_PATH", default_l0_path)

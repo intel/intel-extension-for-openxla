@@ -104,10 +104,8 @@ absl::Status RunAllGather(NcclApi* nccl_api,
   int device_ordinal = stream.parent()->device_ordinal();
   VLOG(3) << "Performing all-gather from device ordinal: " << device_ordinal;
 
-  auto ccl_api = dynamic_cast<CclApi*>(nccl_api);
-  for (size_t i = 0; i < buffers.size(); ++i) {
-    DeviceBufferPair& buffer = buffers[i];
-    TF_RETURN_IF_ERROR(ccl_api->AllGather(
+  for (DeviceBufferPair& buffer : buffers) {
+    TF_RETURN_IF_ERROR(nccl_api->AllGather(
         buffer.source_buffer, buffer.destination_buffer, buffer.element_type,
         buffer.element_count, comm, &stream));
   }

@@ -55,10 +55,8 @@ absl::Status RunAllReduce(NcclApi* nccl_api, ReductionKind reduction_kind,
 
   VLOG(3) << "Performing all-reduce from device ordinal: " << device_ordinal;
 
-  auto ccl_api = dynamic_cast<CclApi*>(nccl_api);
-  for (size_t i = 0; i < buffers.size(); ++i) {
-    DeviceBufferPair& buffer = buffers[i];
-    TF_RETURN_IF_ERROR(ccl_api->AllReduce(
+  for (DeviceBufferPair& buffer : buffers) {
+    TF_RETURN_IF_ERROR(nccl_api->AllReduce(
         buffer.source_buffer, buffer.destination_buffer, buffer.element_type,
         buffer.element_count, reduction_kind, comm, &stream));
   }
@@ -234,12 +232,19 @@ absl::Status RunReduceScatter(NcclApi* nccl_api, ReductionKind reduction_kind,
   VLOG(3) << "Performing reduce-scatter from device ordinal: "
           << device_ordinal;
 
-  auto ccl_api = dynamic_cast<CclApi*>(nccl_api);
-  for (size_t i = 0; i < buffers.size(); ++i) {
-    DeviceBufferPair& buffer = buffers[i];
-    TF_RETURN_IF_ERROR(ccl_api->ReduceScatter(
+  TF_ASSIGN_OR_RETURN(int32_t num_participants, nccl_api->CommCount(comm));
+
+  for (DeviceBufferPair& buffer : buffers) {
+    // buffer.element_count is the source buffers element count. For
+    // ncclReduceScatter, we need the destination buffers element count.
+    TF_RET_CHECK(buffer.element_count % num_participants == 0)
+        << "Source buffer was not an exact multiple of the number of "
+            "participants.";
+
+    TF_RETURN_IF_ERROR(nccl_api->ReduceScatter(
         buffer.source_buffer, buffer.destination_buffer, buffer.element_type,
-        buffer.element_count, reduction_kind, comm, &stream));
+        buffer.element_count / num_participants, reduction_kind, comm, 
+        &stream));
   }
   return absl::OkStatus();
 }

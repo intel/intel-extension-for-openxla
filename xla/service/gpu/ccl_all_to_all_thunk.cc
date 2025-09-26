@@ -109,58 +109,32 @@ absl::Status NcclAllToAllStartThunk::RunNcclCollective(
 absl::Status RunAllToAll(NcclApi* nccl_api, bool has_split_dimension,
                          std::vector<DeviceBufferPair>& buffers,
                          se::Stream& stream, NcclApi::NcclCommHandle comm) {
-  int device_ordinal = stream.parent()->device_ordinal();
-  VLOG(3) << "Performing " << (has_split_dimension ? "" : "non-")
-          << "split all-to-all from device ordinal: " << device_ordinal;
+  TF_ASSIGN_OR_RETURN(int nranks, nccl_api->CommCount(comm));
+  auto* ccl_api = dynamic_cast<CclApi*>(nccl_api);
+  if (!ccl_api) return absl::InternalError("RunAllToAll: CclApi cast failed");
 
-  PrimitiveType element_type = buffers[0].element_type;
-  int num_participants = CastCCLComm(comm)->nranks;
-  size_t element_count = buffers[0].element_count;
-  std::vector<const void*> send_buffers;
-  std::vector<void*> recv_buffers;
-
-  // AllToAll can operate in two modes. Either it specifies a split dimension,
-  // in which case inputs are split and outputs concatenated in that dimension
-  // (here, we only support dimension 0), or it takes a list of inputs
-  // and produces a tuple of outputs.
-  if (has_split_dimension) {
-    TF_RET_CHECK(element_count % num_participants == 0)
-        << "Buffer was not an exact multiple of the number of participants.";
-    TF_RET_CHECK(buffers.size() == 1)
-        << "Split AllToAll only supported dimension 0 as buffer.";
-
-    auto& buffer = buffers[0];
-    const uint8_t* send_buffer =
-        static_cast<uint8_t*>(buffer.source_buffer.opaque());
-    uint8_t* recv_buffer =
-        static_cast<uint8_t*>(buffer.destination_buffer.opaque());
-
-    send_buffers.push_back(send_buffer);
-    recv_buffers.push_back(recv_buffer);
-  } else {
-    TF_RET_CHECK(buffers.size() == num_participants)
-        << "Number of inputs didn't match the number of participants.";
-
-    for (size_t i = 0; i < buffers.size(); ++i) {
-      auto& buffer = buffers[i];
-      const uint8_t* send_buffer =
-          static_cast<uint8_t*>(buffer.source_buffer.opaque());
-      uint8_t* recv_buffer =
-          static_cast<uint8_t*>(buffer.destination_buffer.opaque());
-
-      send_buffers.push_back(send_buffer);
-      recv_buffers.push_back(recv_buffer);
-    }
+  if (!has_split_dimension) {
+    return absl::UnimplementedError("non-split all-to-all not implemented");
   }
 
-  auto ccl_api = dynamic_cast<CclApi*>(nccl_api);
-  TF_RETURN_IF_ERROR(ccl_api->AllToAll(has_split_dimension, send_buffers,
-                                       recv_buffers, element_count,
-                                       element_type, comm, &stream));
+  for (DeviceBufferPair& buf : buffers) {
+    TF_RET_CHECK(buf.element_count % nranks == 0)
+        << "element_count must be divisible by nranks";
+    const size_t count_per_rank = buf.element_count / nranks;
+    
 
-  VLOG(3) << "Done performing all-to-all for ordinal: " << device_ordinal;
+    // Base contiguous buffers (layout: [chunk0][chunk1]...[chunkN-1])
+    void* send_base = buf.source_buffer.opaque();
+    void* recv_base = buf.destination_buffer.opaque();
+
+    TF_RETURN_IF_ERROR(
+        ccl_api->AllToAll(send_base, count_per_rank,
+                          recv_base, count_per_rank,
+                          buf.element_type, comm, &stream));
+  }
   return absl::OkStatus();
 }
+
 
 }  // namespace gpu
 }  // namespace xla

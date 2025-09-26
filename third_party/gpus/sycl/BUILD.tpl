@@ -44,6 +44,25 @@ cc_library(
 )
 
 cc_library(
+    name = "ccl",
+    srcs = [
+        %{ccl_libs}
+    ],
+    data = [
+        %{ccl_libs}
+    ],
+    hdrs = [
+        %{ccl_headers}
+    ],
+    includes = [
+        ".",
+        "ccl/include",
+    ],
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
     name = "level_zero",
     srcs = [
         %{level_zero_libs}

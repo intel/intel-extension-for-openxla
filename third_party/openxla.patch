@@ -106494,7 +106494,7 @@ index f2845893c8..6a5865f3cc 100644
      return false;
    }
 diff --git a/xla/pjrt/gpu/BUILD b/xla/pjrt/gpu/BUILD
-index 68a6b77fad..d5d85b1535 100644
+index 68a6b77fad..430fb103ae 100644
 --- a/xla/pjrt/gpu/BUILD
 +++ b/xla/pjrt/gpu/BUILD
 @@ -1,47 +1,36 @@
@@ -106552,7 +106552,7 @@ index 68a6b77fad..d5d85b1535 100644
      ],
  )
  
-@@ -50,20 +39,21 @@ cc_library(
+@@ -50,20 +39,22 @@ cc_library(
      srcs = ["se_gpu_pjrt_client.cc"],
      hdrs = ["se_gpu_pjrt_client.h"],
      defines = if_cuda(["GOOGLE_CUDA=1"]) + if_rocm(["TENSORFLOW_USE_ROCM=1"]),
@@ -106564,6 +106564,7 @@ index 68a6b77fad..d5d85b1535 100644
          ":gpu_metrics",
          ":gpu_topology",
 -        ":gpu_topology_proto_cc",
++        ":nccl_id_store",
          "//xla:literal",
          "//xla:shape_util",
          "//xla:status_macros",
@@ -106577,7 +106578,7 @@ index 68a6b77fad..d5d85b1535 100644
          "//xla/pjrt:compile_options_proto_cc",
          "//xla/pjrt:event_pool",
          "//xla/pjrt:host_memory_spaces",
-@@ -79,13 +69,10 @@ cc_library(
+@@ -79,13 +70,10 @@ cc_library(
          "//xla/pjrt:stream_executor_executable_proto_cc",
          "//xla/pjrt:tracked_device_buffer",
          "//xla/pjrt:utils",
@@ -106591,7 +106592,7 @@ index 68a6b77fad..d5d85b1535 100644
          "//xla/service:compiler",
          "//xla/service:computation_placer_hdr",
          "//xla/service:executable",
-@@ -94,19 +81,18 @@ cc_library(
+@@ -94,19 +82,18 @@ cc_library(
          "//xla/service:shaped_buffer",
          "//xla/service:transfer_manager",
          "//xla/service/gpu:gpu_executable_run_options",
@@ -106613,7 +106614,7 @@ index 68a6b77fad..d5d85b1535 100644
          "//xla/tsl/util:env_var",
          "@com_google_absl//absl/algorithm:container",
          "@com_google_absl//absl/base:core_headers",
-@@ -124,35 +110,29 @@ cc_library(
+@@ -124,35 +111,29 @@ cc_library(
          "@com_google_absl//absl/synchronization",
          "@com_google_absl//absl/time",
          "@com_google_absl//absl/types:span",
@@ -106652,7 +106653,7 @@ index 68a6b77fad..d5d85b1535 100644
      tags = [
          "gpu",
          "no_oss",
-@@ -167,50 +147,36 @@ xla_cc_test(
+@@ -167,50 +148,36 @@ xla_cc_test(
          "//xla:literal_util",
          "//xla:shape_util",
          "//xla:status_macros",
@@ -106709,7 +106710,7 @@ index 68a6b77fad..d5d85b1535 100644
      ],
  )
  
-@@ -220,19 +186,15 @@ cc_library(
+@@ -220,19 +187,15 @@ cc_library(
      hdrs = ["nccl_id_store.h"],
      deps = [
          "//xla:status_macros",
@@ -106732,7 +106733,7 @@ index 68a6b77fad..d5d85b1535 100644
          "@tsl//tsl/platform:errors",
          "@tsl//tsl/platform:statusor",
      ],
-@@ -259,6 +221,7 @@ xla_test(
+@@ -259,6 +222,7 @@ xla_test(
  tf_proto_library(
      name = "gpu_topology_proto",
      srcs = ["gpu_topology.proto"],
@@ -106740,7 +106741,7 @@ index 68a6b77fad..d5d85b1535 100644
      visibility = ["//visibility:public"],
  )
  
-@@ -266,7 +229,6 @@ cc_library(
+@@ -266,7 +230,6 @@ cc_library(
      name = "gpu_topology",
      srcs = ["gpu_topology.cc"],
      hdrs = ["gpu_topology.h"],
@@ -106748,7 +106749,7 @@ index 68a6b77fad..d5d85b1535 100644
      deps = [
          ":gpu_topology_proto_cc",
          "@com_google_absl//absl/strings:string_view",
-@@ -274,138 +236,87 @@ cc_library(
+@@ -274,138 +237,87 @@ cc_library(
  )
  
  cc_library(
@@ -106922,7 +106923,7 @@ index 68a6b77fad..d5d85b1535 100644
          "@llvm-project//mlir:Parser",
          "@tsl//tsl/platform:status_matchers",
          "@tsl//tsl/platform:statusor",
-@@ -413,24 +324,27 @@ xla_test(
+@@ -413,24 +325,27 @@ xla_test(
      ],
  )
  
@@ -106957,7 +106958,7 @@ index 68a6b77fad..d5d85b1535 100644
          "//xla/tests:literal_test_util",
          "@com_google_absl//absl/memory",
          "@com_google_absl//absl/status",
-@@ -444,5 +358,11 @@ xla_test(
+@@ -444,5 +359,11 @@ xla_test(
          "@tsl//tsl/platform:protobuf",
          "@tsl//tsl/platform:statusor",
          "@tsl//tsl/platform:test_main",
@@ -107277,7 +107278,7 @@ index 2254abef26..0bb3c5b34f 100644
 -  reserved 7;  // Was: core_count_per_chip
  }
 diff --git a/xla/pjrt/gpu/nccl_id_store.cc b/xla/pjrt/gpu/nccl_id_store.cc
-index be0684da19..c61dbb748f 100644
+index be0684da19..81740405f2 100644
 --- a/xla/pjrt/gpu/nccl_id_store.cc
 +++ b/xla/pjrt/gpu/nccl_id_store.cc
 @@ -18,50 +18,40 @@ limitations under the License.
@@ -107329,7 +107330,7 @@ index be0684da19..c61dbb748f 100644
 -                        gpu::GpuCollectives::Default()->CreateUniqueCliqueId());
 -    TF_RETURN_IF_ERROR(
 -        kv_store_->Set(gpu_key->ToString(), clique_id.ToString()));
-+    TF_ASSIGN_OR_RETURN(clique_id, gpu::NcclApi::Default()->GetUniqueId());
++    TF_ASSIGN_OR_RETURN(clique_id, gpu::NcclApi::Default()->GetUniqueId(key));
 +    TF_RETURN_IF_ERROR(kv_store_->Set(key.ToString(), clique_id.ToString()));
    } else {
      TF_ASSIGN_OR_RETURN(std::string id_str,
@@ -107390,7 +107391,7 @@ index fe8b060cb9..389775debd 100644
  
  }  // namespace xla
 diff --git a/xla/pjrt/gpu/se_gpu_pjrt_client.cc b/xla/pjrt/gpu/se_gpu_pjrt_client.cc
-index cd54e96ce4..c1a51fe105 100644
+index cd54e96ce4..bfe40e842a 100644
 --- a/xla/pjrt/gpu/se_gpu_pjrt_client.cc
 +++ b/xla/pjrt/gpu/se_gpu_pjrt_client.cc
 @@ -18,12 +18,12 @@ limitations under the License.
@@ -107424,16 +107425,17 @@ index cd54e96ce4..c1a51fe105 100644
  #include "xla/layout.h"
  #include "xla/layout_util.h"
  #include "xla/literal.h"
-@@ -56,8 +55,6 @@ limitations under the License.
+@@ -56,8 +55,7 @@ limitations under the License.
  #include "xla/pjrt/distributed/topology_util.h"
  #include "xla/pjrt/event_pool.h"
  #include "xla/pjrt/gpu/gpu_helpers.h"
 -#include "xla/pjrt/gpu/gpu_topology.h"
 -#include "xla/pjrt/gpu/gpu_topology.pb.h"
++#include "xla/pjrt/gpu/nccl_id_store.h"
  #include "xla/pjrt/host_memory_spaces.h"
  #include "xla/pjrt/local_device_state.h"
  #include "xla/pjrt/pjrt_client.h"
-@@ -66,11 +63,8 @@ limitations under the License.
+@@ -66,11 +64,8 @@ limitations under the License.
  #include "xla/pjrt/pjrt_executable.h"
  #include "xla/pjrt/pjrt_future.h"
  #include "xla/pjrt/pjrt_stream_executor_client.h"
@@ -107445,7 +107447,7 @@ index cd54e96ce4..c1a51fe105 100644
  #include "xla/service/compiler.h"
  #include "xla/service/computation_placer.h"
  #include "xla/service/global_device_id.h"
-@@ -86,26 +80,25 @@ limitations under the License.
+@@ -86,26 +81,25 @@ limitations under the License.
  #include "xla/stream_executor/stream.h"
  #include "xla/stream_executor/stream_executor.h"
  #include "xla/tsl/framework/allocator.h"
@@ -107476,7 +107478,7 @@ index cd54e96ce4..c1a51fe105 100644
  #include "xla/xla.pb.h"
  #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
  
-@@ -118,6 +111,8 @@ limitations under the License.
+@@ -118,6 +112,8 @@ limitations under the License.
  #endif
  
  #include "xla/service/gpu/gpu_executable_run_options.h"
@@ -107485,7 +107487,7 @@ index cd54e96ce4..c1a51fe105 100644
  #include "xla/stream_executor/integrations/tf_allocator_adapter.h"
  #include "xla/util.h"
  
-@@ -126,28 +121,17 @@ class AsyncHostToDeviceTransferManager
+@@ -126,28 +122,17 @@ class AsyncHostToDeviceTransferManager
      : public xla::PjRtClient::AsyncHostToDeviceTransferManager {
   public:
    static absl::StatusOr<std::unique_ptr<AsyncHostToDeviceTransferManager>>
@@ -107521,7 +107523,7 @@ index cd54e96ce4..c1a51fe105 100644
          return Unimplemented(
              "Async buffer transfer of tuples not implemented.");
        }
-@@ -155,24 +139,18 @@ class AsyncHostToDeviceTransferManager
+@@ -155,24 +140,18 @@ class AsyncHostToDeviceTransferManager
        // event will block the buffer usage until the transfer is done.
        definition_events.push_back(
            std::make_shared<BufferSequencingEvent>(client->thread_pool()));
@@ -107553,7 +107555,7 @@ index cd54e96ce4..c1a51fe105 100644
        // Get a temporary hold just so we can fish out a shared_ptr to the
        // TrackedDeviceBuffer. It's ok to drop the hold before return the
        // buffers, because the invariants of this class ensure that the buffer
-@@ -188,7 +166,7 @@ class AsyncHostToDeviceTransferManager
+@@ -188,7 +167,7 @@ class AsyncHostToDeviceTransferManager
  
      return std::make_unique<AsyncHostToDeviceTransferManager>(
          std::move(buffers), std::move(buffer_ptrs),
@@ -107562,7 +107564,7 @@ index cd54e96ce4..c1a51fe105 100644
    }
  
    AsyncHostToDeviceTransferManager(
-@@ -196,12 +174,10 @@ class AsyncHostToDeviceTransferManager
+@@ -196,12 +175,10 @@ class AsyncHostToDeviceTransferManager
        absl::InlinedVector<std::shared_ptr<TrackedDeviceBuffer>, 4> buffer_ptrs,
        absl::InlinedVector<std::shared_ptr<BufferSequencingEvent>, 4>
            definition_events,
@@ -107575,7 +107577,7 @@ index cd54e96ce4..c1a51fe105 100644
          remaining_buffer_count_(buffer_ptrs_.size()),
          transfers_in_flight_(0),
          device_(device) {
-@@ -252,6 +228,9 @@ class AsyncHostToDeviceTransferManager
+@@ -252,6 +229,9 @@ class AsyncHostToDeviceTransferManager
  
      TransferManager* transfer_manager =
          se_client->client()->backend().transfer_manager();
@@ -107585,7 +107587,7 @@ index cd54e96ce4..c1a51fe105 100644
  
      std::shared_ptr<TrackedDeviceBuffer> buffer;
      {
-@@ -276,6 +255,16 @@ class AsyncHostToDeviceTransferManager
+@@ -276,6 +256,16 @@ class AsyncHostToDeviceTransferManager
        }
        DCHECK_EQ(buffer->device_memory().size(), 1);
  
@@ -107602,7 +107604,7 @@ index cd54e96ce4..c1a51fe105 100644
        ++transfers_in_flight_;
      }
  
-@@ -284,7 +273,7 @@ class AsyncHostToDeviceTransferManager
+@@ -284,7 +274,7 @@ class AsyncHostToDeviceTransferManager
      // TODO(misard) assess if it would be preferable to introduce a heuristic to
      // put the transfer into the calling thread for small literals.
      auto transfer_h2d = [this, buffer_index, stream, transfer_manager, literal,
@@ -107611,7 +107613,7 @@ index cd54e96ce4..c1a51fe105 100644
                           local_device =
                               std::move(device_->local_device_state()),
                           on_done = std::move(on_done)]() mutable {
-@@ -295,8 +284,7 @@ class AsyncHostToDeviceTransferManager
+@@ -295,8 +285,7 @@ class AsyncHostToDeviceTransferManager
        auto event = local_device->event_pool().AllocateEvent(stream->parent());
  
        // Initiate linearization and transfer of the buffer on the stream.
@@ -107621,7 +107623,7 @@ index cd54e96ce4..c1a51fe105 100644
        TF_CHECK_OK(transfer_manager->TransferLiteralToDeviceAsync(
            stream, literal, buffer));
        local_device->event_pool().ThenRecordEvent(stream, event.value());
-@@ -460,8 +448,6 @@ class AsyncHostToDeviceTransferManager
+@@ -460,8 +449,6 @@ class AsyncHostToDeviceTransferManager
    // corresponding buffer transfer has completed.
    absl::InlinedVector<std::shared_ptr<BufferSequencingEvent>, 4>
        definition_events_ ABSL_GUARDED_BY(mu_);
@@ -107630,7 +107632,7 @@ index cd54e96ce4..c1a51fe105 100644
    // Count of buffers that have not yet been fully transferred.
    size_t remaining_buffer_count_ ABSL_GUARDED_BY(mu_);
    // Count of transfers that have been started but have not yet called cleanup.
-@@ -496,44 +482,6 @@ class AsyncHostToDeviceTransferManager
+@@ -496,44 +483,6 @@ class AsyncHostToDeviceTransferManager
    }
  };
  
@@ -107675,7 +107677,7 @@ index cd54e96ce4..c1a51fe105 100644
  StreamExecutorGpuClient::StreamExecutorGpuClient(
      std::string platform_name, LocalClient* client,
      std::vector<std::unique_ptr<PjRtStreamExecutorDevice>> devices,
-@@ -541,18 +489,15 @@ StreamExecutorGpuClient::StreamExecutorGpuClient(
+@@ -541,18 +490,15 @@ StreamExecutorGpuClient::StreamExecutorGpuClient(
      std::unique_ptr<tsl::Allocator> host_memory_allocator,
      bool should_stage_host_to_device_transfers,
      std::unique_ptr<gpu::GpuExecutableRunOptions> gpu_run_options,
@@ -107697,7 +107699,7 @@ index cd54e96ce4..c1a51fe105 100644
    for (auto* device : addressable_devices()) {
      // Use the device id to construct a globally unique memory space id. We do
      // not promise that memory space ids and device ids are the same.
-@@ -562,8 +507,8 @@ StreamExecutorGpuClient::StreamExecutorGpuClient(
+@@ -562,8 +508,8 @@ StreamExecutorGpuClient::StreamExecutorGpuClient(
      tensorflow::down_cast<PjRtStreamExecutorDevice*>(device)->AttachMemorySpace(
          memory_space.get());
      owned_memory_spaces_.push_back(std::move(memory_space));
@@ -107708,7 +107710,7 @@ index cd54e96ce4..c1a51fe105 100644
      tensorflow::down_cast<PjRtStreamExecutorDevice*>(device)->AttachMemorySpace(
          pinned.get());
      owned_memory_spaces_.push_back(std::move(pinned));
-@@ -591,62 +536,24 @@ absl::string_view StreamExecutorGpuClient::platform_version() const {
+@@ -591,62 +537,24 @@ absl::string_view StreamExecutorGpuClient::platform_version() const {
  #elif GOOGLE_CUDA && defined(CUDART_VERSION)  // cuda
    return "cuda " STRINGIFY(CUDART_VERSION);
  #else
@@ -107775,7 +107777,7 @@ index cd54e96ce4..c1a51fe105 100644
  }
  
  absl::StatusOr<xla::DeviceAssignment>
-@@ -822,6 +729,7 @@ PjRtFuture<> StreamExecutorGpuClient::CopyRawSubBufferToHost(
+@@ -822,6 +730,7 @@ PjRtFuture<> StreamExecutorGpuClient::CopyRawSubBufferToHost(
  absl::StatusOr<std::unique_ptr<PjRtLoadedExecutable>>
  StreamExecutorGpuClient::Compile(const XlaComputation& computation,
                                   CompileOptions options) {
@@ -107783,7 +107785,7 @@ index cd54e96ce4..c1a51fe105 100644
    auto executable = PjRtStreamExecutorClient::Compile(computation, options);
  
  #if defined(GOOGLE_CUDA) || defined(TENSORFLOW_USE_ROCM)
-@@ -888,55 +796,82 @@ StreamExecutorGpuClient::Load(std::unique_ptr<PjRtExecutable> executable) {
+@@ -888,55 +797,82 @@ StreamExecutorGpuClient::Load(std::unique_ptr<PjRtExecutable> executable) {
  
  namespace {
  
@@ -107907,7 +107909,7 @@ index cd54e96ce4..c1a51fe105 100644
    return FailedPrecondition("CUDA async allocator requires CUDA >= 11.2");
  }
  
-@@ -968,17 +903,17 @@ GetStreamExecutorGpuDeviceAllocator(
+@@ -968,17 +904,17 @@ GetStreamExecutorGpuDeviceAllocator(
    std::vector<se::MultiDeviceAdapter::AllocatorInfo> allocators;
    switch (allocator_config.kind) {
      case GpuAllocatorConfig::Kind::kCudaAsync: {
@@ -107935,7 +107937,7 @@ index cd54e96ce4..c1a51fe105 100644
      }
  
      case GpuAllocatorConfig::Kind::kDefault:
-@@ -997,17 +932,26 @@ GetStreamExecutorGpuDeviceAllocator(
+@@ -997,17 +933,26 @@ GetStreamExecutorGpuDeviceAllocator(
        }
        break;
      }
@@ -107965,7 +107967,7 @@ index cd54e96ce4..c1a51fe105 100644
    }
  
    // Add any additional allocators for alternate memory spaces.
-@@ -1032,59 +976,21 @@ GetStreamExecutorGpuDeviceAllocator(
+@@ -1032,59 +977,21 @@ GetStreamExecutorGpuDeviceAllocator(
                              static_cast<int>(se::MemoryType::kHost));
    }
  
@@ -108028,7 +108030,7 @@ index cd54e96ce4..c1a51fe105 100644
    LocalTopologyProto local_topology;
    local_topology.set_node_id(node_id);
    std::string boot_id_str;
-@@ -1100,8 +1006,7 @@ absl::StatusOr<DeviceTopologyPair> BuildDistributedDevices(
+@@ -1100,8 +1007,7 @@ absl::StatusOr<DeviceTopologyPair> BuildDistributedDevices(
          ordinal_and_device.second->executor()->GetPlatform();
      TF_ASSIGN_OR_RETURN(
          std::unique_ptr<xla::se::DeviceDescription> desc,
@@ -108038,7 +108040,7 @@ index cd54e96ce4..c1a51fe105 100644
      DeviceProto* device_proto = local_topology.add_devices();
      device_proto->set_local_device_ordinal(ordinal_and_device.first);
      device_proto->set_name(desc->name());
-@@ -1113,37 +1018,12 @@ absl::StatusOr<DeviceTopologyPair> BuildDistributedDevices(
+@@ -1113,37 +1019,12 @@ absl::StatusOr<DeviceTopologyPair> BuildDistributedDevices(
  
    GlobalTopologyProto global_topology;
    if (enable_mock_nccl) {
@@ -108081,7 +108083,7 @@ index cd54e96ce4..c1a51fe105 100644
      }
      global_topology = BuildGlobalTopology(absl::MakeSpan(local_topologies),
                                            /*assign_global_device_ids=*/true);
-@@ -1168,16 +1048,13 @@ absl::StatusOr<DeviceTopologyPair> BuildDistributedDevices(
+@@ -1168,16 +1049,13 @@ absl::StatusOr<DeviceTopologyPair> BuildDistributedDevices(
          TF_RET_CHECK(it->second != nullptr);
          local_device = std::move(it->second);
          gpu_device_ids[device_proto.local_device_ordinal()] = global_device_id;
@@ -108099,7 +108101,12 @@ index cd54e96ce4..c1a51fe105 100644
      }
    }
    for (const auto& device : local_device_states) {
-@@ -1189,15 +1066,13 @@ absl::StatusOr<DeviceTopologyPair> BuildDistributedDevices(
+@@ -1185,19 +1063,17 @@ absl::StatusOr<DeviceTopologyPair> BuildDistributedDevices(
+   }
+   gpu_executable_run_options->set_gpu_global_device_ids(
+       std::move(gpu_device_ids));
+-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
++#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM || TENSORFLOW_USE_SYCL
    if (num_nodes > 1) {
      auto nccl_id_store = std::make_shared<NcclIdStore>(node_id, device_to_node,
                                                         std::move(kv_store));
@@ -108118,7 +108125,7 @@ index cd54e96ce4..c1a51fe105 100644
  }
  
  std::string MakeComputeCapabilityString(const se::DeviceDescription* desc) {
-@@ -1222,6 +1097,8 @@ StreamExecutorGpuDevice::StreamExecutorGpuDevice(
+@@ -1222,6 +1098,8 @@ StreamExecutorGpuDevice::StreamExecutorGpuDevice(
                                 std::move(device_kind), node_id),
        device_vendor_(std::move(device_vendor)),
        slice_index_(slice_index) {
@@ -108127,7 +108134,7 @@ index cd54e96ce4..c1a51fe105 100644
    std::array<int, 1> coords = {local_device_id().value()};
    description().SetCoords(coords);
    std::vector<int64_t> v_coords(description().coords().begin(),
-@@ -1229,6 +1106,7 @@ StreamExecutorGpuDevice::StreamExecutorGpuDevice(
+@@ -1229,6 +1107,7 @@ StreamExecutorGpuDevice::StreamExecutorGpuDevice(
  
    description().SetAttributes(
        {{"coords", xla::PjRtDeviceAttribute(v_coords)},
@@ -108135,7 +108142,7 @@ index cd54e96ce4..c1a51fe105 100644
         {"device_vendor", device_vendor_},
         {"slice_index", static_cast<int64_t>(slice_index)},
         {"compute_capability", xla::PjRtDeviceAttribute(compute_capability)},
-@@ -1275,6 +1153,10 @@ absl::Span<int const> StreamExecutorGpuDevice::coords() const {
+@@ -1275,6 +1154,10 @@ absl::Span<int const> StreamExecutorGpuDevice::coords() const {
    return description().coords();
  }
  
@@ -108146,7 +108153,7 @@ index cd54e96ce4..c1a51fe105 100644
  absl::StatusOr<PjRtMemorySpace*> StreamExecutorGpuDevice::default_memory_space()
      const {
    return memory_space_by_kind_id(StreamExecutorGpuHbmMemorySpace::kKindId);
-@@ -1312,43 +1194,32 @@ absl::StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorGpuClient(
+@@ -1312,43 +1195,32 @@ absl::StatusOr<std::unique_ptr<PjRtClient>> GetStreamExecutorGpuClient(
    auto host_memory_allocator =
        GetGpuHostAllocator(local_device_states.begin()->second->executor());
  
@@ -251005,10 +251012,10 @@ index 9313a72d68..c3065a4dbd 100644
 -#endif  // XLA_SERVICE_GPU_TRANSFORMS_RENAME_FUSIONS_H_
 +#endif  // XLA_SERVICE_GPU_RENAME_FUSIONS_H_
 diff --git a/xla/service/gpu/runtime/BUILD b/xla/service/gpu/runtime/BUILD
-index dac588557b..b6860821a1 100644
+index dac588557b..8986d4d5eb 100644
 --- a/xla/service/gpu/runtime/BUILD
 +++ b/xla/service/gpu/runtime/BUILD
-@@ -1,10 +1,11 @@
+@@ -1,10 +1,13 @@
  load("@local_config_rocm//rocm:build_defs.bzl", "if_rocm_is_configured")
 +load("@tsl//tsl/platform/default:cuda_build_defs.bzl", "if_cuda_is_configured")
  load("//xla:xla.bzl", "xla_cc_test")
@@ -251017,12 +251024,14 @@ index dac588557b..b6860821a1 100644
  load("//xla/tests:build_defs.bzl", "xla_test")
 -load("//xla/tsl:tsl.bzl", "if_google", "internal_visibility", "nvtx_headers")
 -load("//xla/tsl/platform/default:cuda_build_defs.bzl", "if_cuda_is_configured")
++load("@local_config_sycl//sycl:build_defs.bzl", "if_sycl_is_configured", "if_ccl_is_configured")
++load("@intel_extension_for_openxla//xla:xla.bzl", "xpu_library")
 +load("//xla/tsl:tsl.bzl", "if_google", "if_nccl", "internal_visibility", "nvtx_headers")
 +load("//xla/tsl:tsl.default.bzl", "get_compatible_with_portable")
  
  package(
      # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-@@ -55,23 +56,16 @@ cc_library(
+@@ -55,23 +58,16 @@ cc_library(
      deps = [
          ":annotation",
          ":custom_call_thunk",
@@ -251048,7 +251057,7 @@ index dac588557b..b6860821a1 100644
          "//xla/ffi:call_frame",
          "//xla/ffi:ffi_api",
          "//xla/ffi/api:c_api",
-@@ -81,22 +75,18 @@ cc_library(
+@@ -81,22 +77,18 @@ cc_library(
          "//xla/service:computation_placer",
          "//xla/service:custom_call_status_internal",
          "//xla/service:custom_call_status_public_headers",
@@ -251074,7 +251083,7 @@ index dac588557b..b6860821a1 100644
          "//xla/stream_executor/gpu:gpu_stream_header",
          "//xla/stream_executor/gpu:gpu_types_header",
          "//xla/tsl/concurrency:ref_count",
-@@ -108,11 +98,9 @@ cc_library(
+@@ -108,11 +100,9 @@ cc_library(
          "@com_google_absl//absl/functional:function_ref",
          "@com_google_absl//absl/log",
          "@com_google_absl//absl/status",
@@ -251086,7 +251095,7 @@ index dac588557b..b6860821a1 100644
          "@tsl//tsl/platform:env",
          "@tsl//tsl/platform:errors",
          "@tsl//tsl/platform:logging",
-@@ -137,14 +125,13 @@ cc_library(
+@@ -137,14 +127,13 @@ cc_library(
          ":memset_thunk",
          ":nccl_all_gather_thunk",
          ":nccl_all_reduce_thunk",
@@ -251102,7 +251111,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/container:inlined_vector",
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/status:statusor",
-@@ -167,18 +154,16 @@ xla_test(
+@@ -167,18 +156,16 @@ xla_test(
          "//xla/service:platform_util",
          "//xla/service/gpu:buffer_allocations",
          "//xla/service/gpu:launch_dimensions",
@@ -251124,7 +251133,7 @@ index dac588557b..b6860821a1 100644
          "@tsl//tsl/platform:status",
          "@tsl//tsl/platform:statusor",
          "@tsl//tsl/platform:test",
-@@ -187,6 +172,147 @@ xla_test(
+@@ -187,6 +174,152 @@ xla_test(
      ],
  )
  
@@ -251181,7 +251190,7 @@ index dac588557b..b6860821a1 100644
 +#     ]),
 +# )
 +
-+cc_library(
++xpu_library(
 +    name = "nccl_api",
 +    srcs = ["ccl_api.cc"],
 +    hdrs = [
@@ -251195,14 +251204,19 @@ index dac588557b..b6860821a1 100644
 +        "//xla:xla_data_proto_cc",
 +        "//xla/service:collective_ops_utils",
 +        "//xla/stream_executor",
++        "//xla/stream_executor/gpu:gpu_executor_header",
 +        "//xla/stream_executor/gpu:gpu_stream",
++        "//xla/tsl/util:env_var",
 +        "//xla/tsl/concurrency:ref_count",
 +        "@intel_extension_for_openxla//xla/service/gpu:ccl_ops",
++        "@intel_extension_for_openxla//xla/stream_executor/sycl:sycl_driver",
 +        "@com_google_absl//absl/status",
 +        "@com_google_absl//absl/status:statusor",
 +        "@com_google_absl//absl/types:span",
 +        "@tsl//tsl/platform:logging",
-+    ],
++    ] + if_ccl_is_configured([
++        "@local_config_sycl//sycl:ccl",
++    ]),
 +)
 +
 +cc_library(
@@ -251272,7 +251286,7 @@ index dac588557b..b6860821a1 100644
  #===-------------------------------------------------------------------------------------------===//
  # XLA Thunks Runtime
  #===-------------------------------------------------------------------------------------------===//
-@@ -199,20 +325,16 @@ cc_library(
+@@ -199,20 +332,16 @@ cc_library(
          ":sequential_thunk",
          ":thunk",
          ":while_thunk",
@@ -251294,7 +251308,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/synchronization",
          "@llvm-project//llvm:Support",
-@@ -232,7 +354,6 @@ xla_test(
+@@ -232,7 +361,6 @@ xla_test(
      backends = [
          "gpu_a100",
          "gpu_v100",
@@ -251302,7 +251316,7 @@ index dac588557b..b6860821a1 100644
          "gpu_amd_any",
      ],
      local_defines = if_cuda_is_configured(["GOOGLE_CUDA=1"]) + if_rocm_is_configured(["TENSORFLOW_USE_ROCM=1"]),
-@@ -251,22 +372,17 @@ xla_test(
+@@ -251,22 +379,17 @@ xla_test(
          "//xla/service/gpu:buffer_allocations",
          "//xla/service/gpu:launch_dimensions",
          "//xla/service/gpu:matmul_utils",
@@ -251327,7 +251341,7 @@ index dac588557b..b6860821a1 100644
          "@tsl//tsl/platform:statusor",
          "@tsl//tsl/platform:test",
          "@tsl//tsl/platform:test_main",
-@@ -280,25 +396,22 @@ cc_library(
+@@ -280,25 +403,22 @@ cc_library(
      srcs = if_gpu_is_configured(["cholesky_thunk.cc"]),
      hdrs = if_gpu_is_configured(["cholesky_thunk.h"]),
      deps = if_gpu_is_configured([
@@ -251361,7 +251375,7 @@ index dac588557b..b6860821a1 100644
          "@tsl//tsl/platform:status",
      ]),
  )
-@@ -307,19 +420,17 @@ cc_library(
+@@ -307,19 +427,17 @@ cc_library(
      name = "command_buffer_thunk",
      srcs = ["command_buffer_thunk.cc"],
      hdrs = ["command_buffer_thunk.h"],
@@ -251383,7 +251397,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/status:statusor",
          "@com_google_absl//absl/synchronization",
-@@ -335,7 +446,7 @@ cc_library(
+@@ -335,7 +453,7 @@ cc_library(
  
  xla_test(
      name = "command_buffer_thunk_test",
@@ -251392,7 +251406,7 @@ index dac588557b..b6860821a1 100644
      backend_tags = {
          "gpu_a100": if_google(["config-cuda-only"]),
          "gpu_v100": if_google(["config-cuda-only"]),
-@@ -343,14 +454,12 @@ xla_test(
+@@ -343,14 +461,12 @@ xla_test(
      backends = [
          "gpu_a100",
          "gpu_v100",
@@ -251408,7 +251422,7 @@ index dac588557b..b6860821a1 100644
          ":thunk",
          "//xla:shape_util",
          "//xla:types",
-@@ -361,30 +470,20 @@ xla_test(
+@@ -361,30 +477,20 @@ xla_test(
          "//xla/service/gpu:buffer_allocations",
          "//xla/service/gpu:launch_dimensions",
          "//xla/service/gpu:matmul_utils",
@@ -251441,7 +251455,7 @@ index dac588557b..b6860821a1 100644
      ] + if_cuda_is_configured([
          "@local_config_cuda//cuda:cuda_headers",
      ]),
-@@ -401,17 +500,14 @@ cc_library(
+@@ -401,17 +507,14 @@ cc_library(
          "//xla:util",
          "//xla/service:buffer_assignment",
          "//xla/service/gpu:variant_visitor",
@@ -251460,7 +251474,7 @@ index dac588557b..b6860821a1 100644
          "@tsl//tsl/platform:statusor",
      ],
  )
-@@ -420,17 +516,17 @@ cc_library(
+@@ -420,17 +523,17 @@ cc_library(
      name = "convolution_thunk",
      srcs = ["convolution_thunk.cc"],
      hdrs = ["convolution_thunk.h"],
@@ -251482,7 +251496,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/base:core_headers",
          "@com_google_absl//absl/container:flat_hash_map",
          "@com_google_absl//absl/container:inlined_vector",
-@@ -439,7 +535,10 @@ cc_library(
+@@ -439,7 +542,10 @@ cc_library(
          "@com_google_absl//absl/synchronization",
          "@com_google_absl//absl/types:span",
          "@tsl//tsl/platform:errors",
@@ -251494,7 +251508,7 @@ index dac588557b..b6860821a1 100644
  )
  
  cc_library(
-@@ -450,9 +549,8 @@ cc_library(
+@@ -450,9 +556,8 @@ cc_library(
          ":thunk",
          "//xla/hlo/ir:hlo",
          "//xla/service:buffer_assignment",
@@ -251505,7 +251519,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/base:core_headers",
          "@com_google_absl//absl/container:flat_hash_map",
          "@com_google_absl//absl/log",
-@@ -480,22 +578,23 @@ cc_library(
+@@ -480,22 +585,23 @@ cc_library(
          "//xla/service:buffer_assignment",
          "//xla/service/gpu:buffer_allocations",
          "//xla/service/gpu/runtime:thunk",
@@ -251533,7 +251547,7 @@ index dac588557b..b6860821a1 100644
      deps = [
          ":thunk",
          "//xla:executable_run_options",
-@@ -503,7 +602,6 @@ cc_library(
+@@ -503,7 +609,6 @@ cc_library(
          "//xla:util",
          "//xla/ffi:call_frame",
          "//xla/ffi:execution_context",
@@ -251541,7 +251555,7 @@ index dac588557b..b6860821a1 100644
          "//xla/ffi:ffi_api",
          "//xla/ffi/api:c_api",
          "//xla/hlo/ir:hlo",
-@@ -511,39 +609,13 @@ cc_library(
+@@ -511,39 +616,13 @@ cc_library(
          "//xla/service:custom_call_status",
          "//xla/service:custom_call_status_internal",
          "//xla/service/gpu:buffer_allocations",
@@ -251584,7 +251598,7 @@ index dac588557b..b6860821a1 100644
      ],
  )
  
-@@ -559,12 +631,9 @@ cc_library(
+@@ -559,12 +638,9 @@ cc_library(
          "//xla:util",
          "//xla:xla_data_proto_cc",
          "//xla/service:buffer_assignment",
@@ -251598,7 +251612,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/base:core_headers",
          "@com_google_absl//absl/container:flat_hash_map",
          "@com_google_absl//absl/status",
-@@ -577,6 +646,29 @@ cc_library(
+@@ -577,6 +653,29 @@ cc_library(
      ],
  )
  
@@ -251628,7 +251642,7 @@ index dac588557b..b6860821a1 100644
  cc_library(
      name = "gemm_thunk",
      srcs = ["gemm_thunk.cc"],
-@@ -596,22 +688,26 @@ cc_library(
+@@ -596,22 +695,26 @@ cc_library(
  
  cc_library(
      name = "gpublas_lt_matmul_thunk",
@@ -251666,7 +251680,7 @@ index dac588557b..b6860821a1 100644
          "@tsl//tsl/platform:statusor",
      ],
  )
-@@ -627,11 +723,9 @@ cc_library(
+@@ -627,11 +730,9 @@ cc_library(
          "//xla:status_macros",
          "//xla:util",
          "//xla/service/gpu:buffer_allocations",
@@ -251679,7 +251693,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/log",
          "@com_google_absl//absl/log:check",
          "@com_google_absl//absl/status",
-@@ -652,10 +746,8 @@ cc_library(
+@@ -652,10 +753,8 @@ cc_library(
          "//xla/service/gpu:launch_dimensions",
          "//xla/service/gpu:stream_executor_util",
          "//xla/service/gpu/kernels:custom_kernel",
@@ -251692,7 +251706,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/base:core_headers",
          "@com_google_absl//absl/container:flat_hash_map",
          "@com_google_absl//absl/container:inlined_vector",
-@@ -676,7 +768,7 @@ cc_library(
+@@ -676,7 +775,7 @@ cc_library(
      deps = [
          ":thunk",
          "//xla/service:buffer_assignment",
@@ -251701,7 +251715,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/status",
      ],
  )
-@@ -686,15 +778,14 @@ cc_library(
+@@ -686,15 +785,14 @@ cc_library(
      srcs = ["nccl_all_gather_thunk.cc"],
      hdrs = ["nccl_all_gather_thunk.h"],
      deps = [
@@ -251720,7 +251734,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/strings:str_format",
          "@com_google_absl//absl/types:span",
-@@ -709,16 +800,15 @@ cc_library(
+@@ -709,16 +807,15 @@ cc_library(
      srcs = ["nccl_all_reduce_thunk.cc"],
      hdrs = ["nccl_all_reduce_thunk.h"],
      deps = [
@@ -251740,7 +251754,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/status:statusor",
          "@com_google_absl//absl/types:span",
-@@ -734,55 +824,17 @@ cc_library(
+@@ -734,55 +831,17 @@ cc_library(
      srcs = ["nccl_all_to_all_thunk.cc"],
      hdrs = ["nccl_all_to_all_thunk.h"],
      deps = [
@@ -251800,7 +251814,7 @@ index dac588557b..b6860821a1 100644
          "@tsl//tsl/platform:errors",
          "@tsl//tsl/platform:logging",
          "@tsl//tsl/platform:statusor",
-@@ -794,15 +846,13 @@ cc_library(
+@@ -794,15 +853,13 @@ cc_library(
      srcs = ["nccl_collective_broadcast_thunk.cc"],
      hdrs = ["nccl_collective_broadcast_thunk.h"],
      deps = [
@@ -251818,7 +251832,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/types:span",
          "@tsl//tsl/platform:errors",
-@@ -815,26 +865,21 @@ cc_library(
+@@ -815,26 +872,21 @@ cc_library(
      srcs = ["nccl_collective_permute_thunk.cc"],
      hdrs = ["nccl_collective_permute_thunk.h"],
      deps = [
@@ -251847,7 +251861,7 @@ index dac588557b..b6860821a1 100644
          "@tsl//tsl/platform:errors",
      ],
  )
-@@ -843,20 +888,19 @@ cc_library(
+@@ -843,20 +895,19 @@ cc_library(
      name = "nccl_collective_thunk",
      srcs = ["nccl_collective_thunk.cc"],
      hdrs = ["nccl_collective_thunk.h"],
@@ -251874,7 +251888,7 @@ index dac588557b..b6860821a1 100644
          "//xla/service:buffer_assignment",
          "//xla/service:collective_ops_utils",
          "//xla/service:computation_placer",
-@@ -865,11 +909,13 @@ cc_library(
+@@ -865,11 +916,13 @@ cc_library(
          "//xla/service/gpu:buffer_allocations",
          "//xla/service/gpu:ir_emission_utils",
          "//xla/service/llvm_ir:llvm_util",
@@ -251891,7 +251905,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/algorithm:container",
          "@com_google_absl//absl/base:core_headers",
          "@com_google_absl//absl/container:flat_hash_map",
-@@ -895,16 +941,15 @@ cc_library(
+@@ -895,16 +948,15 @@ cc_library(
      srcs = ["nccl_p2p_thunk_common.cc"],
      hdrs = ["nccl_p2p_thunk_common.h"],
      deps = [
@@ -251910,7 +251924,7 @@ index dac588557b..b6860821a1 100644
          "//xla/stream_executor:stream_executor_h",
          "@com_google_absl//absl/base:core_headers",
          "@com_google_absl//absl/container:flat_hash_map",
-@@ -922,18 +967,17 @@ cc_library(
+@@ -922,18 +974,17 @@ cc_library(
      srcs = ["nccl_recv_thunk.cc"],
      hdrs = ["nccl_recv_thunk.h"],
      deps = [
@@ -251933,7 +251947,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/log",
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/strings:str_format",
-@@ -948,18 +992,17 @@ cc_library(
+@@ -948,18 +999,17 @@ cc_library(
      srcs = ["nccl_send_thunk.cc"],
      hdrs = ["nccl_send_thunk.h"],
      deps = [
@@ -251956,7 +251970,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/log",
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/strings:str_format",
-@@ -969,36 +1012,17 @@ cc_library(
+@@ -969,36 +1019,17 @@ cc_library(
      ],
  )
  
@@ -251995,7 +252009,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/base:core_headers",
          "@com_google_absl//absl/container:flat_hash_map",
          "@com_google_absl//absl/status",
-@@ -1018,10 +1042,8 @@ cc_library(
+@@ -1018,10 +1049,8 @@ cc_library(
          "//xla:util",
          "//xla/service:buffer_assignment",
          "//xla/service/gpu:buffer_allocations",
@@ -252007,7 +252021,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/log",
          "@com_google_absl//absl/status",
          "@tsl//tsl/platform:errors",
-@@ -1033,9 +1055,9 @@ cc_library(
+@@ -1033,9 +1062,9 @@ cc_library(
      srcs = ["replica_id_thunk.cc"],
      hdrs = ["replica_id_thunk.h"],
      deps = [
@@ -252018,7 +252032,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/status",
          "@tsl//tsl/platform:statusor",
      ],
-@@ -1050,8 +1072,7 @@ cc_library(
+@@ -1050,8 +1079,7 @@ cc_library(
      ]),
      deps = [
          ":annotation",
@@ -252028,7 +252042,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/strings",
          "@tsl//tsl/platform:errors",
-@@ -1066,18 +1087,17 @@ cc_library(
+@@ -1066,18 +1094,17 @@ cc_library(
      deps = [
          ":thunk",
          "//xla:shape_util",
@@ -252049,7 +252063,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/strings:str_format",
          "@com_google_absl//absl/synchronization",
          "@tsl//tsl/platform:errors",
-@@ -1091,13 +1111,10 @@ cc_library(
+@@ -1091,13 +1118,10 @@ cc_library(
      srcs = ["thunk.cc"],
      hdrs = ["thunk.h"],
      deps = [
@@ -252066,7 +252080,7 @@ index dac588557b..b6860821a1 100644
          "//xla/ffi:execution_context",
          "//xla/hlo/ir:hlo",
          "//xla/service:buffer_assignment",
-@@ -1106,31 +1123,47 @@ cc_library(
+@@ -1106,31 +1130,47 @@ cc_library(
          "//xla/service/gpu:backend_configs_cc",
          "//xla/service/gpu:buffer_allocations",
          "//xla/service/gpu:gpu_executable_run_options",
@@ -252120,7 +252134,7 @@ index dac588557b..b6860821a1 100644
          ":sequential_thunk",
          ":thunk",
          ":while_thunk",
-@@ -1145,8 +1178,8 @@ cc_library(
+@@ -1145,8 +1185,8 @@ cc_library(
      srcs = if_gpu_is_configured(["triangular_solve_thunk.cc"]),
      hdrs = if_gpu_is_configured(["triangular_solve_thunk.h"]),
      deps = if_gpu_is_configured([
@@ -252131,7 +252145,7 @@ index dac588557b..b6860821a1 100644
          "//xla:types",
          "//xla:util",
          "//xla:xla_data_proto_cc",
-@@ -1155,16 +1188,13 @@ cc_library(
+@@ -1155,16 +1195,13 @@ cc_library(
          "//xla/service/gpu:buffer_allocations",
          "//xla/service/gpu:make_batch_pointers",
          "//xla/service/gpu/runtime:thunk",
@@ -252151,7 +252165,7 @@ index dac588557b..b6860821a1 100644
  )
  
  cc_library(
-@@ -1175,13 +1205,11 @@ cc_library(
+@@ -1175,13 +1212,11 @@ cc_library(
          ":sequential_thunk",
          ":thunk",
          "//xla/service:buffer_assignment",
@@ -252166,7 +252180,7 @@ index dac588557b..b6860821a1 100644
          "@com_google_absl//absl/status",
          "@com_google_absl//absl/status:statusor",
          "@com_google_absl//absl/strings:str_format",
-@@ -1189,8 +1217,6 @@ cc_library(
+@@ -1189,8 +1224,6 @@ cc_library(
          "@tsl//tsl/platform:errors",
          "@tsl//tsl/platform:logging",
          "@tsl//tsl/platform:statusor",
@@ -252175,7 +252189,7 @@ index dac588557b..b6860821a1 100644
      ],
  )
  
-@@ -1215,7 +1241,7 @@ cc_library(
+@@ -1215,7 +1248,7 @@ cc_library(
          ":thunk",
          "//xla/service:buffer_assignment",
          "//xla/service/gpu:kernel_arguments",
@@ -252184,7 +252198,7 @@ index dac588557b..b6860821a1 100644
          "//xla/stream_executor:dnn",
          "@com_google_absl//absl/base",
          "@com_google_absl//absl/status",
-@@ -1223,11 +1249,3 @@ cc_library(
+@@ -1223,11 +1256,3 @@ cc_library(
          "@tsl//tsl/platform:errors",
      ],
  )
@@ -252448,10 +252462,10 @@ index 13d34e35db..70a4c8df1d 100644
  
 diff --git a/xla/service/gpu/runtime/ccl_api.cc b/xla/service/gpu/runtime/ccl_api.cc
 new file mode 100644
-index 0000000000..0ec895d732
+index 0000000000..49c96f55be
 --- /dev/null
 +++ b/xla/service/gpu/runtime/ccl_api.cc
-@@ -0,0 +1,318 @@
+@@ -0,0 +1,594 @@
 +/* Copyright (c) 2024 Intel Corporation
 +
 +Copyright 2019 The TensorFlow Authors. All Rights Reserved.
@@ -252473,10 +252487,10 @@ index 0000000000..0ec895d732
 +
 +#include <cstddef>
 +#include <cstdint>
++#include <thread>
 +
 +#include "absl/status/status.h"
 +#include "absl/status/statusor.h"
-+#include "xla/tsl/concurrency/ref_count.h"
 +#include "xla/service/collective_ops_utils.h"
 +#include "xla/service/gpu/ccl_ops.h"
 +#include "xla/service/gpu/runtime/nccl_api.h"
@@ -252484,8 +252498,108 @@ index 0000000000..0ec895d732
 +#include "xla/stream_executor/device_memory.h"
 +#include "xla/stream_executor/gpu/gpu_stream.h"
 +#include "xla/stream_executor/stream.h"
++#include "xla/tsl/concurrency/ref_count.h"
 +
 +namespace xla::gpu {
++
++static std::string_view ToString(ReductionKind reduction_kind) {
++  switch (reduction_kind) {
++    case ReductionKind::SUM:
++      return "sum";
++    case ReductionKind::PRODUCT:
++      return "prod";
++    case ReductionKind::MIN:
++      return "min";
++    case ReductionKind::MAX:
++      return "max";
++  }
++}
++
++//==-----------------------------------------------------------------------===//
++// Conversions between XLA and OneCCL data types
++//==-----------------------------------------------------------------------===//
++#ifdef XLA_ENABLE_ONECCL
++static size_t ToCclCount(PrimitiveType dtype, size_t count) {
++  return primitive_util::IsComplexType(dtype) ? count * 2 : count;
++}
++
++static absl::StatusOr<ccl::datatype> ToCclDataType(PrimitiveType dtype,
++                                                   bool is_reduction_op) {
++  switch (dtype) {
++    case S8:
++    case F8E5M2:
++    case F8E4M3FN:
++      return ccl::datatype::int8;
++    case PRED:
++    case U8:
++      return ccl::datatype::uint8;
++    case S32:
++      return ccl::datatype::int32;
++    case U32:
++      return ccl::datatype::uint32;
++    case S64:
++      return ccl::datatype::int64;
++    case U64:
++      return ccl::datatype::uint64;
++    case F16:
++      return ccl::datatype::float16;
++    case F32:
++    case C64:
++      return ccl::datatype::float32;
++    case F64:
++    case C128:
++      return ccl::datatype::float64;
++    case S16:
++    case U16:
++      // For reductions we expect 16 bit integer types to be promoted to 32-bit.
++      if (is_reduction_op) {
++        return absl::InvalidArgumentError(
++            absl::StrFormat("Unsupported data type for reduction operation: %s",
++                            primitive_util::LowercasePrimitiveTypeName(dtype)));
++      }
++      // For collectives that just move data around, we can use ncclFloat16 for
++      // 16-bit integer data types.
++      return ccl::datatype::float16;
++    case BF16:
++      return ccl::datatype::bfloat16;
++    default:
++      return absl::InvalidArgumentError(
++          absl::StrFormat("Unsupported data type: %s",
++                          primitive_util::LowercasePrimitiveTypeName(dtype)));
++  }
++}
++
++static ccl::reduction ToCclReduction(ReductionKind kind) {
++  switch (kind) {
++    case ReductionKind::SUM:
++      return ccl::reduction::sum;
++    case ReductionKind::PRODUCT:
++      return ccl::reduction::prod;
++    case ReductionKind::MIN:
++      return ccl::reduction::min;
++    case ReductionKind::MAX:
++      return ccl::reduction::max;
++  }
++}
++
++static ccl::stream ToCclStream(se::Stream* stream) {
++  static std::unordered_map<se::gpu::GpuStreamHandle,
++                            std::shared_ptr<ccl::stream>>
++      ccl_streams;
++  static std::mutex mu;
++
++  se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(stream);
++  std::lock_guard<std::mutex> lock(mu);
++  if (ccl_streams.find(gpu_stream) == ccl_streams.end()) {
++    std::shared_ptr<ccl::stream> ccl_stream =
++        std::make_shared<ccl::stream>(ccl::create_stream(*gpu_stream));
++    ccl_streams[gpu_stream] = ccl_stream;
++  }
++  return *ccl_streams[gpu_stream];
++}
++
++#endif  // XLA_ENABLE_ONECCL
++
 +//==-----------------------------------------------------------------------===//
 +// NcclApi::PersistentPlanAllocator
 +//==-----------------------------------------------------------------------===//
@@ -252526,51 +252640,130 @@ index 0000000000..0ec895d732
 +//===----------------------------------------------------------------------===//
 +// CclApi
 +//===----------------------------------------------------------------------===//
++struct NcclApi::NcclComm {
++  int nranks;
++  int rank;
++  std::string id;
++  void* comm;  // point to ccl::communicator if ccl enabled
++};
 +
 +static absl::Status UnimplementedError(std::string mes = "") {
-+  return absl::UnimplementedError("XLA compiled without CCL support: " + mes);
++  return absl::UnimplementedError("OneCCL does not support: " + mes);
 +}
 +
-+CclApi::CclApi() {}
++CclApi::CclApi() {
++#ifdef XLA_ENABLE_ONECCL
++  tsl::ReadBoolFromEnvVar("COLLECTIVE_USE_ONECCL", false,
++                          &collective_use_oneccl_);
++  tsl::ReadBoolFromEnvVar("ALLREDUCE_USE_ONECCL", false,
++                          &allreduce_use_oneccl_);
++  tsl::ReadBoolFromEnvVar("BROADCAST_USE_ONECCL", false,
++                          &broadcast_use_oneccl_);
++  tsl::ReadBoolFromEnvVar("ALLGATHER_USE_ONECCL", false,
++                          &allgather_use_oneccl_);
++  tsl::ReadBoolFromEnvVar("REDUCESCATTER_USE_ONECCL", false,
++                          &reducescatter_use_oneccl_);
++  tsl::ReadBoolFromEnvVar("ALLTOALL_USE_ONECCL", false, &alltoall_use_oneccl_);
++  tsl::ReadBoolFromEnvVar("COLLECTIVEPERMUTE_USE_ONECCL", false,
++                          &collectivepermute_use_oneccl_);
++  tsl::ReadBoolFromEnvVar("SENDRECV_USE_ONECCL", false, &sendrecv_use_oneccl_);
++  need_oneccl_ = collective_use_oneccl_ || allreduce_use_oneccl_ ||
++                 broadcast_use_oneccl_ || allgather_use_oneccl_ ||
++                 reducescatter_use_oneccl_ || alltoall_use_oneccl_ ||
++                 collectivepermute_use_oneccl_ || sendrecv_use_oneccl_;
++  static std::once_flag init_ccl;
++  if (need_oneccl_) {
++    std::call_once(init_ccl, []() { ccl::init(); });
++  }
++#endif
++}
 +
-+absl::StatusOr<NcclCliqueId> CclApi::GetUniqueId() { return NcclCliqueId(); }
++absl::StatusOr<NcclCliqueId> CclApi::GetUniqueId(const NcclCliqueKey& key) {
++#ifdef XLA_ENABLE_ONECCL
++  if (need_oneccl_) {
++    ccl::shared_ptr_class<ccl::kvs> kvs = ccl::create_main_kvs();
++    ccl::kvs::address_type main_addr = kvs.get()->get_address();
++    auto clique_id = NcclCliqueId((char*)main_addr.data());
++    clique_id.SetKey(key.ToString());
++    std::lock_guard<std::mutex> lock(mu_);
++    id_to_kvs_[absl::HashOf(clique_id)] = kvs;
++    return clique_id;
++  }
++#endif
 +
-+absl::StatusOr<NcclCliqueId> CclApi::GetId(const NcclCliqueKey& key,
-+                                           const RunId& id) {
-+  std::string new_id =
-+      id.ToString() + "=" + GlobalDeviceIdsToString(key.devices());
-+  TF_RET_CHECK(new_id.size() < NcclCliqueId::kSize)
-+      << "Run ID length must < kSize(" << NcclCliqueId::kSize << ").";
-+  new_id.resize(NcclCliqueId::kSize);
-+
-+  return NcclCliqueId().FromString(new_id);
++  auto clique_id = NcclCliqueId();
++  clique_id.SetKey(key.ToString());
++  return clique_id;
 +}
 +
 +absl::StatusOr<std::vector<CclApi::OwnedNcclComm>> CclApi::CommInitRanks(
 +    int32_t nranks, const NcclCliqueId& clique_id,
-+    absl::Span<const DeviceRank> ranks, const Config& config){
++    absl::Span<const DeviceRank> ranks, const Config& config) {
 +  VLOG(1) << "Initialize NCCL communicator for " << ranks.size()
 +          << " devices; hash(id)=" << absl::HashOf(clique_id);
++#ifdef XLA_ENABLE_ONECCL
++  if (need_oneccl_) {
++    ccl::shared_ptr_class<ccl::kvs> kvs;
++    {
++      std::lock_guard<std::mutex> lock(mu_);
++      if (id_to_kvs_.find(absl::HashOf(clique_id)) == id_to_kvs_.end()) {
++        ccl::kvs::address_type main_addr = clique_id.ToArray();
++        kvs = ccl::create_kvs(main_addr);
++        id_to_kvs_[absl::HashOf(clique_id)] = kvs;
++      } else {
++        kvs = id_to_kvs_[absl::HashOf(clique_id)];
++      }
++    }
++    std::vector<OwnedNcclComm> comms;
++    comms.resize(ranks.size());
++
++    std::vector<std::thread> threads;
++    for (size_t i = 0; i < ranks.size(); ++i) {
++      threads.push_back(
++          std::thread([this, &comms, &ranks, i, nranks, &clique_id, kvs]() {
++            int32_t rank = ranks[i].rank;
++            se::gpu::GpuExecutor* gpu_executor =
++                se::gpu::ExtractGpuExecutor(ranks[i].device);
++            auto dev = ccl::create_device(*(gpu_executor->device()));
++            auto ctx =
++                ccl::create_context(*(gpu_executor->gpu_context()->context()));
++            ccl::communicator cclcomm =
++                ccl::create_communicatorExt(nranks, rank, dev, ctx, kvs);
++            void* cclcomm_p =
++                static_cast<void*>(new ccl::communicator(std::move(cclcomm)));
++            NcclCommHandle comm =
++                new NcclComm{nranks, rank, clique_id.GetKey(), cclcomm_p};
++            OwnedNcclComm owned_comm(comm, NcclCommDeleter{this});
++            comms[i] = std::move(owned_comm);
++          }));
++    }
++
++    for (auto& thread : threads) {
++      thread.join();
++    }
++
++    return comms;
++  }
++#endif
 +
 +  std::vector<OwnedNcclComm> comms;
 +  comms.reserve(ranks.size());
 +
 +  for (size_t i = 0; i < ranks.size(); ++i) {
-+    VLOG(1) << "Initialize NCCL communicator for rank #" << ranks[i].rank
++    VLOG(1) << "Initialize OneCCL communicator for rank #" << ranks[i].rank
 +            << " of " << nranks << "; hash(id)=" << absl::HashOf(clique_id);
 +
-+  NcclCommHandle comm = reinterpret_cast<NcclCommHandle>(
-+      new ccl::communicator(nranks, ranks[i].rank, clique_id.ToString()));
-+
-+  comms.emplace_back(comm, NcclCommDeleter{this});
-+}
++    NcclCommHandle comm =
++        new NcclComm{nranks, ranks[i].rank, clique_id.GetKey(), nullptr};
++    comms.emplace_back(comm, NcclCommDeleter{this});
++  }
 +
 +  return comms;
 +}
 +
 +absl::StatusOr<std::vector<CclApi::OwnedNcclComm>> CclApi::CommSplit(
 +    absl::Span<const NcclCommHandle> comms, int32_t color,
-+    absl::Span<const int32_t> keys, std::optional<Config> config){
++    absl::Span<const int32_t> keys, std::optional<Config> config) {
 +  // Don't need now
 +  return UnimplementedError("CommSplit");
 +}
@@ -252586,13 +252779,16 @@ index 0000000000..0ec895d732
 +}
 +
 +absl::Status CclApi::CommDestroy(NcclCommHandle comm) {
-+  delete reinterpret_cast<ncclComm_t>(comm);
++#ifdef XLA_ENABLE_ONECCL
++  if (comm->comm != nullptr)
++    delete reinterpret_cast<ccl::communicator*>(comm->comm);
++#endif
++  delete comm;
 +  return absl::OkStatus();
 +}
 +
-+absl::StatusOr<int32_t> CclApi::CommCount(NcclCommHandle) {
-+  // Don't need now
-+  return UnimplementedError("CommCount");
++absl::StatusOr<int32_t> CclApi::CommCount(NcclCommHandle comm) {
++  return comm->nranks;
 +}
 +
 +absl::Status CclApi::CommGetAsyncError(NcclCommHandle comm) {
@@ -252614,34 +252810,66 @@ index 0000000000..0ec895d732
 +                               PrimitiveType dtype, size_t count,
 +                               ReductionKind reduction_kind,
 +                               NcclCommHandle comm, se::Stream* stream) {
++#ifdef XLA_ENABLE_ONECCL
++  if (collective_use_oneccl_ || allreduce_use_oneccl_) {
++    VLOG(3) << absl::StreamFormat(
++        "Launch OneCCL AllReduce operation on device #%d; send_buffer=%p; "
++        "recv_buffer=%p; dtype=%s; count=%d; reduction_kind=%s; comm=%p; "
++        "stream=%p",
++        stream->parent()->device_ordinal(), send_buffer.opaque(),
++        recv_buffer.opaque(), primitive_util::LowercasePrimitiveTypeName(dtype),
++        count, ToString(reduction_kind), comm, stream);
++    TF_ASSIGN_OR_RETURN(ccl::datatype ccl_dtype, ToCclDataType(dtype, false));
++    ccl::allreduce(
++        send_buffer.opaque(), recv_buffer.opaque(), ToCclCount(dtype, count),
++        ccl_dtype, ToCclReduction(reduction_kind),
++        *reinterpret_cast<ccl::communicator*>(comm->comm), ToCclStream(stream))
++        .wait();
++
++    return absl::OkStatus();
++  }
++#endif
 +  se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(stream);
 +
 +  const void* send_buffer_ = send_buffer.opaque();
 +  void* recv_buffer_ = recv_buffer.opaque();
 +  size_t element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
 +
-+  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
-+
 +  sycl_allreduce(send_buffer_, recv_buffer_, element_count, dtype,
-+                 reduction_kind, gpu_stream, comm_);
++                 reduction_kind, gpu_stream, reinterpret_cast<SyclComm*>(comm));
 +  return absl::OkStatus();
 +}
 +
 +absl::Status CclApi::Broadcast(se::DeviceMemoryBase send_buffer,
 +                               se::DeviceMemoryBase recv_buffer,
-+                               PrimitiveType dtype, size_t count,
-+                               size_t root, NcclCommHandle comm,
-+                               se::Stream* stream){
++                               PrimitiveType dtype, size_t count, size_t root,
++                               NcclCommHandle comm, se::Stream* stream) {
++#ifdef XLA_ENABLE_ONECCL
++  if (collective_use_oneccl_ || broadcast_use_oneccl_) {
++    VLOG(3) << absl::StreamFormat(
++        "Launch OneCCL Broadcast operation on device #%d; send_buffer=%p; "
++        "recv_buffer=%p; dtype=%s; count=%d; root=%d; comm=%p; stream=%p",
++        stream->parent()->device_ordinal(), send_buffer.opaque(),
++        recv_buffer.opaque(), primitive_util::LowercasePrimitiveTypeName(dtype),
++        count, root, comm, stream);
++
++    TF_ASSIGN_OR_RETURN(ccl::datatype ccl_dtype, ToCclDataType(dtype, false));
++    ccl::broadcast(send_buffer.opaque(), recv_buffer.opaque(),
++                   ToCclCount(dtype, count), ccl_dtype, root,
++                   *reinterpret_cast<ccl::communicator*>(comm),
++                   ToCclStream(stream))
++        .wait();
++  }
++#endif
++
 +  se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(stream);
 +
 +  const void* send_buffer_ = send_buffer.opaque();
 +  void* recv_buffer_ = recv_buffer.opaque();
 +  size_t element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
 +
-+  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
-+
-+  sycl_broadcast(send_buffer_, recv_buffer_, element_count, dtype,
-+                 root, gpu_stream, comm_);
++  sycl_broadcast(send_buffer_, recv_buffer_, element_count, dtype, root,
++                 gpu_stream, reinterpret_cast<SyclComm*>(comm));
 +
 +  return absl::OkStatus();
 +}
@@ -252651,28 +252879,37 @@ index 0000000000..0ec895d732
 +                                   PrimitiveType dtype, size_t count,
 +                                   ReductionKind reduction_kind,
 +                                   NcclCommHandle comm, se::Stream* stream) {
++#ifdef XLA_ENABLE_ONECCL
++  if (collective_use_oneccl_ || reducescatter_use_oneccl_) {
++    VLOG(3) << absl::StreamFormat(
++        "Launch OneCCL ReduceScatter operation on device #%d; send_buffer=%p; "
++        "recv_buffer=%p; dtype=%s; count=%d; reduction_kind=%s; comm=%p; "
++        "stream=%p",
++        stream->parent()->device_ordinal(), send_buffer.opaque(),
++        recv_buffer.opaque(), primitive_util::LowercasePrimitiveTypeName(dtype),
++        count, ToString(reduction_kind), comm, stream);
++
++    TF_ASSIGN_OR_RETURN(ccl::datatype ccl_dtype, ToCclDataType(dtype, false));
++
++    ccl::reduce_scatter(
++        send_buffer.opaque(), recv_buffer.opaque(), ToCclCount(dtype, count),
++        ccl_dtype, ToCclReduction(reduction_kind),
++        *reinterpret_cast<ccl::communicator*>(comm->comm), ToCclStream(stream))
++        .wait();
++
++    return absl::OkStatus();
++  }
++#endif
++
 +  se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(stream);
 +
 +  const void* send_buffer_ = send_buffer.opaque();
 +  void* recv_buffer_ = recv_buffer.opaque();
 +  size_t element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
 +
-+  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
-+
-+  int num_participants = comm_->nranks;
-+  TF_RET_CHECK(element_count % num_participants == 0)
-+      << "Source buffer was not an exact multiple of the number of "
-+         "participants.";
-+  int64_t recv_count = element_count / num_participants;
-+  VLOG(3) << absl::StreamFormat(
-+      "Calling ncclReduceScatter(send_buffer=%p, recv_buffer=%p, "
-+      "recvcount=%d, "
-+      "comm=%p, stream=%p)",
-+      send_buffer_, recv_buffer_, recv_count, static_cast<const void*>(comm_),
-+      gpu_stream);
-+
-+  sycl_reduce_scatter(send_buffer_, recv_buffer_, recv_count, dtype,
-+                      reduction_kind, gpu_stream, comm_);
++  sycl_reduce_scatter(send_buffer_, recv_buffer_, element_count, dtype,
++                      reduction_kind, gpu_stream,
++                      reinterpret_cast<SyclComm*>(comm));
 +  return absl::OkStatus();
 +}
 +
@@ -252680,37 +252917,53 @@ index 0000000000..0ec895d732
 +                               se::DeviceMemoryBase recv_buffer,
 +                               PrimitiveType dtype, size_t count,
 +                               NcclCommHandle comm, se::Stream* stream) {
++#ifdef XLA_ENABLE_ONECCL
++  if (collective_use_oneccl_ || allgather_use_oneccl_) {
++    VLOG(3) << absl::StreamFormat(
++        "Launch NCCL AllGather operation on device #%d; send_buffer=%p; "
++        "recv_buffer=%p; dtype=%s; count=%d; comm=%p; stream=%p",
++        stream->parent()->device_ordinal(), send_buffer.opaque(),
++        recv_buffer.opaque(), primitive_util::LowercasePrimitiveTypeName(dtype),
++        count, comm, stream);
++
++    TF_ASSIGN_OR_RETURN(ccl::datatype ccl_dtype, ToCclDataType(dtype, false));
++
++    std::vector<size_t> recvcounts(comm->nranks, ToCclCount(dtype, count));
++    ccl::allgather(send_buffer.opaque(), recv_buffer.opaque(), count, ccl_dtype,
++                   *reinterpret_cast<ccl::communicator*>(comm->comm),
++                   ToCclStream(stream))
++        .wait();
++
++    return absl::OkStatus();
++  }
++#endif
 +  se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(stream);
 +
 +  const void* send_buffer_ = send_buffer.opaque();
 +  void* recv_buffer_ = recv_buffer.opaque();
 +  size_t element_count = count * (primitive_util::IsComplexType(dtype) ? 2 : 1);
 +
-+  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
-+
 +  sycl_allgather(send_buffer_, recv_buffer_, element_count, dtype, gpu_stream,
-+                 comm_);
++                 reinterpret_cast<SyclComm*>(comm));
 +  return absl::OkStatus();
 +}
 +
-+absl::Status CclApi::AllToAll(bool has_split_dimension,
-+                              std::vector<const void*>& send_buffers,
-+                              std::vector<void*>& recv_buffers,
-+                              size_t element_count, PrimitiveType element_type,
-+                              NcclCommHandle comm, se::Stream* stream) {
-+  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
++absl::Status CclApi::AllToAll(void* send_buffers, size_t send_counts,
++                              void* recv_buffers, size_t recv_counts,
++                              PrimitiveType dtype, NcclCommHandle comm,
++                              se::Stream* stream) {
++#ifdef XLA_ENABLE_ONECCL
++  if (collective_use_oneccl_ || alltoall_use_oneccl_) {
++    TF_ASSIGN_OR_RETURN(ccl::datatype ccl_dtype, ToCclDataType(dtype, false));
++    ccl::communicator& ccl_comm =
++        *reinterpret_cast<ccl::communicator*>(comm->comm);
 +
-+  se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(stream);
-+
-+  element_count = element_count * (primitive_util::IsComplexType(element_type) ? 2 : 1);
-+
-+  if (has_split_dimension) {
-+    sycl_alltoall_split(send_buffers, recv_buffers, element_count, element_type,
-+                        gpu_stream, comm_);
-+  } else {
-+    sycl_alltoall(send_buffers, recv_buffers, element_count, element_type,
-+                  gpu_stream, comm_);
++    ccl::alltoall(send_buffers, recv_buffers, ToCclCount(dtype, send_counts),
++                  ccl_dtype, ccl_comm, ToCclStream(stream))
++        .wait();
++    return absl::OkStatus();
 +  }
++#endif
 +
 +  return absl::OkStatus();
 +}
@@ -252723,28 +252976,69 @@ index 0000000000..0ec895d732
 +                                       const std::optional<int64_t> target_id,
 +                                       NcclCommHandle comm,
 +                                       se::Stream* stream) {
-+  auto comm_ = reinterpret_cast<ncclComm_t>(comm);
-+
++#ifdef XLA_ENABLE_ONECCL
++  if (collective_use_oneccl_ || collectivepermute_use_oneccl_) {
++    ccl::group_start();
++    Send(src_addr, element_type, element_count, target_id.value(), comm, stream);
++    Recv(dest_addr, element_type, element_count, source_id.value(), comm, stream);
++    ccl::group_end();
++  }
++#endif
 +  se::gpu::GpuStreamHandle gpu_stream = se::gpu::AsGpuStreamValue(stream);
-+
-+  element_count = element_count * (primitive_util::IsComplexType(element_type) ? 2 : 1);
 +
 +  sycl_collective_permute(src_addr.opaque(), dest_addr.opaque(), element_count,
 +                          element_type, source_id, target_id, gpu_stream,
-+                          comm_);
++                          reinterpret_cast<SyclComm*>(comm));
 +
 +  return absl::OkStatus();
 +}
 +
-+absl::Status CclApi::Send(se::DeviceMemoryBase, PrimitiveType, size_t, int32_t,
-+                          NcclCommHandle, se::Stream*) {
-+  // Don't need now
++absl::Status CclApi::Send(se::DeviceMemoryBase send_buffer, PrimitiveType dtype,
++                          size_t count, int32_t peer, NcclCommHandle comm,
++                          se::Stream* stream) {
++#ifdef XLA_ENABLE_ONECCL
++  if (collective_use_oneccl_ || sendrecv_use_oneccl_) {
++    VLOG(3) << absl::StreamFormat(
++        "Launch OneCCL Send operation on device #%d; send_buffer=%p; dtype=%s; "
++        "count=%d; peer=%d; comm=%p; stream=%p",
++        stream->parent()->device_ordinal(), send_buffer.opaque(),
++        primitive_util::LowercasePrimitiveTypeName(dtype), count, peer, comm,
++        stream);
++
++    TF_ASSIGN_OR_RETURN(ccl::datatype ccl_dtype, ToCclDataType(dtype, false));
++
++    ccl::send(send_buffer.opaque(), ToCclCount(dtype, count), ccl_dtype, peer,
++              *reinterpret_cast<ccl::communicator*>(comm->comm),
++              ToCclStream(stream));
++    return absl::OkStatus();
++  }
++#endif
++
 +  return UnimplementedError("Send");
 +}
 +
-+absl::Status CclApi::Recv(se::DeviceMemoryBase, PrimitiveType, size_t, int32_t,
-+                          NcclCommHandle, se::Stream*) {
-+  // Don't need now
++absl::Status CclApi::Recv(se::DeviceMemoryBase recv_buffer, PrimitiveType dtype,
++                          size_t count, int32_t peer, NcclCommHandle comm,
++                          se::Stream* stream) {
++#ifdef XLA_ENABLE_ONECCL
++  if (collective_use_oneccl_ || sendrecv_use_oneccl_) {
++    VLOG(3) << absl::StreamFormat(
++        "Launch OneCCL Recv operation on device #%d; recv_buffer=%p; dtype=%s; "
++        "count=%d; peer=%d; comm=%p; stream=%p",
++        stream->parent()->device_ordinal(), recv_buffer.opaque(),
++        primitive_util::LowercasePrimitiveTypeName(dtype), count, peer, comm,
++        stream);
++
++    TF_ASSIGN_OR_RETURN(ccl::datatype ccl_dtype, ToCclDataType(dtype, false));
++
++    ccl::recv(recv_buffer.opaque(), ToCclCount(dtype, count), ccl_dtype, peer,
++              *reinterpret_cast<ccl::communicator*>(comm->comm),
++              ToCclStream(stream));
++
++    return absl::OkStatus();
++  }
++#endif
++
 +  return UnimplementedError("Recv");
 +}
 +
@@ -252760,10 +253054,6 @@ index 0000000000..0ec895d732
 +  return UnimplementedError("DeregisterBuffer");
 +}
 +
-+ncclComm_t CastCCLComm(CclApi::NcclCommHandle comm) {
-+  return reinterpret_cast<ncclComm_t>(comm);
-+}
-+
 +NcclApi* NcclApi::Default() {
 +  static auto* ccl_api = new CclApi();
 +  return ccl_api;
@@ -252772,10 +253062,10 @@ index 0000000000..0ec895d732
 +}  // namespace xla::gpu
 diff --git a/xla/service/gpu/runtime/ccl_api.h b/xla/service/gpu/runtime/ccl_api.h
 new file mode 100644
-index 0000000000..bb90373e1e
+index 0000000000..b5eebe3ce7
 --- /dev/null
 +++ b/xla/service/gpu/runtime/ccl_api.h
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,138 @@
 +/* Copyright (c) 2024 Intel Corporation
 +
 +Copyright 2019 The TensorFlow Authors. All Rights Reserved.
@@ -252800,14 +253090,21 @@ index 0000000000..bb90373e1e
 +
 +#include "absl/status/status.h"
 +#include "absl/status/statusor.h"
-+#include "xla/tsl/concurrency/ref_count.h"
 +#include "xla/service/collective_ops_utils.h"
 +#include "xla/service/gpu/ccl_ops.h"
 +#include "xla/service/gpu/runtime/nccl_api.h"
 +#include "xla/service/gpu/runtime/nccl_clique_key.h"
 +#include "xla/stream_executor/device_memory.h"
++#include "xla/stream_executor/gpu/gpu_executor.h"
 +#include "xla/stream_executor/gpu/gpu_stream.h"
 +#include "xla/stream_executor/stream.h"
++#include "xla/stream_executor/sycl/sycl_driver.h"
++#include "xla/tsl/concurrency/ref_count.h"
++#include "xla/tsl/util/env_var.h"
++
++#ifdef XLA_ENABLE_ONECCL
++#include "oneapi/ccl.hpp"
++#endif
 +
 +namespace xla::gpu {
 +//===----------------------------------------------------------------------===//
@@ -252818,14 +253115,7 @@ index 0000000000..bb90373e1e
 + public:
 +  CclApi();
 +
-+  absl::StatusOr<NcclCliqueId> GetUniqueId() final;
-+
-+  absl::StatusOr<NcclCliqueId> GetId(const NcclCliqueKey& key,
-+                                     const RunId& id) final;
-+
-+//   absl::StatusOr<OwnedNcclComm> CommInitRank(int32_t nranks,
-+//                                              const NcclCliqueId& clique_id,
-+//                                              int32_t rank);
++  absl::StatusOr<NcclCliqueId> GetUniqueId(const NcclCliqueKey& key) final;
 +
 +  absl::StatusOr<std::vector<OwnedNcclComm>> CommInitRanks(
 +      int32_t nranks, const NcclCliqueId& clique_id,
@@ -252851,9 +253141,8 @@ index 0000000000..bb90373e1e
 +                         NcclCommHandle comm, se::Stream* stream) final;
 +
 +  absl::Status Broadcast(se::DeviceMemoryBase send_buffer,
-+                         se::DeviceMemoryBase recv_buffer,
-+                         PrimitiveType dtype, size_t count,
-+                         size_t root, NcclCommHandle comm,
++                         se::DeviceMemoryBase recv_buffer, PrimitiveType dtype,
++                         size_t count, size_t root, NcclCommHandle comm,
 +                         se::Stream* stream) final;
 +
 +  absl::Status ReduceScatter(se::DeviceMemoryBase send_buffer,
@@ -252867,32 +253156,51 @@ index 0000000000..bb90373e1e
 +                         size_t count, NcclCommHandle comm,
 +                         se::Stream* stream) final;
 +
-+  absl::Status AllToAll(bool has_split_dimension,
-+                        std::vector<const void*>& send_buffers,
-+                        std::vector<void*>& recv_buffers, size_t element_count,
-+                        PrimitiveType element_type, NcclCommHandle comm,
-+                        se::Stream* stream);
++  absl::Status AllToAll(void* send_buffers,
++                        size_t send_counts,
++                        void* recv_buffers,
++                        size_t, PrimitiveType dtype,
++                        NcclCommHandle comm, se::Stream* stream);
 +
 +  absl::Status CollectivePermute(se::DeviceMemoryBase src_addr,
 +                                 se::DeviceMemoryBase dest_addr,
-+                                 size_t element_count, PrimitiveType element_type,
++                                 size_t element_count,
++                                 PrimitiveType element_type,
 +                                 const std::optional<int64_t> source_id,
 +                                 const std::optional<int64_t> target_id,
 +                                 NcclCommHandle comm, se::Stream* stream);
 +
-+  absl::Status Send(se::DeviceMemoryBase, PrimitiveType, size_t, int32_t,
-+                    NcclCommHandle, se::Stream*) final;
-+  absl::Status Recv(se::DeviceMemoryBase, PrimitiveType, size_t, int32_t,
-+                    NcclCommHandle, se::Stream*) final;
++  absl::Status Send(se::DeviceMemoryBase send_buffer, PrimitiveType dtype,
++                    size_t count, int32_t peer, NcclCommHandle comm,
++                    se::Stream* stream) final;
++
++  absl::Status Recv(se::DeviceMemoryBase recv_buffer, PrimitiveType dtype,
++                    size_t count, int32_t peer, NcclCommHandle comm,
++                    se::Stream* stream) final;
 +
 +  absl::StatusOr<NcclRegisteredBufferHandle> RegisterBuffer(
 +      NcclCommHandle, se::DeviceMemoryBase) final;
 +
 +  absl::StatusOr<NcclRegisteredBufferHandle> DeregisterBuffer(
 +      NcclCommHandle, NcclRegisteredBufferHandle) final;
-+};
-+
-+ncclComm_t CastCCLComm(CclApi::NcclCommHandle);
++#ifdef XLA_ENABLE_ONECCL
++ private:
++  // A hash map where key is the hash of NcclUniqueId and value is ccl::kvs.
++  // Since ccl::address_type is a string `ip:port` and each calling
++  // ccl::create_main_kvs() uses different port, it is safe to use it.
++  std::unordered_map<uint64_t, ccl::shared_ptr_class<ccl::kvs>> id_to_kvs_;
++  std::mutex mu_;
++  bool collective_use_oneccl_;
++  bool allreduce_use_oneccl_;
++  bool broadcast_use_oneccl_;
++  bool allgather_use_oneccl_;
++  bool reducescatter_use_oneccl_;
++  bool alltoall_use_oneccl_;
++  bool collectivepermute_use_oneccl_;
++  bool sendrecv_use_oneccl_;
++  bool need_oneccl_;
++#endif
++};  // CclApi
 +
 +}  // namespace xla::gpu
 +#endif  // XLA_SERVICE_GPU_RUNTIME_CCL_API_H_
@@ -258335,10 +258643,10 @@ index 0000000000..49abfa4636
 +}  // namespace xla::gpu
 diff --git a/xla/service/gpu/runtime/nccl_api.h b/xla/service/gpu/runtime/nccl_api.h
 new file mode 100644
-index 0000000000..c406f743da
+index 0000000000..50183c99fd
 --- /dev/null
 +++ b/xla/service/gpu/runtime/nccl_api.h
-@@ -0,0 +1,278 @@
+@@ -0,0 +1,274 @@
 +/* Copyright 2024 The OpenXLA Authors.
 +
 +Licensed under the Apache License, Version 2.0 (the "License");
@@ -258485,11 +258793,7 @@ index 0000000000..c406f743da
 +  // Creates a new unique clique id.
 +  //
 +  // https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api/comms.html#ncclgetuniqueid
-+  virtual absl::StatusOr<NcclCliqueId> GetUniqueId() = 0;
-+
-+  // Temporary function to get unique id for non-NCCL backend.
-+  virtual absl::StatusOr<NcclCliqueId> GetId(const NcclCliqueKey& key,
-+                                             const RunId& id) = 0;
++  virtual absl::StatusOr<NcclCliqueId> GetUniqueId(const NcclCliqueKey& key) = 0;
 +                                             
 +  // Creates new communicators for given devices.
 +  //
@@ -258798,10 +259102,10 @@ index 0000000000..b0cfad8fc2
 +}  // namespace xla::gpu
 diff --git a/xla/service/gpu/runtime/nccl_clique.cc b/xla/service/gpu/runtime/nccl_clique.cc
 new file mode 100644
-index 0000000000..d2a82d8211
+index 0000000000..cb72e02c79
 --- /dev/null
 +++ b/xla/service/gpu/runtime/nccl_clique.cc
-@@ -0,0 +1,545 @@
+@@ -0,0 +1,544 @@
 +/* Copyright 2024 The OpenXLA Authors.
 +
 +Licensed under the Apache License, Version 2.0 (the "License");
@@ -258878,9 +259182,8 @@ index 0000000000..d2a82d8211
 +         "GPU, the nccl_clique_id_callback must be provided by the client.";
 +
 +  static auto* local_callback =
-+      new NcclCliqueIdCallback([](const NcclCliqueKey& key, const RunId& id) {
-+        // return NcclApi::Default()->GetUniqueId();
-+        return NcclApi::Default()->GetId(key, id);
++      new NcclCliqueIdCallback([](const NcclCliqueKey& key) {
++        return NcclApi::Default()->GetUniqueId(key);
 +      });
 +  return local_callback;
 +}
@@ -259070,7 +259373,7 @@ index 0000000000..d2a82d8211
 +  // gives access to clique communicators.
 +  auto initialize = [&](absl::Span<const NcclApi::DeviceRank* const> args)
 +      -> absl::StatusOr<NcclClique::Lock> {
-+    TF_ASSIGN_OR_RETURN(auto clique_id, clique_id_callback(clique_key, run_id));
++    TF_ASSIGN_OR_RETURN(auto clique_id, clique_id_callback(clique_key));
 +
 +    std::vector<NcclApi::DeviceRank> ranks;
 +    ranks.reserve(args.size());
@@ -259349,7 +259652,7 @@ index 0000000000..d2a82d8211
 +}  // namespace xla::gpu
 diff --git a/xla/service/gpu/runtime/nccl_clique.h b/xla/service/gpu/runtime/nccl_clique.h
 new file mode 100644
-index 0000000000..ad0bd1fce2
+index 0000000000..f03685c72d
 --- /dev/null
 +++ b/xla/service/gpu/runtime/nccl_clique.h
 @@ -0,0 +1,174 @@
@@ -259384,8 +259687,8 @@ index 0000000000..ad0bd1fce2
 +#include "absl/status/statusor.h"
 +#include "absl/strings/str_format.h"
 +#include "xla/executable_run_options.h"
-+#include "xla/service/gpu/runtime/nccl_api.h"
 +#include "xla/service/gpu/runtime/ccl_api.h"
++#include "xla/service/gpu/runtime/nccl_api.h"
 +#include "xla/service/gpu/runtime/nccl_clique_key.h"
 +#include "xla/service/lockable.h"
 +#include "xla/stream_executor/stream_executor.h"
@@ -259529,10 +259832,10 @@ index 0000000000..ad0bd1fce2
 +#endif  // XLA_SERVICE_GPU_RUNTIME_NCCL_CLIQUE_H_
 diff --git a/xla/service/gpu/runtime/nccl_clique_key.cc b/xla/service/gpu/runtime/nccl_clique_key.cc
 new file mode 100644
-index 0000000000..a7b068c4a9
+index 0000000000..dedcd2dfd6
 --- /dev/null
 +++ b/xla/service/gpu/runtime/nccl_clique_key.cc
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,132 @@
 +/* Copyright 2024 The OpenXLA Authors.
 +
 +Licensed under the Apache License, Version 2.0 (the "License");
@@ -259656,13 +259959,21 @@ index 0000000000..a7b068c4a9
 +  return std::string(data_.data(), data_.size());
 +}
 +
++void NcclCliqueId::SetKey(const std::string& key) { key_ = key; }
++
++std::string NcclCliqueId::GetKey() const { return key_; }
++
++std::array<char, NcclCliqueId::kSize> NcclCliqueId::ToArray() const {
++  return data_;
++}
++
 +}  // namespace xla::gpu
 diff --git a/xla/service/gpu/runtime/nccl_clique_key.h b/xla/service/gpu/runtime/nccl_clique_key.h
 new file mode 100644
-index 0000000000..0dc2f64156
+index 0000000000..f86b0b481e
 --- /dev/null
 +++ b/xla/service/gpu/runtime/nccl_clique_key.h
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,174 @@
 +/* Copyright 2024 The OpenXLA Authors.
 +
 +Licensed under the Apache License, Version 2.0 (the "License");
@@ -259801,7 +260112,7 @@ index 0000000000..0dc2f64156
 +// A globally unique collective clique identifier.
 +class NcclCliqueId {
 + public:
-+  static constexpr int32_t kSize = 128;
++  static constexpr int32_t kSize = 256;
 +
 +  static absl::StatusOr<NcclCliqueId> FromString(std::string_view str);
 +
@@ -259809,10 +260120,17 @@ index 0000000000..0dc2f64156
 +  explicit NcclCliqueId(char bytes[kSize]);
 +
 +  absl::Span<const char> data() const;
++  std::array<char, kSize> ToArray() const;
 +  std::string ToString() const;
 +
 +  template <typename H>
 +  friend H AbslHashValue(H h, const NcclCliqueId& id);
++  
++
++  // save NcclCliqueKey for ccl_ops.h
++  void SetKey(const std::string& key);
++  std::string GetKey() const;
++  std::string key_;
 +
 + private:
 +  std::array<char, kSize> data_;
@@ -259825,8 +260143,7 @@ index 0000000000..0dc2f64156
 +
 +// A callback to get a unique clique id (see `ncclUniqueId` documentation).
 +using NcclCliqueIdCallback =  // NOLINT
-+    std::function<absl::StatusOr<NcclCliqueId>(const NcclCliqueKey&,
-+                                               const RunId&)>;
++    std::function<absl::StatusOr<NcclCliqueId>(const NcclCliqueKey&)>;
 +
 +}  // namespace xla::gpu
 +

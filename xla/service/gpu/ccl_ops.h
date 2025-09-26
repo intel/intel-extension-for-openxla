@@ -19,60 +19,54 @@ limitations under the License.
 #include "xla/service/collective_ops_utils.h"
 #include "xla/stream_executor/gpu/gpu_types.h"
 
-namespace ccl {
-struct communicator {
-  communicator(int nranks, int rank, const std::string id)
-      : nranks(nranks), rank(rank), id(id) {}
-  int nranks;
-  int rank;
-  const std::string id;
-};
-}  // namespace ccl
-
-using ncclComm_t = ccl::communicator*;
 #define MAX_RANK_SIZE 16
-
 #if !ITEX_USE_CCL
-
 namespace xla {
 namespace gpu {
+
+// Should be the same as NcclApi::NcclComm in ccl_api.cc
+struct SyclComm {
+  int nranks;
+  int rank;
+  std::string id;
+  void* comm; // point to ccl::communicator if ccl enabled
+};
 
 void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                     size_t element_count, PrimitiveType dtype,
                     ReductionKind reduction_kind,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
+                    se::gpu::GpuStreamHandle gpu_stream, SyclComm* comm);
 
 void sycl_broadcast(const void* send_buffer, void* recv_buffer,
                     size_t element_count, PrimitiveType dtype, size_t root,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
+                    se::gpu::GpuStreamHandle gpu_stream, SyclComm* comm);
 
 void sycl_allgather(const void* send_buffer, void* recv_buffer,
                     size_t element_count, PrimitiveType dtype,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
+                    se::gpu::GpuStreamHandle gpu_stream, SyclComm* comm);
 
 void sycl_alltoall(std::vector<const void*> send_buffer,
                    std::vector<void*> recv_buffer, size_t element_count,
                    PrimitiveType dtype, se::gpu::GpuStreamHandle gpu_stream,
-                   ncclComm_t comm);
+                   SyclComm* comm);
 
 void sycl_alltoall_split(std::vector<const void*> send_buffer,
                          std::vector<void*> recv_buffer, size_t element_count,
                          PrimitiveType dtype,
-                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
+                         se::gpu::GpuStreamHandle gpu_stream, SyclComm* comm);
 
 void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                          size_t element_count, PrimitiveType dtype,
                          ReductionKind reduction_kind,
-                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
+                         se::gpu::GpuStreamHandle gpu_stream, SyclComm* comm);
 
 void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
                              size_t element_count, PrimitiveType dtype,
                              const std::optional<int64_t>& source_id,
                              const std::optional<int64_t>& target_id,
                              se::gpu::GpuStreamHandle gpu_stream,
-                             ncclComm_t comm);
+                             SyclComm* comm);
 }  // namespace gpu
 }  // namespace xla
-
 #endif  // ITEX_USE_CCL
 #endif  // XLA_SERVICE_GPU_CCL_OPS_H_

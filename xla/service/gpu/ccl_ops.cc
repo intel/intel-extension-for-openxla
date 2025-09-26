@@ -604,7 +604,7 @@ void streamlist_wait_stream(se::gpu::GpuStreamHandle stream,
 void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                     size_t element_count, PrimitiveType dtype,
                     ReductionKind reduction_kind,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+                    se::gpu::GpuStreamHandle gpu_stream, SyclComm* comm) {
   CHECK_NE(comm->nranks, 1);
   gpu_stream
       ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
@@ -790,7 +790,7 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
 
 void sycl_broadcast(const void* send_buffer, void* recv_buffer,
                     size_t element_count, PrimitiveType dtype, size_t root,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+                    se::gpu::GpuStreamHandle gpu_stream, SyclComm* comm) {
   CHECK_NE(comm->nranks, 1);
   gpu_stream
       ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
@@ -897,7 +897,7 @@ void sycl_broadcast(const void* send_buffer, void* recv_buffer,
 
 void sycl_allgather(const void* send_buffer, void* recv_buffer,
                     size_t element_count, PrimitiveType dtype,
-                    se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+                    se::gpu::GpuStreamHandle gpu_stream, SyclComm* comm) {
   std::shared_ptr<Collective<Participant>> collective;
   bool rank_to_launch_kernel = false;
   {
@@ -965,7 +965,7 @@ void sycl_allgather(const void* send_buffer, void* recv_buffer,
 void sycl_alltoall(std::vector<const void*> send_buffers,
                    std::vector<void*> recv_buffers, size_t element_count,
                    PrimitiveType dtype, se::gpu::GpuStreamHandle gpu_stream,
-                   ncclComm_t comm) {
+                   SyclComm* comm) {
   CHECK_NE(comm->nranks, 1);
   gpu_stream
       ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
@@ -1072,7 +1072,7 @@ void sycl_alltoall(std::vector<const void*> send_buffers,
 void sycl_alltoall_split(std::vector<const void*> send_buffers,
                          std::vector<void*> recv_buffers, size_t element_count,
                          PrimitiveType dtype,
-                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+                         se::gpu::GpuStreamHandle gpu_stream, SyclComm* comm) {
   CHECK_NE(comm->nranks, 1);
   gpu_stream
       ->wait();  // TODO(intel):remove this wait once barrier bug is fixed.
@@ -1181,7 +1181,7 @@ void sycl_alltoall_split(std::vector<const void*> send_buffers,
 void sycl_reduce_scatter(const void* send_buffer, void* recv_buffer,
                          size_t element_count, PrimitiveType dtype,
                          ReductionKind reduction_kind,
-                         se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
+                         se::gpu::GpuStreamHandle gpu_stream, SyclComm* comm) {
   std::shared_ptr<Collective<Participant>> collective;
   bool rank_to_launch_kernel = false;
   {
@@ -1351,7 +1351,7 @@ void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
                              const std::optional<int64_t>& source_id,
                              const std::optional<int64_t>& target_id,
                              se::gpu::GpuStreamHandle gpu_stream,
-                             ncclComm_t comm) {
+                             SyclComm* comm) {
   std::shared_ptr<Collective<PermuteParticipant>> collective;
   bool rank_to_launch_kernel = false;
   {
@@ -1421,4 +1421,4 @@ void sycl_collective_permute(const void* send_buffer, void* recv_buffer,
 
 }  // namespace gpu
 }  // namespace xla
-#endif  // ITEX_USE_CCL
+#endif

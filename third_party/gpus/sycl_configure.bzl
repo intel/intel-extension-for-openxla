@@ -36,6 +36,12 @@ _GCC_HOST_COMPILER_PREFIX = "GCC_HOST_COMPILER_PREFIX"
 def _mkl_include_path(sycl_config):
     return sycl_config.mkl_include_dir
 
+def _ccl_include_path(sycl_config):
+    return sycl_config.ccl_include_dir
+
+def _ccl_library_path(sycl_config):
+    return sycl_config.ccl_library_dir
+
 def _mkl_library_path(sycl_config):
     return sycl_config.mkl_library_dir
 
@@ -79,6 +85,12 @@ def _enable_sycl(repository_ctx):
     if "TF_NEED_SYCL" in repository_ctx.os.environ:
         enable_sycl = repository_ctx.os.environ["TF_NEED_SYCL"].strip()
         return enable_sycl == "1"
+    return False
+
+def _enable_ccl(repository_ctx):
+    if "TF_NEED_CCL" in repository_ctx.os.environ:
+        enable_ccl = repository_ctx.os.environ["TF_NEED_CCL"].strip()
+        return enable_ccl == "1"
     return False
 
 def auto_configure_fail(msg):
@@ -217,6 +229,9 @@ def _find_libs(repository_ctx, sycl_config, bash_bin):
         libs_paths.append(("mkl_sycl_rng", _sycl_lib_paths(repository_ctx, "mkl_sycl_rng", mkl_path)))
         libs_paths.append(("mkl_sycl_stats", _sycl_lib_paths(repository_ctx, "mkl_sycl_stats", mkl_path)))
         libs_paths.append(("mkl_sycl_data_fitting", _sycl_lib_paths(repository_ctx, "mkl_sycl_data_fitting", mkl_path)))
+    if _enable_ccl(repository_ctx):
+        ccl_path = _ccl_library_path(sycl_config)
+        libs_paths.append(("ccl", _sycl_lib_paths(repository_ctx, "ccl", ccl_path)))
     l0_path = _l0_library_path(sycl_config)
     libs_paths.append(("ze_loader", _sycl_lib_paths(repository_ctx, "ze_loader", l0_path)))
     return _select_sycl_lib_paths(repository_ctx, libs_paths, bash_bin)
@@ -245,6 +260,8 @@ def _get_sycl_config(repository_ctx, bash_bin):
     sycl_basekit_version_number = config["sycl_basekit_version_number"]
     mkl_include_dir = config["mkl_include_dir"]
     mkl_library_dir = config["mkl_library_dir"]
+    ccl_include_dir = config["ccl_include_dir"] if _enable_ccl(repository_ctx) else ""
+    ccl_library_dir = config["ccl_library_dir"] if _enable_ccl(repository_ctx) else ""
     l0_include_dir = config["l0_include_dir"]
     l0_library_dir = config["l0_library_dir"]
     return struct(
@@ -254,6 +271,8 @@ def _get_sycl_config(repository_ctx, bash_bin):
         sycl_basekit_version_number = sycl_basekit_version_number,
         mkl_include_dir = mkl_include_dir,
         mkl_library_dir = mkl_library_dir,
+        ccl_include_dir = ccl_include_dir,
+        ccl_library_dir = ccl_library_dir,
         l0_include_dir = l0_include_dir,
         l0_library_dir = l0_library_dir,
     )
@@ -420,6 +439,13 @@ def _create_local_sycl_repository(repository_ctx):
         src_dir = _mkl_include_path(sycl_config),
         out_dir = "sycl/include",
     ))
+    if _enable_ccl(repository_ctx):
+        copy_rules.append(make_copy_dir_rule(
+            repository_ctx,
+            name = "ccl-include",
+            src_dir = _ccl_include_path(sycl_config),
+            out_dir = "ccl/include",
+        ))
     copy_rules.append(make_copy_dir_rule(
         repository_ctx,
         name = "level-zero-include",
@@ -447,6 +473,7 @@ def _create_local_sycl_repository(repository_ctx):
         {
             "%{sycl_is_configured}": "True",
             "%{sycl_build_is_configured}": "True",
+            "%{ccl_is_configured}": ("True" if _enable_ccl(repository_ctx) else "False"),
         },
     )
 
@@ -475,6 +502,18 @@ def _create_local_sycl_repository(repository_ctx):
         "%{level_zero_libs}": level_zero_libs,
         "%{level_zero_headers}": ('":level-zero-include"'),
     }
+    if _enable_ccl(repository_ctx):
+        ccl_libs = '"{}",\n'.format("sycl/lib/" + sycl_libs["ccl"].file_name,)
+        repository_dict.update({
+            "%{ccl_libs}": ccl_libs,
+            "%{ccl_headers}": ('":ccl-include"'),
+        })
+    else:
+        repository_dict.update({
+            "%{ccl_libs}": '',
+            "%{ccl_headers}": '',
+        })
+
     repository_ctx.template(
         "sycl/BUILD",
         tpl_paths["sycl:BUILD"],
@@ -507,6 +546,7 @@ def _create_local_sycl_repository(repository_ctx):
         "-DTENSORFLOW_USE_SYCL=1",
         "-DMKL_ILP64",
         "-fPIC",
+        "-DXLA_ENABLE_ONECCL" if _enable_ccl(repository_ctx) else "",
     ])
     sycl_defines["%{sycl_compiler_root}"] = str(sycl_config.sycl_toolkit_path)
     sycl_defines["%{SYCL_ROOT_DIR}"] = str(sycl_config.sycl_toolkit_path)

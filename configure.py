@@ -36,6 +36,7 @@ except ImportError:
 
 
 _DEFAULT_SYCL_TOOLKIT_PATH = '/opt/intel/oneapi/compiler/latest'
+_DEFAULT_CCL_TOOLKIT_PATH = '/opt/intel/oneapi/ccl/latest'
 _DEFAULT_AOT_CONFIG = ''
 _DEFAULT_GCC_TOOLCHAIN_PATH = ''
 _DEFAULT_GCC_TOOLCHAIN_TARGET = ''
@@ -702,6 +703,35 @@ def set_sycl_toolkit_path(environ_cp):
   write_action_env_to_bazelrc('LIBRARY_PATH',
                               lib_path)
 
+def set_ccl_toolkit_path(environ_cp):
+  """Set CCL_TOOLKIT_PATH."""
+
+  def toolkit_exists(toolkit_path):
+    """Check if a OneCCL toolkit path is valid."""
+    ccl_lib_path = 'lib/libccl.so'
+
+    ccl_lib_path_full = os.path.join(toolkit_path, ccl_lib_path)
+    exists = os.path.exists(ccl_lib_path_full)
+    if not exists:
+      print('Invalid OneCCL library path. %s cannot be found' %
+            (ccl_lib_path_full))
+      return False
+
+    return True
+
+  ccl_toolkit_path = prompt_loop_or_load_from_env(
+      environ_cp,
+      var_name='CCL_TOOLKIT_PATH',
+      var_default=_DEFAULT_CCL_TOOLKIT_PATH,
+      ask_for_var=(
+          'Please specify the location where OneCCL is installed.'),
+      check_success=toolkit_exists,
+      error_msg='Invalid OneCCL path.',
+      suppress_default_error=True)
+
+  write_action_env_to_bazelrc('CCL_TOOLKIT_PATH',
+                              ccl_toolkit_path)
+
 
 def system_specific_test_config(env):
   """Add default build and test flags required for TF tests to bazelrc."""
@@ -803,6 +833,10 @@ def main():
   else:
     print('CPU is not supported.')
     sys.exit(1)
+  
+  set_action_env_var(environ_cp, 'TF_NEED_CCL', 'OneCCL', False)
+  if environ_cp.get('TF_NEED_CCL') == '1':
+    set_ccl_toolkit_path(environ_cp)
 
   set_cc_opt_flags()
   set_system_libs_flag(environ_cp)

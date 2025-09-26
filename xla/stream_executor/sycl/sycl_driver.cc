@@ -15,6 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "xla/stream_executor/sycl/sycl_driver.h"
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -58,27 +60,6 @@ limitations under the License.
 
 namespace stream_executor {
 namespace gpu {
-
-ScopedActivateContext::ScopedActivateContext(GpuContext* context) {}
-ScopedActivateContext::~ScopedActivateContext() {}
-
-class GpuContext {
- public:
-  GpuContext(sycl::device* d, sycl::context* c) : device_(d), context_(c) {}
-
-  sycl::device* device() const { return device_; }
-  sycl::context* context() const { return context_; }
-
-  // Disallow copying and moving.
-  GpuContext(GpuContext&&) = delete;
-  GpuContext(const GpuContext&) = delete;
-  GpuContext& operator=(GpuContext&&) = delete;
-  GpuContext& operator=(const GpuContext&) = delete;
-
- private:
-  sycl::device* device_;
-  sycl::context* context_;
-};
 
 namespace {
 
