@@ -369,6 +369,15 @@ index 20b0abb..b19ecc1 100644
  
  
  def get_coords(device: jax.Device) -> HardwareMesh:
+@@ -314,7 +314,7 @@ def default_mesh(num_partitions: int,
+ 
+   if platform == 'cpu':
+     return get_cpu_mesh()
+-  elif platform == 'gpu':
++  elif platform == 'gpu' or 'sycl':
+     return get_gpu_mesh(num_partitions)
+ 
+   mps = None
 diff --git a/t5x/utils.py b/t5x/utils.py
 index eb3f1aa..69cd5f9 100644
 --- a/t5x/utils.py
