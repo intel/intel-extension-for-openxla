@@ -112,7 +112,7 @@ class PerformanceCallback(keras.callbacks.Callback):
     def on_train_end(self, logs=None):
         print("[INFO] Average Lantency of each steps is : {} ms.".format(str(self.total_time/(self.total_steps-self.warmup_steps)/1000000)))
 
-print("[INFO] Using devices:", keras.distribution.list_devices("xpu")[:args.num_gpus])
+print("[INFO] Using devices:", keras.distribution.list_devices("sycl")[:args.num_gpus])
 
 if args.dtype == "bfloat16":
     print("[INFO] Using bfloat16 datatype.")
@@ -130,13 +130,13 @@ if args.data_parallel * args.model_parallel != args.num_gpus:
 if args.num_gpus > 1:
     print("[INFO] Using data_parallel = {} and model_parallel = {}.".format(str(args.data_parallel), str(args.model_parallel)))
     if args.model_parallel == 1:
-        data_parallel = keras.distribution.DataParallel(devices=keras.distribution.list_devices("xpu")[:args.num_gpus])
+        data_parallel = keras.distribution.DataParallel(devices=keras.distribution.list_devices("sycl")[:args.num_gpus])
         keras.distribution.set_distribution(data_parallel)
     else:
         device_mesh = keras.distribution.DeviceMesh(
             (args.data_parallel, args.model_parallel),
             ["batch", "model"],
-            devices=keras.distribution.list_devices("xpu")[:args.num_gpus])
+            devices=keras.distribution.list_devices("sycl")[:args.num_gpus])
 
         model_dim = "model"
         layout_map = keras.distribution.LayoutMap(device_mesh)
