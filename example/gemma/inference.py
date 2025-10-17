@@ -52,6 +52,8 @@ args = parser.parse_args()
 
 if args.dtype == "bfloat16":
   keras.config.set_floatx("bfloat16")
+data_parallel = keras.distribution.DataParallel(devices=keras.distribution.list_devices("sycl"))
+keras.distribution.set_distribution(data_parallel) 
 model = keras_nlp.models.GemmaCausalLM.from_preset(MODEL_CLASSES[args.model])
 if args.num_beams > 1:
   from keras_nlp.samplers import BeamSampler
