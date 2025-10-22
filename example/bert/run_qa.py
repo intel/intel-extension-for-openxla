@@ -850,13 +850,14 @@ def main():
     # endregion
 
     # region Training steps and logging init
-    train_dataset = processed_raw_datasets["train"]
+    if training_args.do_train:
+        train_dataset = processed_raw_datasets["train"]
     if training_args.do_eval:
         eval_dataset = processed_raw_datasets["validation"]
 
     # Log a few random samples from the training set:
-    for index in random.sample(range(len(train_dataset)), 3):
-        logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
+    #for index in random.sample(range(len(train_dataset)), 3):
+    #    logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
     # Define a summary writer
     has_tensorboard = is_tensorboard_available()
@@ -910,17 +911,33 @@ def main():
         seed=training_args.seed,
         dtype=getattr(jnp, model_args.dtype),
     )
+    if training_args.do_train:
+        learning_rate_fn = create_learning_rate_fn(
+            len(train_dataset),
+            train_batch_size,
+            training_args.num_train_epochs,
+            training_args.warmup_steps,
+            training_args.learning_rate,
+        )
 
-    learning_rate_fn = create_learning_rate_fn(
-        len(train_dataset),
-        train_batch_size,
-        training_args.num_train_epochs,
-        training_args.warmup_steps,
-        training_args.learning_rate,
-    )
-
-    state = create_train_state(model, learning_rate_fn, num_labels=max_seq_length, training_args=training_args)
+        state = create_train_state(model, learning_rate_fn, num_labels=max_seq_length, training_args=training_args)
     # endregion
+
+    if training_args.do_eval and not training_args.do_train:
+        class EvalState(train_state.TrainState):
+            # we only need logits_fn for eval
+            logits_fn: Callable = struct.field(pytree_node=False)
+
+        # tx with 0.0 lr is fine; we won't be applying grads in eval.
+        dummy_tx = optax.sgd(0.0)
+
+        state = EvalState.create(
+            apply_fn=model.__call__,
+            params=model.params,
+            tx=dummy_tx,
+            logits_fn=lambda logits: logits,
+        )
+        state = replicate(state)
 
     # region Define train step functions
     def train_step(
@@ -956,115 +973,119 @@ def main():
     # endregion
 
     # region Define train and eval loop
-    logger.info(f"===== Starting training ({num_epochs} epochs) =====")
-    train_time = 0
 
     # make sure weights are replicated on each device
-    state = replicate(state)
+    if training_args.do_train:
+        logger.info(f"===== Starting training ({num_epochs} epochs) =====")
+        train_time = 0
+        state = replicate(state)
 
-    train_time = 0
-    total_train_time = 0
-    step_per_epoch = len(train_dataset) // train_batch_size
-    total_steps = step_per_epoch * num_epochs
-    epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
-    for epoch in epochs:
-        last_time = train_start = time.time()
-        train_metrics = []
+        train_time = 0
+        total_train_time = 0
+        if training_args.do_train:
+            step_per_epoch = len(train_dataset) // train_batch_size
+        elif training_args.do_eval:
+            step_per_epoch = len(eval_dataset) // train_batch_size
+        total_steps = step_per_epoch * num_epochs
+        epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
+        for epoch in epochs:
+            last_time = train_start = time.time()
+            train_metrics = []
 
-        # Create sampling rng
-        rng, input_rng = jax.random.split(rng)
+            # Create sampling rng
+            rng, input_rng = jax.random.split(rng)
 
-        # train
-        for step, batch in enumerate(
-            tqdm(
-                train_data_collator(input_rng, train_dataset, train_batch_size),
-                total=step_per_epoch,
-                desc="Training...",
-                position=1,
-            ),
-            1,
-        ):
-            state, train_metric, dropout_rngs = p_train_step(state, batch, dropout_rngs)
-            train_metrics.append(train_metric)
-
-            cur_step = epoch * step_per_epoch + step
-
-            # Print performance result
-            cur_time = time.time()
-            if cur_step > training_args.warmup_steps:
-                total_train_time += (cur_time - last_time)
-            last_time = cur_time
-
-
-            if cur_step % training_args.logging_steps == 0 and cur_step > 0:
-                # Save metrics
-                train_metric = unreplicate(train_metric)
-                train_time += time.time() - train_start
-                if has_tensorboard and jax.process_index() == 0:
-                    write_train_metric(summary_writer, train_metrics, train_time, cur_step)
-
-                epochs.write(
-                    f"Step... ({cur_step}/{total_steps} | Training Loss: {train_metric['loss']}, Learning Rate:"
-                    f" {train_metric['learning_rate']})"
-                )
-
-                train_metrics = []
-
-            if (
-                training_args.do_eval
-                and (cur_step % training_args.eval_steps == 0 or cur_step % step_per_epoch == 0)
-                and cur_step > 0
+            # train
+            for step, batch in enumerate(
+                tqdm(
+                    train_data_collator(input_rng, train_dataset, train_batch_size),
+                    total=step_per_epoch,
+                    desc="Training...",
+                    position=1,
+                ),
+                1,
             ):
-                eval_metrics = {}
-                all_start_logits = []
-                all_end_logits = []
-                # evaluate
-                for batch in tqdm(
-                    eval_data_collator(eval_dataset, eval_batch_size),
-                    total=math.ceil(len(eval_dataset) / eval_batch_size),
-                    desc="Evaluating ...",
-                    position=2,
-                ):
-                    _ = batch.pop("example_id")
-                    predictions = pad_shard_unpad(p_eval_step)(
-                        state, batch, min_device_batch=per_device_eval_batch_size
+                state, train_metric, dropout_rngs = p_train_step(state, batch, dropout_rngs)
+                train_metrics.append(train_metric)
+
+                cur_step = epoch * step_per_epoch + step
+
+                # Print performance result
+                cur_time = time.time()
+                if cur_step > training_args.warmup_steps:
+                    total_train_time += (cur_time - last_time)
+                last_time = cur_time
+
+
+                if cur_step % training_args.logging_steps == 0 and cur_step > 0:
+                    # Save metrics
+                    train_metric = unreplicate(train_metric)
+                    train_time += time.time() - train_start
+                    if has_tensorboard and jax.process_index() == 0:
+                        write_train_metric(summary_writer, train_metrics, train_time, cur_step)
+
+                    epochs.write(
+                        f"Step... ({cur_step}/{total_steps} | Training Loss: {train_metric['loss']}, Learning Rate:"
+                        f" {train_metric['learning_rate']})"
                     )
-                    start_logits = np.array(predictions[0])
-                    end_logits = np.array(predictions[1])
-                    all_start_logits.append(start_logits)
-                    all_end_logits.append(end_logits)
 
-                max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
+                    train_metrics = []
 
-                # concatenate the numpy array
-                start_logits_concat = create_and_fill_np_array(all_start_logits, eval_dataset, max_len)
-                end_logits_concat = create_and_fill_np_array(all_end_logits, eval_dataset, max_len)
+                if (
+                    training_args.do_eval
+                    and (cur_step % training_args.eval_steps == 0 or cur_step % step_per_epoch == 0)
+                    and cur_step > 0
+                ):
+                    eval_metrics = {}
+                    all_start_logits = []
+                    all_end_logits = []
+                    # evaluate
+                    for batch in tqdm(
+                        eval_data_collator(eval_dataset, eval_batch_size),
+                        total=math.ceil(len(eval_dataset) / eval_batch_size),
+                        desc="Evaluating ...",
+                        position=2,
+                    ):
+                        _ = batch.pop("example_id")
+                        predictions = pad_shard_unpad(p_eval_step)(
+                            state, batch, min_device_batch=per_device_eval_batch_size
+                        )
+                        start_logits = np.array(predictions[0])
+                        end_logits = np.array(predictions[1])
+                        all_start_logits.append(start_logits)
+                        all_end_logits.append(end_logits)
 
-                # delete the list of numpy arrays
-                del all_start_logits
-                del all_end_logits
-                outputs_numpy = (start_logits_concat, end_logits_concat)
-                prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
-                eval_metrics = compute_metrics(prediction)
+                    max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
 
-                logger.info(f"Step... ({cur_step}/{total_steps} | Evaluation metrics: {eval_metrics})")
+                    # concatenate the numpy array
+                    start_logits_concat = create_and_fill_np_array(all_start_logits, eval_dataset, max_len)
+                    end_logits_concat = create_and_fill_np_array(all_end_logits, eval_dataset, max_len)
 
-                if has_tensorboard and jax.process_index() == 0:
-                    write_eval_metric(summary_writer, eval_metrics, cur_step)
+                    # delete the list of numpy arrays
+                    del all_start_logits
+                    del all_end_logits
+                    outputs_numpy = (start_logits_concat, end_logits_concat)
+                    prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
+                    eval_metrics = compute_metrics(prediction)
 
-            if (cur_step % training_args.save_steps == 0 and cur_step > 0) or (cur_step == total_steps):
-                # save checkpoint after each epoch and push checkpoint to the hub
-                if jax.process_index() == 0:
-                    params = jax.device_get(unreplicate(state.params))
-                    model.save_pretrained(training_args.output_dir, params=params)
-                    tokenizer.save_pretrained(training_args.output_dir)
-                    if training_args.push_to_hub:
-                        repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
-        epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
-        throughput = format((total_steps - training_args.warmup_steps) / total_train_time, '.4f')
-        epochs.write(f"Performance... {throughput} iter/s")
+                    logger.info(f"Step... ({cur_step}/{total_steps} | Evaluation metrics: {eval_metrics})")
 
-    # endregion
+                    if has_tensorboard and jax.process_index() == 0:
+                        write_eval_metric(summary_writer, eval_metrics, cur_step)
+
+                if (cur_step % training_args.save_steps == 0 and cur_step > 0) or (cur_step == total_steps):
+                    # save checkpoint after each epoch and push checkpoint to the hub
+                    if jax.process_index() == 0:
+                        params = jax.device_get(unreplicate(state.params))
+                        model.save_pretrained(training_args.output_dir, params=params)
+                        tokenizer.save_pretrained(training_args.output_dir)
+                        if training_args.push_to_hub:
+                            repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
+            epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
+            throughput = format((total_steps - training_args.warmup_steps) / total_train_time, '.4f')
+            epochs.write(f"Performance... {throughput} iter/s")
+
+        # endregion
 
     # Eval after training
     if training_args.do_eval:
@@ -1072,16 +1093,39 @@ def main():
         all_start_logits = []
         all_end_logits = []
 
+        # --- Performance tracking ---
+        WARMUP_STEPS_EVAL = 5  # ignore first N batches for timing
+        batch_durations = []   # model-only per-batch times (seconds)
+        batch_sizes = []       # actual examples per batch (after last partial)
+        per_example_lat_ms = []  # per-example latency (ms) per batch
+        tokens_processed = 0   # tokens/sec
+        batches_seen = 0
+
         eval_loader = eval_data_collator(eval_dataset, eval_batch_size)
         for batch in tqdm(
             eval_loader, total=math.ceil(len(eval_dataset) / eval_batch_size), desc="Evaluating ...", position=2
         ):
             _ = batch.pop("example_id")
+            bsz = len(next(iter(batch.values())))
+            batch_sizes.append(bsz)
+            seq_len = batch.get("attention_mask", batch["input_ids"]).shape[1]
+            tokens_processed += int(bsz * seq_len)
+
+            t0 = time.perf_counter()
             predictions = pad_shard_unpad(p_eval_step)(state, batch, min_device_batch=per_device_eval_batch_size)
+            t1 = time.perf_counter()
+
             start_logits = np.array(predictions[0])
             end_logits = np.array(predictions[1])
             all_start_logits.append(start_logits)
             all_end_logits.append(end_logits)
+
+            # record timing after warmup
+            if batches_seen >= WARMUP_STEPS_EVAL:
+                dur = t1 - t0
+                batch_durations.append(dur)
+                per_example_lat_ms.append((dur / bsz) * 1e3)
+            batches_seen += 1
 
         max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
 
@@ -1095,6 +1139,29 @@ def main():
         outputs_numpy = (start_logits_concat, end_logits_concat)
         prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
         eval_metrics = compute_metrics(prediction)
+
+        # --- Summarize performance ---
+        total_effective_examples = sum(batch_sizes[WARMUP_STEPS_EVAL:]) if len(batch_sizes) > WARMUP_STEPS_EVAL else 0
+        total_model_time = float(np.sum(batch_durations)) if batch_durations else 0.0
+        throughput_eps = (total_effective_examples / total_model_time) if total_model_time > 0 else 0.0
+        tokens_per_s = (tokens_processed / (total_model_time + 1e-12)) if batch_durations else 0.0
+
+        # latency percentiles (ms per example)
+        if per_example_lat_ms:
+            p50 = float(np.percentile(per_example_lat_ms, 50))
+            p90 = float(np.percentile(per_example_lat_ms, 90))
+            p99 = float(np.percentile(per_example_lat_ms, 99))
+            mean_lat = float(np.mean(per_example_lat_ms))
+        else:
+            p50 = p90 = p99 = float("nan")
+
+        # print to logs
+        logger.info(
+            "Eval performance (excluding %d warmup batches): "
+            "Throughput=%.2f ex/s, tokens/sec=%.2f, Latency=%.2fms p50=%.2fms p90=%.2fms p99=%.2fms; "
+            "Accuracy: %s",
+            WARMUP_STEPS_EVAL, throughput_eps, tokens_per_s, mean_lat, p50, p90, p99, eval_metrics,
+        )
 
         if jax.process_index() == 0:
             eval_metrics = {f"eval_{metric_name}": value for metric_name, value in eval_metrics.items()}
