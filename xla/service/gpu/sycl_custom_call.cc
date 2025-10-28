@@ -154,8 +154,7 @@ XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(),
 static absl::Status SyclGemm(se::Stream* stream,
                              se::OwningScratchAllocator<> scratch_allocator,
                              ffi::RemainingArgs args,
-                             ffi::RemainingResults rets,
-                             ffi::Dictionary dict) {
+                             ffi::RemainingResults rets, ffi::Dictionary dict) {
   ffi::BufferBase lhs = *args.get<ffi::BufferBase>(0);
   ffi::BufferBase rhs = *args.get<ffi::BufferBase>(1);
   ffi::BufferBase output = *rets.get<ffi::BufferBase>(0);

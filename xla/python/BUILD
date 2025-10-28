@@ -4,8 +4,8 @@ tsl_pybind_extension(
     name = "xpu_plugin_extension",
     srcs = ["xpu_plugin_extension.cc"],
     deps = [
+        "@com_google_absl//absl/status",
         "@nanobind",
-        "@xla//xla:status",
         "@xla//xla:util",
         "@xla//xla/ffi/api:c_api",
         "@xla//xla/pjrt/c:pjrt_c_api_gpu_extension_hdrs",

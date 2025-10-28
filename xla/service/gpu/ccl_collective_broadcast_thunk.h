@@ -1,6 +1,6 @@
 /* Copyright (c) 2024 Intel Corporation
 
-Copyright 2024 The OpenXLA Authors. 
+Copyright 2024 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,14 +23,13 @@ limitations under the License.
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/gpu/ccl_collective_thunk.h"
 
-
 namespace xla::gpu {
 // Thunk that performs a NCCL-based collective broadcast.
 class NcclCollectiveBroadcastStartThunk : public NcclCollectiveThunk {
  public:
-  static Status CheckImplementable(const HloInstruction* instr,
-                                   int64_t replica_count,
-                                   int64_t partition_count);
+  static absl::Status CheckImplementable(const HloInstruction* instr,
+                                         int64_t replica_count,
+                                         int64_t partition_count);
 
   static CollectiveOpGroupMode GetGroupMode(
       const HloCollectiveBroadcastInstruction* inst);
@@ -46,17 +45,19 @@ class NcclCollectiveBroadcastStartThunk : public NcclCollectiveThunk {
       std::vector<Buffer> buffers);
 
  protected:
-  Status RunNcclCollective(const ExecuteParams& params, se::Stream& stream,
-                           NcclApi::NcclCommHandle comm) override;
+  absl::Status RunNcclCollective(const ExecuteParams& params,
+                                 se::Stream& stream,
+                                 NcclApi::NcclCommHandle comm) override;
 
  private:
   const NcclCollectiveConfig config_;
   const std::vector<Buffer> buffers_;
 };
 
-Status RunCollectiveBroadcast(std::vector<DeviceBufferPair>& buffers,
-                              se::Stream& stream, NcclApi::NcclCommHandle comm,
-                              NcclApi* nccl_api);
+absl::Status RunCollectiveBroadcast(std::vector<DeviceBufferPair>& buffers,
+                                    se::Stream& stream,
+                                    NcclApi::NcclCommHandle comm,
+                                    NcclApi* nccl_api);
 
 }  // namespace xla::gpu
 

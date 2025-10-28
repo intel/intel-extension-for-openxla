@@ -10,6 +10,9 @@ load(
     "@xla//third_party/tsl/third_party/gpus:cuda_configure.bzl",
     "make_copy_dir_rule",
     "make_copy_files_rule",
+)
+load(
+    "@xla//third_party/tsl/third_party/gpus:compiler_common_tools.bzl",
     "to_list_of_strings",
 )
 load(

@@ -43,8 +43,7 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
 
 void sycl_broadcast(const void* send_buffer, void* recv_buffer,
-                    size_t element_count, PrimitiveType dtype,
-                    size_t root,
+                    size_t element_count, PrimitiveType dtype, size_t root,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm);
 
 void sycl_allgather(const void* send_buffer, void* recv_buffer,

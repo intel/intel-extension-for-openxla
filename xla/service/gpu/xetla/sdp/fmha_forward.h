@@ -584,6 +584,9 @@ void fmha_forward_impl(sycl::queue& q, T* query, T* key, T* value, T* bias,
   // fmha forward kernel
   using fmha_forward_op_t =
       fmha_forward_t<fmha_policy, T, kUseBias, kIsCausal, kIsTraining>;
+  syclex::properties fmha_properties{intelex::fp_control <
+                                         intelex::fp_mode::round_downward |
+                                     intelex::fp_mode::denorm_ftz > };
 
   sycl::nd_range<3> NdRange =
       fmha_forward_op_t::get_nd_range(num_batches * num_heads, num_queries);
@@ -591,18 +594,19 @@ void fmha_forward_impl(sycl::queue& q, T* query, T* key, T* value, T* bias,
   auto event = q.submit([&](sycl::handler& cgh) {
     cgh.parallel_for<class FmhaForwardKernel<
         fmha_policy, T, kUseBias, kIsCausal, kIsDropout, kIsTraining>>(
-        NdRange, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
-      // exec item
-      sycl::nd_item<3> ei(item);
+        NdRange, fmha_properties, [=](sycl::nd_item<3> item) SYCL_ESIMD_KERNEL {
+          // exec item
+          sycl::nd_item<3> ei(item);
 
-      // init fmha forward op and arguments
-      fmha_forward_op_t fmha_fwd_op;
-      typename fmha_forward_op_t::arguments_t args(
-          query, key, value, bias, dropout, dropout_prob, out, activation_ptr,
-          num_batches, num_heads, head_size, num_queries, num_keys, head_scale);
+          // init fmha forward op and arguments
+          fmha_forward_op_t fmha_fwd_op;
+          typename fmha_forward_op_t::arguments_t args(
+              query, key, value, bias, dropout, dropout_prob, out,
+              activation_ptr, num_batches, num_heads, head_size, num_queries,
+              num_keys, head_scale);
 
-      // call the functor
-      fmha_fwd_op(ei, args);
+          // call the functor
+          fmha_fwd_op(ei, args);
         });
   });
 }

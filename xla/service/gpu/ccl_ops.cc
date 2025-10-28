@@ -250,8 +250,8 @@ struct BroadcastKernel;
 
 template <typename T>
 void broadcast_dpcpp(se::gpu::GpuStreamHandle stream, size_t element_count,
-                     std::vector<Participant>& participants, int root,
-                     int rank, int reduction_size) {
+                     std::vector<Participant>& participants, int root, int rank,
+                     int reduction_size) {
   if (reduction_size <= MAX_RANK_SIZE) {
     const T* in_ptr = static_cast<const T*>(participants[root].send);
     T* out_ptr = static_cast<T*>(participants[rank].recv);
@@ -789,8 +789,7 @@ void sycl_allreduce(const void* send_buffer, void* recv_buffer,
 }
 
 void sycl_broadcast(const void* send_buffer, void* recv_buffer,
-                    size_t element_count, PrimitiveType dtype,
-                    size_t root,
+                    size_t element_count, PrimitiveType dtype, size_t root,
                     se::gpu::GpuStreamHandle gpu_stream, ncclComm_t comm) {
   CHECK_NE(comm->nranks, 1);
   gpu_stream
@@ -815,8 +814,9 @@ void sycl_broadcast(const void* send_buffer, void* recv_buffer,
         Manager::instance().collectives.erase(comm->id);
         auto& p = collective->participants;
         std::sort(p.begin(), p.end(),
-                  [](const Participant& a, const Participant& b)
-                      -> bool { return a.rank < b.rank; });
+                  [](const Participant& a, const Participant& b) -> bool {
+                    return a.rank < b.rank;
+                  });
         collective->ready_to_launch = true;
         collective->cv.notify_all();
       }
@@ -836,43 +836,43 @@ void sycl_broadcast(const void* send_buffer, void* recv_buffer,
 
   if (dtype == PRED)
     broadcast_dpcpp<bool>(gpu_stream, element_count, p, root, comm->rank,
-                         comm->nranks);
+                          comm->nranks);
   else if (dtype == BF16)
     broadcast_dpcpp<bfloat16>(gpu_stream, element_count, p, root, comm->rank,
-                             comm->nranks);
+                              comm->nranks);
   else if (dtype == F16)
     broadcast_dpcpp<float16>(gpu_stream, element_count, p, root, comm->rank,
-                            comm->nranks);
+                             comm->nranks);
   else if (dtype == F32 || dtype == C64)
     broadcast_dpcpp<float>(gpu_stream, element_count, p, root, comm->rank,
-                          comm->nranks);
+                           comm->nranks);
   else if (dtype == F64 || dtype == C128)
     broadcast_dpcpp<double>(gpu_stream, element_count, p, root, comm->rank,
-                           comm->nranks);
+                            comm->nranks);
   else if (dtype == S8)
     broadcast_dpcpp<int8_t>(gpu_stream, element_count, p, root, comm->rank,
-                           comm->nranks);
+                            comm->nranks);
   else if (dtype == S16)
     broadcast_dpcpp<int16_t>(gpu_stream, element_count, p, root, comm->rank,
-                            comm->nranks);
+                             comm->nranks);
   else if (dtype == S32)
     broadcast_dpcpp<int32_t>(gpu_stream, element_count, p, root, comm->rank,
-                            comm->nranks);
+                             comm->nranks);
   else if (dtype == S64)
     broadcast_dpcpp<int64_t>(gpu_stream, element_count, p, root, comm->rank,
-                            comm->nranks);
+                             comm->nranks);
   else if (dtype == U8)
     broadcast_dpcpp<uint8_t>(gpu_stream, element_count, p, root, comm->rank,
-                            comm->nranks);
+                             comm->nranks);
   else if (dtype == U16)
     broadcast_dpcpp<uint16_t>(gpu_stream, element_count, p, root, comm->rank,
-                             comm->nranks);
+                              comm->nranks);
   else if (dtype == U32)
     broadcast_dpcpp<uint32_t>(gpu_stream, element_count, p, root, comm->rank,
-                             comm->nranks);
+                              comm->nranks);
   else if (dtype == U64)
     broadcast_dpcpp<uint64_t>(gpu_stream, element_count, p, root, comm->rank,
-                             comm->nranks);
+                              comm->nranks);
   else
     LOG(FATAL) << "PrimitiveType "
                << primitive_util::LowercasePrimitiveTypeName(dtype)

@@ -25,8 +25,6 @@ limitations under the License.
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/cublas_cudnn.h"
 #include "xla/service/gpu/gpu_fused_mha_runner.h"
-#include "xla/status.h"
-#include "xla/statusor.h"
 #include "xla/stream_executor/dnn.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/types.h"

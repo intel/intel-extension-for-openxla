@@ -1,6 +1,6 @@
 /* Copyright (c) 2024 Intel Corporation
 
-Copyright 2024 The OpenXLA Authors. 
+Copyright 2024 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,18 +22,17 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "tsl/platform/errors.h"
+#include "tsl/platform/statusor.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/gpu/runtime/ccl_api.h"
 #include "xla/service/gpu/runtime/nccl_api.h"
 #include "xla/service/gpu/runtime/thunk.h"
-#include "xla/status.h"
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla::gpu {
 
@@ -45,10 +44,10 @@ NcclCollectiveBroadcastStartThunk::NcclCollectiveBroadcastStartThunk(
       config_(GetNcclCollectiveConfig(instr, std::nullopt)),
       buffers_(std::move(buffers)) {}
 
-/*static*/ Status NcclCollectiveBroadcastStartThunk::CheckImplementable(
+/*static*/ absl::Status NcclCollectiveBroadcastStartThunk::CheckImplementable(
     const HloInstruction* instr, int64_t replica_count,
     int64_t partition_count) {
-  return OkStatus();
+  return absl::OkStatus();
 }
 
 /*static*/ CollectiveOpGroupMode
@@ -57,7 +56,7 @@ NcclCollectiveBroadcastStartThunk::GetGroupMode(
   return GetNcclCollectiveConfig(inst, std::nullopt).group_mode;
 }
 
-Status NcclCollectiveBroadcastStartThunk::RunNcclCollective(
+absl::Status NcclCollectiveBroadcastStartThunk::RunNcclCollective(
     const ExecuteParams& params, se::Stream& stream,
     NcclApi::NcclCommHandle comm) {
   TF_ASSIGN_OR_RETURN(
@@ -67,9 +66,10 @@ Status NcclCollectiveBroadcastStartThunk::RunNcclCollective(
                                             nccl_api());
 }
 
-Status RunCollectiveBroadcast(std::vector<DeviceBufferPair>& buffers,
-                              se::Stream& stream, NcclApi::NcclCommHandle comm,
-                              NcclApi* nccl_api) {
+absl::Status RunCollectiveBroadcast(std::vector<DeviceBufferPair>& buffers,
+                                    se::Stream& stream,
+                                    NcclApi::NcclCommHandle comm,
+                                    NcclApi* nccl_api) {
   for (auto buffer : buffers) {
     se::DeviceMemoryBase src_addr = buffer.source_buffer;
     se::DeviceMemoryBase dest_addr = buffer.destination_buffer;
