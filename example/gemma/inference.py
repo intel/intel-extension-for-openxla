@@ -53,7 +53,7 @@ args = parser.parse_args()
 if args.dtype == "bfloat16":
   keras.config.set_floatx("bfloat16")
 data_parallel = keras.distribution.DataParallel(devices=keras.distribution.list_devices("sycl"))
-keras.distribution.set_distribution(data_parallel) 
+keras.distribution.set_distribution(data_parallel)
 model = keras_nlp.models.GemmaCausalLM.from_preset(MODEL_CLASSES[args.model])
 if args.num_beams > 1:
   from keras_nlp.samplers import BeamSampler
@@ -67,24 +67,37 @@ prompt = prompt_pool[args.input_tokens]
 total_time = 0.0
 num_iter = args.num_iter
 num_warmup = args.num_warmup
-prompt = [prompt] * args.batch_size
+num_devices = jax.device_count()
+per_device_batch = num_devices * args.batch_size
+global_batch = per_device_batch  # will stay 1 unless you implement real multi-device generate
+prompt_list = [prompt] * global_batch
+
 total_list = []
-output = model.generate(prompt, max_length=int(args.max_new_tokens)+int(args.input_tokens))
+
+for i in range(args.num_warmup):
+  output = model.generate(prompt_list, max_length=int(args.max_new_tokens)+int(args.input_tokens))
+
+measured_iters = 0
+
 for i in range(num_iter):
   tic = time.time()
-  if i == 5 and False:
-    jax.profiler.start_trace("./profile_data_bs4")
+
   output = model.generate(
-    prompt, max_length=int(args.max_new_tokens)+int(args.input_tokens)
+    prompt_list, max_length=int(args.max_new_tokens)+int(args.input_tokens)
   )
   print(output)
-  if i == 5 and False:
-    jax.profiler.stop_trace()
   toc = time.time()
-  print("Iteration: %d, Time: %.6f sec" % (i, toc - tic), flush = True)
-  if i >= num_warmup:
-    total_time += toc - tic
+  iter_lat = toc - tic
+  print(f"Iteration {i}: {iter_lat:.6f} s len of outputs = {len(output)}", flush=True)
+  measured_iters += 1
+  total_time += iter_lat
 
-print("\n", "-" * 10, "Summary:", "-" * 10)
-latency = total_time / (num_iter - num_warmup)
-print("Inference latency: %.3f sec." % latency)
+
+avg_iter_latency = total_time / measured_iters
+per_sample_latency = avg_iter_latency / global_batch
+throughput = global_batch / avg_iter_latency
+
+print("\n---------- Summary (predict forward) ----------", flush=True)
+print(f"Average iteration latency: {avg_iter_latency:.6f} s", flush=True)
+print(f"Per-sample latency: {per_sample_latency:.6f} s", flush=True)
+print(f"Throughput: {throughput:.3f} samples/s", flush=True)
