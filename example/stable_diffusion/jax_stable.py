@@ -36,6 +36,7 @@ parser.add_argument("--profile", action="store_true")
 parser.add_argument('--pipeline_mode', choices=["img2img", "text2img"],
                     default="text2img", type=str, help='evaluation method')
 parser.add_argument("--accuracy", action="store_true")
+parser.add_argument("--per-device-batch-size", default=1, type=int, help="batch size per device")
 args = parser.parse_args()
 print(args, file=sys.stderr)
 
@@ -59,8 +60,11 @@ if args.pipeline_mode == "img2img":
 
 prng_seed = jax.random.PRNGKey(0)
 
-num_samples = jax.device_count()
+num_devices = jax.device_count()
+per_device_batch = args.per_device_batch_size
+num_samples = num_devices * per_device_batch
 prompt = num_samples * [prompt]
+
 
 if args.pipeline_mode == "img2img":    
     init_image = num_samples * [init_image]
@@ -73,6 +77,8 @@ else:
 params = replicate(params)
 prng_seed = jax.random.split(prng_seed, jax.device_count())
 prompt_ids = shard(prompt_ids)
+print(f'prompt ids {prompt_ids.shape}', flush=True)
+# print(f'prompt_ids shape {prompt_ids.shape}')
 
 def elapsed_time(num_iter=10, num_inference_steps=20):
     # warmup
@@ -98,10 +104,20 @@ def elapsed_time(num_iter=10, num_inference_steps=20):
 
 num_inference_steps = args.num_inference_steps
 num_iter = args.num_iter
-latency, images = elapsed_time(num_iter, num_inference_steps)
-print("Average Latency per image is: {:.3f} s".format(latency), file=sys.stderr)
-print("Average Throughput per second is: {:.3f} steps".format(1 / latency * num_inference_steps), file=sys.stderr)
-images = images.reshape((images.shape[0],) + images.shape[-3:])
+latency, images = elapsed_time(num_iter, num_inference_steps)                     
+per_sample_latency = latency / num_samples
+samples_per_second = num_samples / latency
+steps_per_second = (num_samples * num_inference_steps) / latency
+
+print(f"Avg Latency ({num_samples}): {latency:.3f} s", file=sys.stderr)
+print(f"Per-sample latency: {per_sample_latency:.3f} s", file=sys.stderr)
+print(f"Sample throughput: {samples_per_second:.3f} samples/sec", file=sys.stderr)
+print(f"Steps throughput steps/sec (all samples): {steps_per_second:.3f}", file=sys.stderr)
+
+
+# print("Average Latency per image is: {:.3f} s".format(latency), file=sys.stderr)
+# print("Average Throughput per second is: {:.3f} steps".format(1 / latency * num_inference_steps), file=sys.stderr)
+images = images.reshape((num_devices * per_device_batch,) + images.shape[-3:])
 images = pipeline.numpy_to_pil(images)
 images[0].save("img.png")
 

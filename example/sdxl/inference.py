@@ -57,6 +57,9 @@ default_guidance_scale = 5.0
 num_steps = args.num_inference_steps
 print("dtype:", args.dtype)
 
+num_devices = jax.device_count()
+num_samples = num_devices  # 1 sample per device
+
 def tokenize_prompt(prompt, neg_prompt):
     prompt_ids = pipeline.prepare_inputs(prompt)
     neg_prompt_ids = pipeline.prepare_inputs(neg_prompt)
@@ -82,6 +85,9 @@ def generate(
     prompt_ids, neg_prompt_ids = tokenize_prompt(prompt, negative_prompt)
     prompt_ids, neg_prompt_ids, rng = replicate_all(prompt_ids, neg_prompt_ids, seed)
     
+
+    print(f'prompt id shape {prompt_ids.shape}', flush=True)
+
     start = time.time()
     print("Compiling ...")
     images = pipeline(
@@ -109,14 +115,26 @@ def generate(
             jit=True,
         ).images
         images.block_until_ready()
-        print("Latency of iter {}: {:.3f}s".format(i, time.time() - cur), file=sys.stderr)
-    
+        print("Latency of iter {}: {:.3f}s output shape {}".format(i, time.time() - cur, images.shape), file=sys.stderr)
+
     end = time.time()
     return (end - start) / num_iters, images
 
 latency, images = generate(default_prompt, default_neg_prompt)
-print("Average Latency per image is: {:.3f} s".format(latency), file=sys.stderr)
-print("Average Throughput per second is: {:.3f} steps".format(1 / latency * num_steps), file=sys.stderr)
+
+per_sample_latency = latency / num_samples
+samples_per_second = num_samples / latency
+steps_per_second = (num_samples * num_steps) / latency
+
+print(f"Avg Latency ({num_samples} samples): {latency:.3f} s", file=sys.stderr)
+print(f"Per-sample latency: {per_sample_latency:.3f} s", file=sys.stderr)
+print(f"Sample throughput: {samples_per_second:.3f} samples/sec", file=sys.stderr)
+print(f"Steps throughput steps/sec (all samples): {steps_per_second:.3f}", file=sys.stderr)
+
+
+
+# print("Average Latency per image is: {:.3f} s".format(latency), file=sys.stderr)
+# print("Average Throughput per second is: {:.3f} steps".format(1 / latency * num_steps), file=sys.stderr)
 images = images.reshape((images.shape[0] * images.shape[1],) + images.shape[-3:])
 images = pipeline.numpy_to_pil(np.array(images))
 images[0].save("castle.png")

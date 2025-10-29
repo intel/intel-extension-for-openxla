@@ -89,11 +89,11 @@ global_batch = jax.device_count() * args.batch_size
 base_input_ids = tokenizer([prompt] * global_batch, return_tensors="np").input_ids  # (global_batch, seq_len)
 input_ids = shard(base_input_ids)  # (n_devices, per_device_batch, seq_len)
 print("---- Prompt global size:", base_input_ids.shape, " sharded ->", input_ids.shape, flush=True)
-print('start replication')
+print('start replication',flush=True)
 replicated_params = replicate(model.params)  # replicate params for data parallel inference
 prng_keys = jax.random.split(jax.random.PRNGKey(0), jax.device_count())  # one key per device
 
-print('Completed replication')
+print('Completed replication',flush=True)
 max_new_tokens = args.max_new_tokens
 num_beams = 1 if args.greedy else 4
 
