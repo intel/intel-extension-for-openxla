@@ -68,8 +68,8 @@ total_time = 0.0
 num_iter = args.num_iter
 num_warmup = args.num_warmup
 num_devices = jax.device_count()
-per_device_batch = num_devices * args.batch_size
-global_batch = per_device_batch  # will stay 1 unless you implement real multi-device generate
+per_device_batch = args.batch_size
+global_batch = per_device_batch * num_devices
 prompt_list = [prompt] * global_batch
 
 total_list = []
@@ -97,7 +97,6 @@ avg_iter_latency = total_time / measured_iters
 per_sample_latency = avg_iter_latency / global_batch
 throughput = global_batch / avg_iter_latency
 
-print("\n---------- Summary (predict forward) ----------", flush=True)
-print(f"Average iteration latency: {avg_iter_latency:.6f} s", flush=True)
+print(f"Average latency: {avg_iter_latency:.6f} s", flush=True)
 print(f"Per-sample latency: {per_sample_latency:.6f} s", flush=True)
 print(f"Throughput: {throughput:.3f} samples/s", flush=True)
