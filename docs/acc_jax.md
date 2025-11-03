@@ -10,6 +10,7 @@ Please check the [Requirements section](../README.md#2-requirements) for the har
 The following table tracks intel-extension-for-openxla versions and compatible versions of `jax` and `jaxlib`. The compatibility between `jax` and `jaxlib` is maintained through JAX. This version restriction will be relaxed over time as the plugin API matures.
 |**intel-extension-for-openxla**|**jaxlib**|**jax**|
 |:-:|:-:|:-:|
+| 0.7.0 | 0.5.0 | 0.5.0 |
 | 0.6.0 | 0.4.38 | 0.4.38 |
 | 0.5.0 | 0.4.30 | >= 0.4.30, <= 0.4.31|
 | 0.4.0 | 0.4.26 | >= 0.4.26, <= 0.4.27|
