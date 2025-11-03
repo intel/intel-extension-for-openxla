@@ -37,7 +37,7 @@ Verified Hardware Platforms:
 * Ubuntu 22.04, SUSE Linux Enterprise Server(SLES) 15 SP4
   * Intel® Data Center GPU Max Series
 * [Intel® Deep Learning Essentials 2025.1](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?packages=dl-essentials&dl-lin=offline&dl-essentials-os=linux)
-* Jax/Jaxlib 0.4.38
+* Jax/Jaxlib 0.5.0
 * Python 3.10-3.13
 * pip 19.0 or later (requires manylinux2014 support)
 
@@ -78,6 +78,7 @@ Please refer to [test/requirements.txt](test/requirements.txt) for the version d
 The following table tracks intel-extension-for-openxla versions and compatible versions of `jax` and `jaxlib`. The compatibility between `jax` and `jaxlib` is maintained through JAX. This version restriction will be relaxed over time as the plugin API matures.
 |**intel-extension-for-openxla**|**jaxlib**|**jax**|
 |:-:|:-:|:-:|
+| 0.7.0 | 0.5.0 | 0.5.0 |
 | 0.6.0 | 0.4.38 | 0.4.38 |
 | 0.5.0 | 0.4.30 | >= 0.4.30, <= 0.4.31|
 | 0.4.0 | 0.4.26 | >= 0.4.26, <= 0.4.27|
