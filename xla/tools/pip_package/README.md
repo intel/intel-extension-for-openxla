@@ -13,6 +13,7 @@ Intel® Extension for OpenXLA* includes PJRT plugin implementation, which seamle
 The following table tracks intel-extension-for-openxla versions and compatible versions of jax, jaxlib.
 | **intel-extension-for-openxla** | **jaxlib** | **jax** |
 |:-:|:-:|:-:|
+| 0.7.0 | 0.5.0 | 0.5.0 |
 | 0.6.0 | 0.4.38 | 0.4.38 |
 | 0.5.0 | 0.4.30 | >= 0.4.30, <= 0.4.31|
 | 0.4.0 | 0.4.26 | >= 0.4.26, <= 0.4.27|
