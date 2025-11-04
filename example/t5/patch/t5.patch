@@ -1,5 +1,5 @@
 diff --git a/setup.py b/setup.py
-index 37238ba..6a97d34 100644
+index 37238ba..d76f36f 100644
 --- a/setup.py
 +++ b/setup.py
 @@ -27,8 +27,8 @@ from version import __version__  # pylint: disable=g-import-not-at-top
@@ -347,10 +347,10 @@ index df07d24..9449d8d 100644
        return_all_decodes: bool = False,
        num_decodes: int = 1,
 diff --git a/t5x/partitioning.py b/t5x/partitioning.py
-index 20b0abb..b19ecc1 100644
+index 20b0abb..23541a7 100644
 --- a/t5x/partitioning.py
 +++ b/t5x/partitioning.py
-@@ -78,13 +78,13 @@ def bounds_from_last_device(last_device: jax.Device) -> HardwareMesh:
+@@ -78,19 +78,19 @@ def bounds_from_last_device(last_device: jax.Device) -> HardwareMesh:
    # Must be passed the device at the highest-coordinate corner of the
    # relevant mesh, which is a requirement we know is satisfied by the last
    # device in jax.devices().
@@ -369,6 +369,14 @@ index 20b0abb..b19ecc1 100644
  
  
  def get_coords(device: jax.Device) -> HardwareMesh:
+   """Returns the coordinates of the given device."""
+-  if hasattr(device, 'coords'):
+-    return (*device.coords, device.core_on_chip)
++  # if hasattr(device, 'coords'):
++  #   return (*device.coords, device.core_on_chip)
+   return (device.process_index, device.id % jax.local_device_count())
+ 
+ 
 @@ -314,7 +314,7 @@ def default_mesh(num_partitions: int,
  
    if platform == 'cpu':
