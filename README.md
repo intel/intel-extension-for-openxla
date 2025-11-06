@@ -36,7 +36,7 @@ Verified Hardware Platforms:
   * Intel® Data Center GPU Flex Series
 * Ubuntu 22.04, SUSE Linux Enterprise Server(SLES) 15 SP4
   * Intel® Data Center GPU Max Series
-* [Intel® Deep Learning Essentials 2025.1](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?packages=dl-essentials&dl-lin=offline&dl-essentials-os=linux)
+* [Intel® oneAPI Base Toolkit 2025.2.1](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?packages=oneapi-toolkit&oneapi-toolkit-os=linux&oneapi-lin=offline)
 * Jax/Jaxlib 0.5.0
 * Python 3.10-3.13
 * pip 19.0 or later (requires manylinux2014 support)
@@ -53,25 +53,26 @@ Verified Hardware Platforms:
 ### Install Intel® Deep Learning Essentials Packages
 
 Need to install components of Intel® Deep Learning Essentials:
-
 * Intel® oneAPI DPC++ Compiler
 * Intel® oneAPI Math Kernel Library (oneMKL)
 
+Navigate to [Intel® oneAPI Base Toolkit selector webpage](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html?packages=oneapi-toolkit&oneapi-toolkit-os=linux&oneapi-lin=offline)
+* Select version 2025.2.1 and download the offline installer
+
 ```bash
-$ wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/e04d067d-4bce-4eed-a6fc-80a5df45c78c/intel-deep-learning-essentials-2025.1.0.581_offline.sh
 # 2 components are necessary: DPC++/C++ Compiler and oneMKL
-sudo sh ./intel-deep-learning-essentials-2025.1.0.581_offline.sh -a --silent --eula accept
+sudo sh ./intel-deep-learning-essentials-2025.2.1.44_offline.sh -a --silent --eula accept
 
 # Source OneAPI env
-source /opt/intel/oneapi/compiler/2025.1/env/vars.sh
-source /opt/intel/oneapi/mkl/2025.1/env/vars.sh
+source /opt/intel/oneapi/compiler/2025.2/env/vars.sh
+source /opt/intel/oneapi/mkl/2025.2/env/vars.sh
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/intel/oneapi/umf/latest/lib
 ```
 
 ### Install Jax and Jaxlib
 
 ```bash
-pip install -r https://raw.githubusercontent.com/intel/intel-extension-for-openxla/main/test/requirements.txt
+pip install -r https://raw.githubusercontent.com/intel/intel-extension-for-openxla/blob/r0.7/test/requirements.txt
 ```
 Please refer to [test/requirements.txt](test/requirements.txt) for the version dependency of `jax`, `jaxlib` and `flax`.
 
@@ -103,7 +104,7 @@ git clone https://github.com/intel/intel-extension-for-openxla.git
 ./configure        # Choose Yes for all.
 bazel build //xla/tools/pip_package:build_pip_package
 ./bazel-bin/xla/tools/pip_package/build_pip_package ./
-pip install intel_extension_for_openxla-0.6.0-cp312-cp312-linux_x86_64.whl
+pip install intel_extension_for_openxla-0.7.0-cp312-cp312-linux_x86_64.whl
 ```
 
 **Aditional Build Option**:
@@ -119,7 +120,7 @@ bazel build --override_repository=xla=/path/to/xla //xla/tools/pip_package:build
 By default, bazel will automatically search for the required libraries on your system. This eliminates the need for manual configuration in most cases. For more advanced use cases, you can specify a custom location for the libraries using environment variables:
 
 ```bash
-export MKL_INSTALL_PATH=/opt/intel/oneapi/mkl/2025.1
+export MKL_INSTALL_PATH=/opt/intel/oneapi/mkl/2025.2
 export L0_INSTALL_PATH=/usr
 bazel build //xla/tools/pip_package:build_pip_package
 ```
