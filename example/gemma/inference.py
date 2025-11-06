@@ -2,12 +2,13 @@ import os
 os.environ["KERAS_BACKEND"] = "jax"
 import time
 import json
-import pathlib
+from pathlib import Path
 import argparse
 import sys
 import keras
-import keras_nlp
+import keras_hub
 import jax
+import kagglehub
 
 MODEL_CLASSES = {
   "gemma_2b": "gemma_2b_en",
@@ -50,11 +51,30 @@ parser.add_argument("--num-warmup", default=3, type=int, help="num warmup")
 parser.add_argument("--batch-size", default=1, type=int, help="batch size")
 args = parser.parse_args()
 
-if args.dtype in ("bfloat16", "float16"):
-  keras.config.set_floatx(args.dtype)
-model = keras_nlp.models.GemmaCausalLM.from_preset(MODEL_CLASSES[args.model])
+preset = MODEL_CLASSES[args.model]
+
+assets_dir = kagglehub.model_download(f"keras/gemma/keras/{preset}")
+spm_path = Path(assets_dir) / "assets" / "tokenizer" / "vocabulary.spm"
+if not spm_path.exists():
+  raise FileNotFoundError(f"vocabulary.spm not found under: {spm_path}")
+
+# Build tokenizer & preprocessor explicitly (no Keras deserializer involved)
+Tokenizer = getattr(keras_hub.models, "GemmaTokenizer")
+Preprocessor = getattr(keras_hub.models, "GemmaCausalLMPreprocessor")
+
+with open(spm_path, "rb") as f:
+  spm_proto = f.read()
+
+tokenizer = Tokenizer(proto=spm_proto, dtype="int32")
+preproc = Preprocessor(tokenizer=tokenizer)
+
+keras.config.set_dtype_policy(args.dtype)
+model = keras_hub.models.GemmaCausalLM.from_preset(
+    preset, preprocessor=preproc, load_weights=True, dtype=args.dtype
+)
+
 if args.num_beams > 1:
-  from keras_nlp.samplers import BeamSampler
+  from keras_hub.samplers import BeamSampler
   print("beam")
   model.compile(sampler=BeamSampler(num_beams=args.num_beams))
 current_path = os.path.dirname(__file__)
@@ -70,14 +90,10 @@ total_list = []
 output = model.generate(prompt, max_length=int(args.max_new_tokens)+int(args.input_tokens))
 for i in range(num_iter):
   tic = time.time()
-  if i == 5 and False:
-    jax.profiler.start_trace("./profile_data_bs4")
   output = model.generate(
     prompt, max_length=int(args.max_new_tokens)+int(args.input_tokens)
   )
   print(output)
-  if i == 5 and False:
-    jax.profiler.stop_trace()
   toc = time.time()
   print("Iteration: %d, Time: %.6f sec" % (i, toc - tic), flush = True)
   if i >= num_warmup:
