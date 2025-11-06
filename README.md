@@ -98,6 +98,19 @@ pip install --upgrade intel-extension-for-openxla
 
 ### Install from Source Build
 
+**Build oneCCL from source**:
+
+```bash
+git clone -b master https://github.com/uxlfoundation/oneCCL liboneccl
+cd liboneccl
+mkdir build
+cd ./build
+cmake .. -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCOMPUTE_BACKEND=dpcpp
+make -j 
+make install
+source _install/env/vars.sh
+```
+
 **NOTE: Extra software (GCC 10.0.0 or later) is required if want to build from source.**
 ```bash
 git clone https://github.com/intel/intel-extension-for-openxla.git
@@ -123,19 +136,6 @@ By default, bazel will automatically search for the required libraries on your s
 export MKL_INSTALL_PATH=/opt/intel/oneapi/mkl/2025.2
 export L0_INSTALL_PATH=/usr
 bazel build //xla/tools/pip_package:build_pip_package
-```
-
-**Build oneCCL from source**:
-
-```bash
-git clone -b master https://github.com/uxlfoundation/oneCCL liboneccl
-cd liboneccl
-mkdir build
-cd ./build
-cmake .. -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCOMPUTE_BACKEND=dpcpp
-make -j 
-make install
-source _install/env/vars.sh
 ```
 
 ## 4. Run JAX Example
