@@ -114,7 +114,7 @@ source _install/env/vars.sh
 **NOTE: Extra software (GCC 10.0.0 or later) is required if want to build from source.**
 ```bash
 git clone https://github.com/intel/intel-extension-for-openxla.git
-./configure        # Choose Yes for all.
+./configure        # Choose Yes for all. Please configure with oneCCL locally installed path at {...}/liboneccl/build/_install
 bazel build //xla/tools/pip_package:build_pip_package
 ./bazel-bin/xla/tools/pip_package/build_pip_package ./
 pip install intel_extension_for_openxla-0.7.0-cp312-cp312-linux_x86_64.whl
