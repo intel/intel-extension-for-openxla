@@ -48,7 +48,7 @@ sed -i 's/"inputs": .*, "targets": .*}/"inputs": '${INPUT_LENGTH}', "targets": '
 PREC="bfloat16"        # Precision (float32, float16, bfloat16)
 
 
-NUM_GPUS=2      # Number of GPUs (1, 2, 4, 8)
+NUM_GPUS=4      # Number of GPUs (1, 2, 4, 8)
 BSIZE_PER_GPU=1 # Batch size per GPU (varies with model size)
 T5_NAME=flan-t5-$MODEL_SIZE
 GIN_FILE="${T5X_DIR}/../xl_infer.gin"
