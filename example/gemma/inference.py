@@ -102,3 +102,6 @@ for i in range(num_iter):
 print("\n", "-" * 10, "Summary:", "-" * 10)
 latency = total_time / (num_iter - num_warmup)
 print("Inference latency: %.3f sec." % latency)
+
+throughput = (args.batch_size * (num_iter - num_warmup)) / total_time
+print("Throughput: %.3f sequences/sec" % throughput)
