@@ -27,7 +27,7 @@ index 00000000..732185c4
 +import os
 +import numpy as np
 +import keras
-+import keras_nlp
++import keras_hub
 +from keras import ops
 +from lm_eval.base import BaseLM
 +from tqdm import tqdm
@@ -37,10 +37,10 @@ index 00000000..732185c4
 +class Gemma(BaseLM):
 +    def __init__(self, model_name="gemma_2b_en", dtype="bfloat16", num_beams=1, **kwargs):
 +        super().__init__()
-+        keras.config.set_floatx(dtype)
-+        self.model = keras_nlp.models.GemmaCausalLM.from_preset(model_name)
++        keras.config.set_dtype_policy(dtype)
++        self.model = keras_hub.models.GemmaCausalLM.from_preset(model_name, dtype=dtype)
 +        if num_beams > 1:
-+            from keras_nlp.samplers import BeamSampler
++            from keras_hub.samplers import BeamSampler
 +            self.model.compile(sampler=BeamSampler(num_beams=num_beams))
 +
 +    @property

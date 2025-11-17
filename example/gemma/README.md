@@ -17,10 +17,6 @@ Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```bash
 cd <WORKSPACE>/example/gemma/
 pip install keras==3.3.2
-git clone https://github.com/keras-team/keras-nlp.git
-cd keras-nlp
-git checkout v0.10.0
-git apply ../keras_nlp.patch
 python setup.py install
 cd ..
 pip install -r ../../test/requirements.txt
@@ -150,6 +146,7 @@ git checkout b281b0921b636bc36ad05c0b0b0763bd6dd43463
 git apply ../gemma.patch
 pip install -r requirements.txt
 pip install torch --index-url https://download.pytorch.org/whl/cpu --force-reinstall
+pip install keras keras-hub
 export KERAS_BACKEND=jax
 python main.py \
   --model gemma \
