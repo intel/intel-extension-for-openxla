@@ -17,9 +17,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
   "--dtype",
   type=str,
-  choices=["bfloat16", "float16"],
+  choices=["bfloat16", "float16", "float32"],
   default="bfloat16",
-  help="bfloat16, float16",
+  help="bfloat16, float16, float32",
 )
 parser.add_argument("--num-iter", default=1, type=int, help="num iter")
 parser.add_argument("--num-inference-steps", default=25, type=int, help="inference steps")
@@ -28,7 +28,7 @@ parser.add_argument("--accuracy", action="store_true")
 args = parser.parse_args()
 print(args, file=sys.stderr)
 
-dtype = jax.numpy.bfloat16 if args.dtype == "bfloat16" else jax.numpy.float16
+dtype = {"bfloat16": jax.numpy.bfloat16, "float16": jax.numpy.float16, "float32": jax.numpy.float32}[args.dtype]
 
 pipeline, params = FlaxStableDiffusionXLPipeline.from_pretrained(
     "stabilityai/stable-diffusion-xl-base-1.0",

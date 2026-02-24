@@ -27,9 +27,9 @@ parser.add_argument(
 parser.add_argument(
   "--dtype",
   type=str,
-  choices=["float32", "bfloat16"],
+  choices=["float32", "float16", "bfloat16"],
   default="float32",
-  help="bfloat16, float32",
+  help="bfloat16, float16, float32",
 )
 parser.add_argument(
   "--input-tokens",
@@ -50,8 +50,8 @@ parser.add_argument("--num-warmup", default=3, type=int, help="num warmup")
 parser.add_argument("--batch-size", default=1, type=int, help="batch size")
 args = parser.parse_args()
 
-if args.dtype == "bfloat16":
-  keras.config.set_floatx("bfloat16")
+if args.dtype in ("bfloat16", "float16"):
+  keras.config.set_floatx(args.dtype)
 model = keras_nlp.models.GemmaCausalLM.from_preset(MODEL_CLASSES[args.model])
 if args.num_beams > 1:
   from keras_nlp.samplers import BeamSampler
