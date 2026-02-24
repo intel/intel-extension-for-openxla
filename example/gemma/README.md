@@ -29,7 +29,7 @@ pip install -r ../../test/requirements.txt
 ### Options
 ```
 --model: The model name. Choices are "gemma_2b", "gemma_7b", "gemma_2b_it", "gemma_7b_it". Default is "gemma_2b".
---dtype: The data type. Choices are "float32", "bfloat16". Default is "float32".
+--dtype: The data type. Choices are "float32", "float16", "bfloat16". Default is "float32".
 --input-tokens: The length of input tokens. Choices are "32", "64", "128", "256", "512", "1024", "2016", "2017", "2048", "4096", "8192". Default is "32".
 --max-new-tokens: The maximum number of new tokens to generate. Default is 32.
 --prompt: The input prompt for self-defined if needed.

@@ -35,7 +35,7 @@ pip install -r ../../test/requirements.txt
 ### 2. Options
 
 ```
---dtype: Support bfloat16 and float16, default is bfloat16.
+--dtype: Support bfloat16, float16, and float32, default is bfloat16.
 --num-iter: The number of times to run generation, default is 1.
 --num-inference-steps: The inference steps for each generated image, default is 25.
 --accuracy: Check whether the demo result is expected. Output range is `0`~`1`, higher is better.
@@ -56,6 +56,7 @@ Average Throughput per second is: x.xxx steps
 ```
 
 ### Accuracy
+**Note:** The reference image (`target.png`) was generated with the default `bfloat16` dtype. The expected accuracy score only applies when running with `--dtype=bfloat16`. Other dtypes will produce different images and lower NRMSE scores.
 ```
 RMSE accuracy is: 0.979
 ```

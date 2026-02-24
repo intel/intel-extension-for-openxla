@@ -29,7 +29,7 @@ import argparse
 # args
 parser = argparse.ArgumentParser("Stable diffusion generation script", add_help=False)
 parser.add_argument("-m", "--model-id", default="CompVis/stable-diffusion-v1-4", type=str, 
-    choices=["CompVis/stable-diffusion-v1-4", "stabilityai/stable-diffusion-2", "stabilityai/stable-diffusion-2-1"])
+    choices=["CompVis/stable-diffusion-v1-4"])
 parser.add_argument("--num-inference-steps", default=50, type=int, help="inference steps")
 parser.add_argument("--num-iter", default=10, type=int, help="num iter")
 parser.add_argument("--profile", action="store_true")
