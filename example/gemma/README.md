@@ -16,11 +16,12 @@ export KAGGLE_KEY=xxxxxxxx
 Mark `intel-extension-for-openxla` folder as \<WORKSPACE\>, then
 ```bash
 cd <WORKSPACE>/example/gemma/
-pip install keras==3.3.2
-python setup.py install
-cd ..
+pip install keras>=3.13 keras-hub kagglehub
+pip install tensorflow==2.19.1 tensorflow-text==2.19.0 protobuf==5.29.5
 pip install -r ../../test/requirements.txt
 ```
+
+**Note**: `tensorflow>=2.20` causes a protobuf C++ symbol conflict with the Intel extension. Use `tensorflow==2.19.1`.
 
 ### Options
 ```
