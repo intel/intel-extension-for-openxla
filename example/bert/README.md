@@ -31,7 +31,7 @@ cd -
 ### Running command
 ```bash
 python run_qa.py \
- --model_name_or_path <WORKSPACE>/example/bert/models \
+ --model_name_or_path bert-base-uncased \
  --dataset_name squad \
  --do_train \
  --per_device_train_batch_size 8 \
