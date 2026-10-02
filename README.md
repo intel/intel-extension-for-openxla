@@ -7,7 +7,7 @@
 >
 >**Getting started**
 >* See the [JAX Intel GPU installation guide](https://docs.jax.dev/en/latest/installation.html#intel-gpu).
->* For runtime compatibility and required driver versions, see the [oneAPI JAX release notes](https://github.com/Intel-tensorflow/jax/releases).
+>* For runtime compatibility, required driver versions and known limitations, see the [oneAPI JAX release notes](https://github.com/Intel-tensorflow/jax/releases).
 >* Going forward, please report issues through [JAX GitHub Issues](https://github.com/jax-ml/jax/issues) or [XLA GitHub issues](https://github.com/openxla/xla/issues) using `oneAPI` in the issue title for Intel GPU-related issues.
 >
 >## Intel Extension for OpenXLA is being archived
