@@ -1,3 +1,23 @@
+>[!IMPORTANT]
+>## Intel GPU support is now available directly in upstream JAX
+> 
+>[Intel GPU support](https://github.com/jax-ml/jax#instructions) is now integrated directly into [JAX](https://github.com/jax-ml/jax) through XLA's SYCL platform, including oneAPI-based support. This eliminates the need to use Intel Extension for OpenXLA and allows users to use the latest upstream JAX with Intel GPUs.
+> 
+>Intel GPU support is validated for Intel® Arc™ Pro and Intel® Data Center GPU Max Series.
+>
+>**Getting started**
+>* See the [JAX Intel GPU installation guide](https://docs.jax.dev/en/latest/installation.html#intel-gpu).
+>* For runtime compatibility and required driver versions, see the [oneAPI JAX release notes](https://github.com/Intel-tensorflow/jax/releases).
+>* Going forward, please report issues through [JAX GitHub Issues](https://github.com/jax-ml/jax/issues) or [XLA GitHub issues](https://github.com/openxla/xla/issues) using `oneAPI` in the issue title for Intel GPU-related issues.
+>
+>## Intel Extension for OpenXLA is being archived
+>
+>**Intel Extension for OpenXLA will be archived on October 31, 2026.**
+>
+>Over the past year, we have upstreamed Intel GPU features and optimizations into **JAX and XLA**. As a result, active development of Intel Extension for OpenXLA has been discontinued, and official releases ended with **v0.7.0**. We recommend using **upstream JAX directly** for Intel GPU workloads going forward. We remain committed to delivering robust Intel® CPU and GPU support and continued performance improvements through the upstream JAX and XLA projects.
+>
+---
+
 # Intel® Extension for OpenXLA*
 
 [![Python](https://img.shields.io/pypi/pyversions/intel_extension_for_openxla)](https://badge.fury.io/py/intel-extension-for-openxla)
